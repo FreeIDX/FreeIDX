@@ -1,0 +1,779 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind 4 CSS-first 主题：设计令牌的单一事实源。
+ *
+ * 重要分层（2026-10 前台整套主题 1.7）：
+ *  - :root 语义变量 = 前台亮色调色板（#0084ff 主蓝 / #f2f2f2 画布 / 6px 圆角系 / 悬浮投影白卡），
+ *    后台 admin/* 用 .theme-adm 自有令牌，不受影响；
+ *  - `.theme-zh` 作用域重写遗留令牌 + HarmonyOS Sans 字体，Tailwind 4 颜色工具类编译为
+ *    var(--color-*)，容器级重定义即可整套换装，前后台互不影响；
+ *  - 无暗色模式与主题/字号预设，纯亮色单主题。
+ */
+@custom-variant dark (&:is(.dark *));
+
+/* 语义变量（HSL 三元组） */
+:root {
+  --background: 0 0% 95%; /* body #f2f2f2 */
+  --foreground: 0 0% 13%; /* bootstrap 正文 #212529 */
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 13%;
+  --primary: 210 100% 50%; /* #0084ff */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 200 33% 98%; /* #f7f9fa */
+  --secondary-foreground: 0 0% 13%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 215 20% 59%; /* #8590a6 */
+  --accent: 0 0% 95%; /* 列表行 hover #f1f1f1 */
+  --accent-foreground: 0 0% 13%;
+  --destructive: 355 70% 52%; /* #dc3545 */
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 20% 94%; /* rgba(178,186,194,.15) 发丝线（白底上） */
+  --input: 210 14% 82%; /* #ced4da */
+  --ring: 210 100% 50%;
+  --radius: 0.375rem; /* 6px：卡片 rounded-lg，输入框/按钮 rounded-md(4px) */
+}
+
+@theme {
+  /* 语义色工具类（shadcn 标准命名：bg-background / text-foreground / bg-muted-foreground …） */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  /* 圆角系：卡片 6px（rounded-lg），输入框/按钮 4px（rounded-md） */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* 基础令牌（后台 admin/* 保留默认取值；前台全部被 .theme-zh 重写。
+     注：--color-secondary / --color-muted 已在上方语义块定义，前台/后台各自重映射） */
+  --color-brand: #1f4977;
+  --color-brand-hover: #16345a;
+  --color-success: #177f2e;
+  --color-danger: #c6303e;
+  --color-warning: #f1c84c;
+  --color-info: #117887;
+  /* 表面 */
+  --color-canvas: #dee2e6;
+  --color-surface: #f8f9fa;
+  --color-surface-dark: #343a40;
+  --color-nav-sub: #868e96;
+  /* 自定义灰阶（Bootstrap 灰阶 ≠ Tailwind gray/neutral/slate，故逐项显式定义） */
+  --color-ink: #212529;
+  --color-ink-soft: #495057;
+  --color-muted-2: rgba(134, 142, 150, 0.8);
+  --color-line: #dee2e6;
+  --color-line-soft: #e9ecef;
+  --color-input-line: #ced4da;
+  --color-card-header-ink: #454d55;
+  /* 置顶徽标 */
+  --color-top-normal: #ff8800;
+  --color-top-global: #da24a7;
+  /* 后台独有：.price = coral + ￥ 前缀（admin/view/css/admin.css 全文仅 3 行） */
+  --color-price: #ff7f50;
+  --color-price-free: #aaaaaa;
+  /* 断点：Bootstrap 栅格 0/576/768/992/1200（Tailwind 默认 640/768/1024/1280 会错位） */
+  --breakpoint-xs: 0;
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
+  --breakpoint-xl: 1200px;
+  /* 电视/大屏断点（1920+）：配合根字号缩放做 TV 自适应 */
+  --breakpoint-3xl: 1920px;
+  /* 卡片软阴影：业务自定义，非 Bootstrap 默认 */
+  --shadow-card: 2px 2px 3px rgba(173, 181, 189, 0.25);
+  --font-sans:
+    'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica, 微软雅黑, 华文细黑,
+    STHeiti, sans-serif;
+  --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+/*
+ * ============ 前台主题（1.7）============
+ * 主蓝 #0084ff（导航/标签/分页）、发帖按钮 #006eff、画布 #f2f2f2、白卡 6px 悬浮投影、
+ * 发丝线 rgba(178,186,194,.15)、正文链接 #1f4977。遗留令牌名全部保留并映射到主题色。
+ */
+@font-face {
+  font-family: 'HarmonyOS_Sans_SC_Medium';
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/HarmonyOS_Sans_SC_Medium.subset.woff2') format('woff2');
+}
+
+@theme {
+  /* ===== 简蓝主题专有色（不覆盖默认令牌，仅作为新增工具类）===== */
+  --color-lt-blue: #409eff; /* --primary：按钮/链接/激活/置顶 */
+  --color-lt-blue-hover: #006fe6; /* 主色按钮 hover */
+  --color-lt-nav: #2997f7; /* --nav-bg-color：nav-pills 激活/alert-primary/b-blue */
+  --color-lt-grey: #909399; /* --secondary 次要文字 */
+  --color-lt-soft: #f8f9fa; /* --light 浅底（图标圆底/表头） */
+  --color-lt-aid: #f2f3f5; /* --aid-color 搜索框/标签选择底 */
+  --color-lt-line: #e9ecef; /* 列表行分隔线 */
+  --color-lt-line-2: #dee2e6; /* 卡片头分隔线/输入边 */
+  --color-lt-dashed: #dadada; /* 侧栏排行虚线 */
+  --color-lt-hover: #f6f6f6; /* 行 hover */
+  /* 遗留 zh-* 令牌名保留（既有工具类不失效），取值全部换成简蓝主题口径 */
+  --color-zh-blue: #409eff;
+  --color-zh-blue-hover: #006fe6;
+  --color-zh-grey: #909399;
+  --color-zh-accent-soft: rgba(41, 151, 247, 0.1); /* nav-pills 激活底 */
+  --color-zh-nav-active: rgba(41, 151, 247, 0.1);
+  --color-zh-nav-hover: rgba(41, 151, 247, 0.06);
+  --color-zh-quote: #ecf5ff; /* 引用块底（Element 浅蓝） */
+  --color-zh-pill: #c0c4cc; /* 回复数胶囊 */
+  --color-zh-notice: #e9ecef; /* 公告底（alert-secondary） */
+  --color-zh-notice-ink: #383d41;
+  --color-zh-hot-bg: #fef0f0; /* 热榜底（danger 浅色） */
+  --color-zh-hot-ink: #f56c6c;
+  --color-zh-top-text: #ffffff; /* 置顶徽标白字（jb 渐变底） */
+  --color-zh-top1-bg: #409eff;
+  --color-zh-top3-bg: #ff967e;
+  --color-zh-badge-yellow: #409eff; /* 用户组徽标 → badge-primary */
+  --color-zh-cta: #409eff; /* 发帖/登录按钮 */
+  --color-zh-cta-hover: #006fe6;
+  --color-zh-stat-bg: #f8f9fa; /* 侧栏统计块 */
+  --color-zh-num-ink: #409eff; /* 数字强调 */
+  --color-zh-row-hover: #f6f6f6; /* 列表行 hover */
+  --color-zh-brand-2: #66b1ff;
+  --color-zh-hero-btn: #409eff; /* 搜索页大按钮 */
+  --color-zh-footer-ink: #6c757d; /* 页脚文字 */
+  --color-zh-brand-desc: #909399; /* 头部品牌文案 */
+  --color-zh-line: #e9ecef; /* 发丝线（列表分隔线） */
+  --color-zh-deep-link: #409eff; /* 正文链接 */
+  --color-zh-card-line: #dee2e6; /* 卡头下边线 */
+}
+
+/*
+ * ============ 前台主题：简蓝主题（2026-10 整套换装）============
+ * 白色固定顶栏（blur 10.5px）+ #eff2f6 画布 + 白卡圆角 5px 无阴影（扁平）
+ * + #409EFF 主色（激活/按钮/链接）+ #2997f7 强调色（pills/alert）
+ * + #e9ecef 列表分隔线 + 15 种 jb-* 渐变徽章。暗色在文件下部 `.dark .theme-zh`。
+ */
+.theme-zh {
+  /* 语义令牌（直接覆盖 --color-*，容器级换装） */
+  --color-background: #eff2f6;
+  --color-foreground: #212529;
+  --color-card: #ffffff;
+  --color-card-foreground: #212529;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #212529;
+  --color-primary: #409eff;
+  --color-primary-foreground: #ffffff;
+  --color-muted: #909399;
+  --color-muted-foreground: #909399;
+  --color-accent: #f5f7fa;
+  --color-accent-foreground: #212529;
+  --color-border: #e9ecef;
+  --color-input: #ced4da;
+  --color-ring: #409eff;
+  /* 遗留令牌 → 简蓝主题 */
+  --color-brand: #409eff;
+  --color-brand-hover: #006fe6;
+  --color-canvas: #eff2f6;
+  --color-surface: #ffffff;
+  --color-surface-dark: #ffffff;
+  --color-nav-sub: #909399;
+  --color-ink: #212529;
+  --color-ink-soft: #6c757d;
+  --color-muted-2: #8590a6;
+  --color-line: #e9ecef;
+  --color-line-soft: #f2f3f5;
+  --color-input-line: #ced4da;
+  --color-card-header-ink: #454d55;
+  --color-secondary: #f2f3f5;
+  --color-destructive: #f56c6c;
+  --color-destructive-foreground: #ffffff;
+  --color-top-normal: #ff8800;
+  --color-top-global: #da24a7;
+  --shadow-card: 0 0 0 0 rgba(0, 0, 0, 0.08); /* 清零 box-shadow（扁平） */
+  /* 字体：HarmonyOS Sans SC 优先，回退微软雅黑（body_font_style=1） */
+  font-family: 'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+}
+
+/* 固定色相的装饰色（主题语义色） */
+.theme-zh {
+  --color-success: #67c23a;
+  --color-warning: #e6a23c;
+  --color-info: #00b8d8;
+}
+
+/* 得意黑（body_font_style=2）：全站正文覆盖 */
+.theme-zh.font-smiley {
+  font-family: 'smileySans', 'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', sans-serif;
+}
+
+@font-face {
+  font-family: 'smileySans';
+  font-style: oblique;
+  font-display: swap;
+  /* 同 glyph 无损容器替换：TTF 2073KB → WOFF2 929KB（省 55%），渲染结果完全一致 */
+  src: url('/fonts/SmileySans-Oblique.woff2') format('woff2');
+}
+
+/* ============ 简蓝主题暗色 ============
+ * 挂 <html class="dark">：令牌整体切换，工具类随动。 */
+.dark .theme-zh {
+  --color-background: #292a2d;
+  --color-foreground: #e0e0e0;
+  --color-card: #323335;
+  --color-card-foreground: #e0e0e0;
+  --color-popover: #323335;
+  --color-popover-foreground: #e0e0e0;
+  --color-muted: #909399;
+  --color-muted-foreground: #909399;
+  --color-accent: #2d2e31;
+  --color-accent-foreground: #e0e0e0;
+  --color-border: #28262d;
+  --color-input: #28262d;
+  --color-canvas: #292a2d;
+  --color-surface: #323335;
+  --color-surface-dark: #2d2e31;
+  --color-ink: #e0e0e0;
+  --color-ink-soft: #c0c4cc;
+  --color-muted-2: #a8abb2;
+  --color-line: #28262d;
+  --color-line-soft: #2d2e31;
+  --color-input-line: #28262d;
+  --color-card-header-ink: #e0e0e0;
+  --color-secondary: #2d2e31;
+  --color-zh-line: #28262d;
+  --color-zh-card-line: #28262d;
+  --color-zh-row-hover: #2d2e31;
+  --color-zh-stat-bg: #2d2e31;
+  --color-zh-quote: #2d2e31;
+  --color-zh-deep-link: #79bbff;
+  --color-zh-notice: #2d2e31;
+  --color-zh-notice-ink: #c0c4cc;
+  --color-zh-hot-bg: #2d2e31;
+  --color-zh-brand-desc: #a8abb2;
+  /* 简蓝主题专有色（@theme 浅色值）的暗色对齐 */
+  --color-lt-soft: #2d2e31; /* 图标圆底/表头/浅底 */
+  --color-lt-aid: #2d2e31; /* 搜索框/标签选择底 */
+  --color-lt-line: #28262d; /* 列表行分隔线 */
+  --color-lt-line-2: #28262d; /* 卡片头分隔线/输入边 */
+  --color-lt-dashed: #43454a; /* 虚线边框 */
+  --color-lt-hover: #2d2e31; /* 行 hover */
+}
+.dark body {
+  background: #292a2d;
+}
+
+/* ============ 简蓝主题组件基元 ============ */
+
+/* jb-* 渐变徽章族（主题 .jb-pink/.jb-yellow/.jb-* 口径，白字） */
+.jb-pink {
+  background-image: linear-gradient(135deg, #ff5e7f 30%, #ff967e 100%);
+}
+.jb-yellow {
+  background-image: linear-gradient(135deg, #f59f54 10%, #ff6922 100%);
+}
+.jb-red {
+  background-image: linear-gradient(135deg, #fd7a64 0, #fb2d2d 100%);
+}
+.jb-blue {
+  background-image: linear-gradient(135deg, #59c3fb 0, #268df7 100%);
+}
+.jb-purple {
+  background-image: linear-gradient(135deg, #f98dfb 0, #ea00f9 100%);
+}
+.jb-gold {
+  background-image: linear-gradient(135deg, #ffd700 0, #ff8c00 100%);
+}
+
+/*
+ * ============ 后台主题：现代扁平风（2026-10 用户指定版式）============
+ * 版式为现代扁平风（浅色侧栏、白卡、软色徽标、Element Plus 系灰阶/蓝），
+ * 手法——容器级只重定义同名令牌，前后台互不影响。
+ */
+
+/* 后台专有令牌（只被 admin/* 消费，故直接给值，不必再分作用域）。
+ * 2026-10 按用户要求，后台版式为**现代扁平风**（浅色侧栏 + 白卡 + 软色徽标），
+ * 灰阶/蓝取 Element Plus 系：#409eff 品牌蓝、#303133/#606266/#909399 三级文字、#ebeef5 发丝线。 */
+@theme {
+  --color-adm-side-ink: #606266; /* 侧栏常规项文字 */
+  --color-adm-side-hover: #f5f7fa; /* 侧栏项 hover 底色（选中态另用 bg-brand/10） */
+  --color-adm-footer-ink: #909399;
+  --shadow-adm-card: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.theme-adm {
+  --color-brand: #409eff;
+  --color-brand-hover: #66b1ff; /* 现代口径 hover 变浅 */
+  --color-success: #67c23a;
+  --color-danger: #f56c6c;
+  --color-warning: #e6a23c;
+  --color-info: #13c2c2;
+  --color-secondary: #909399;
+  --color-canvas: #f5f7fa; /* 内容区灰底 */
+  --color-surface: #ffffff;
+  --color-surface-dark: #303133;
+  --color-ink: #303133;
+  --color-ink-soft: #606266;
+  --color-muted: #909399;
+  --color-muted-2: #a8abb2;
+  --color-line: #ebeef5;
+  --color-line-soft: #f0f2f5;
+  --color-input-line: #dcdfe6;
+  --color-card-header-ink: #303133;
+}
+
+/* 侧栏滚动条隐藏（.sidebar{scrollbar-width:none} + webkit 版） */
+.theme-adm .adm-sidebar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.theme-adm .adm-sidebar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/*
+ * 后台表格：白卡内的现代列表——无竖线、表头浅灰底 + 灰字、行底发丝线、hover 换底色。
+ * 用同名选择器 (0,2,1) 压过工具类 (0,1,0)，与前台 .theme-zh 的手法一致。
+ */
+.theme-adm .adm-table {
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+.theme-adm .adm-table th,
+.theme-adm .adm-table td {
+  padding: 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-line);
+}
+.theme-adm .adm-table thead th {
+  background-color: var(--color-canvas);
+  color: var(--color-muted);
+  font-weight: 500;
+  font-size: 13px;
+}
+/* 列头默认左对齐：浏览器 UA 默认 th 居中，沿用 Bootstrap reboot 的 `th { text-align: inherit }`
+   与单元格同左。必须放进 @layer base——本文件其余自定义规则故意非分层以压过工具类，
+   而这里恰恰相反，要让 th 上的 .text-center / .text-left 工具类（删除列、权限矩阵等）赢过默认值。 */
+@layer base {
+  .theme-adm .adm-table thead th {
+    text-align: inherit;
+  }
+}
+.theme-adm .adm-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+/* 卡体无内距时表格贴边：去掉 .adm-table 的 1rem 下边距。
+   必须叠两个类名打回 (0,3,0)，单写 Tailwind `mb-0` (0,1,0) 输给上面的 `.theme-adm .adm-table`。 */
+.theme-adm .adm-table.adm-flush {
+  margin-bottom: 0;
+}
+.theme-adm .adm-table-hover tbody tr:hover th,
+.theme-adm .adm-table-hover tbody tr:hover td {
+  background-color: var(--color-canvas);
+}
+.theme-adm .adm-table-striped tbody tr:nth-of-type(odd) th,
+.theme-adm .adm-table-striped tbody tr:nth-of-type(odd) td {
+  background-color: rgba(0, 0, 0, 0.015);
+}
+
+/* 卡片（前台 .zh-card）：白底无边框 5px 圆角、扁平无阴影（清零 box-shadow） */
+.theme-zh .zh-card {
+  border-radius: 5px;
+  background: var(--color-card);
+  box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.08);
+  color: var(--color-card-foreground);
+}
+
+/* 卡头：透明底 + 1px #dee2e6 下边线 + #454d55 字 */
+.theme-zh .zh-card-header {
+  border-bottom: 1px solid var(--color-zh-card-line);
+  color: var(--color-card-header-ink);
+}
+
+/* 侧栏排行/聚合列表行：31px 行高 + 虚线分隔（.site-top ul li 口径） */
+.theme-zh .zh-rank-row {
+  height: 31px;
+  line-height: 31px;
+  border-bottom: 1px dashed var(--color-lt-dashed);
+}
+.theme-zh .zh-rank-row:last-child {
+  border-bottom: 0;
+}
+
+/* 表情面板（高 145px 滚动）与正文内表情图 */
+.qqface-panel {
+  max-height: 145px;
+  overflow: auto;
+}
+.post-body img.em_icon,
+.ProseMirror img.em_icon {
+  display: inline-block;
+  width: 1.6em;
+  height: 1.6em;
+  max-width: none;
+  border: 0;
+  margin: 0 2px;
+  vertical-align: -0.35em;
+}
+
+/* 发现页轮播：高 18rem、圆角 5px、移动端 0 圆角 */
+.discovery-carousel {
+  height: 18rem;
+  border-radius: 5px;
+  overflow: hidden;
+}
+@media (max-width: 767.98px) {
+  .discovery-carousel {
+    height: 12rem;
+    border-radius: 0;
+  }
+}
+
+/* 发现页版块卡（.discovery_forum：1px 浅边，hover 主色边 + 进入按钮填充） */
+.theme-zh .discovery-forum {
+  border: 1px solid #f5f5f5;
+  transition: border-color 0.2s ease;
+}
+.theme-zh .discovery-forum:hover {
+  border-color: var(--color-brand);
+}
+.theme-zh .into-forum-link {
+  padding: 2px 5px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+.theme-zh .discovery-forum:hover .into-forum-link {
+  background: var(--color-brand);
+  color: #fff;
+}
+.dark .theme-zh .discovery-forum {
+  border-color: #28262d;
+}
+.dark .theme-zh .discovery-forum:hover {
+  border-color: var(--color-brand);
+}
+
+/* 帖内移动悬浮条（.thread-nav：45px，输入条 #f5f5f5 圆角 10px） */
+.theme-zh .thread-nav-input {
+  height: 32px;
+  line-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #f5f5f5;
+}
+.dark .theme-zh .thread-nav-input {
+  background: #2d2e31;
+}
+
+/*
+ * 详情页主贴卡/回复卡粘连（主贴卡 margin-bottom:0 且下圆角归零 +
+ * 回复卡 border-top-width:0 且上圆角归零，两块拼成一张大卡）。
+ * 必须用同名选择器压过 `.theme-zh .zh-card` 的 (0,2,0) 特异性，Tailwind 工具类打不赢。
+ */
+.theme-zh .zh-card.card-thread {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.theme-zh .zh-card.card-postlist {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  font-size: 14px;
+}
+
+/* 侧栏等级进度（bootstrap .progress-bar-striped.progress-bar-animated，内联 line-height:20px 撑高） */
+.theme-zh .zh-progress-bar {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: zh-progress-stripes 1s linear infinite;
+  transition: width 0.6s ease;
+}
+@keyframes zh-progress-stripes {
+  from {
+    background-position: 1rem 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* 主题滚动条：6px 细条 + 半透明圆角滑块 */
+.theme-zh::-webkit-scrollbar,
+.theme-zh *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  -webkit-appearance: none;
+  background: rgba(0, 0, 0, 0.1);
+}
+.theme-zh::-webkit-scrollbar-thumb,
+.theme-zh *::-webkit-scrollbar-thumb {
+  cursor: pointer;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.15);
+  transition: color 0.2s ease;
+}
+
+/* 正文渲染（前台）：引用块 #ECF5FF + 左 5px #409EFF；标题彩色左边线；链接 #409EFF */
+.theme-zh .post-body blockquote {
+  background: var(--color-zh-quote);
+  border-left: 5px solid var(--color-brand);
+  padding: 0.5rem 0.75rem;
+  color: hsl(var(--foreground));
+}
+.theme-zh .post-body h1,
+.theme-zh .post-body h2,
+.theme-zh .post-body h3,
+.theme-zh .post-body h4,
+.theme-zh .post-body h5,
+.theme-zh .post-body h6 {
+  font-weight: bold;
+  padding: 2px 0;
+  margin: 8px 0;
+}
+/* H6-H1 彩色左边线 */
+.theme-zh .post-body h6 {
+  border-left: 3px solid #6293d4;
+  text-indent: 8px;
+}
+.theme-zh .post-body h5 {
+  border-left: 4px solid #84985a;
+  text-indent: 8px;
+}
+.theme-zh .post-body h4 {
+  border-left: 5px solid #b55594;
+  text-indent: 8px;
+}
+.theme-zh .post-body h3 {
+  border-left: 6px solid #a232de;
+  text-indent: 8px;
+}
+.theme-zh .post-body h2 {
+  position: relative;
+  font-weight: 700;
+  font-size: 18px;
+  padding-left: 18px;
+  line-height: 1.46;
+  border: 0;
+  text-indent: 0;
+}
+.theme-zh .post-body h2:before {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  content: '';
+  width: 3px;
+  height: calc(100% - 8px);
+  border-radius: 3px;
+  background-color: #0084ff;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent);
+}
+.theme-zh .post-body h1 {
+  border-left: 8px solid #de3232;
+  text-indent: 8px;
+}
+.theme-zh .post-body a {
+  color: var(--color-zh-deep-link);
+  text-decoration: none;
+}
+.theme-zh .post-body a:hover {
+  color: #0084ff;
+}
+
+/* 根字号 14px（业务覆盖 Tailwind 默认的 16px）：
+ * 改这一处即可让整套 Tailwind rem 间距/字号与设计口径对齐。
+ */
+html {
+  font-size: 14px;
+  /* 始终预留滚动条槽位：有/无滚动条的页面（如首页 vs 版块页）版心居中位置一致，避免切页时整页左右跳动 */
+  scrollbar-gutter: stable;
+}
+
+/* 电视/大屏（TV）自适应：≥1920 逐级放大根字号（全套 rem 字号/间距随之缩放），4K（≥2560）再放大一档。
+ * 版心宽度由 Layout 的 3xl: 变体同步放宽，电视上不会出现「小字居中一条」的观感。 */
+@media (min-width: 1920px) {
+  html {
+    font-size: 16px;
+  }
+}
+@media (min-width: 2560px) {
+  html {
+    font-size: 20px;
+  }
+}
+
+/* 后台窄屏（<md）自适应：卡片体横向滚动，宽表格/权限矩阵不再撑破版心 */
+@media (max-width: 767.98px) {
+  .theme-adm section.mb-4 > div {
+    overflow-x: auto;
+  }
+}
+
+/* 正文/编辑器渲染：图片自适应、代码块横向滚动、占位符 */
+.post-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+.post-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.75rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+}
+.post-body code {
+  background: #f1f5f9;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  font-size: 0.8125rem;
+}
+.post-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.post-body blockquote {
+  background: var(--color-zh-quote);
+  border-left: 5px solid #0084ff;
+  padding: 0.5rem 0.75rem;
+}
+.ProseMirror:focus {
+  outline: none;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/* 动效清单（前端页面设计文档 §6）：Modal 淡入微弹、引用/定位楼层闪回 */
+@keyframes xn-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes xn-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xn-flash {
+  from {
+    background-color: var(--color-zh-quote);
+  }
+  to {
+    background-color: #f8f9fa;
+  }
+}
+.modal-fade {
+  animation: xn-fade-in 0.15s ease-out;
+}
+.modal-pop {
+  animation: xn-pop-in 0.15s ease-out;
+}
+/* 移动端导航抽屉：左侧滑入 */
+@keyframes xn-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+.drawer-in {
+  animation: xn-slide-in-left 0.2s ease-out;
+}
+li[id^='pid-']:target {
+  animation: xn-flash 1s ease-out;
+}
+
+/*
+ * 认证面板：白卡（.box 风格软投影）
+ */
+.auth-panel {
+  background: hsl(var(--card));
+  box-shadow: 0 0 2px rgb(98 124 153 / 10%);
+}
+
+/* 我的消息列表：
+ * 消息体是服务端生成的受限 HTML（.comment-info/.quote-comment/.reply-comment/.single-comment/.handle）。
+ */
+.theme-zh .noticelist > .notice {
+  padding: 0.7rem 0;
+}
+.theme-zh .noticelist > .notice:not(:last-child) {
+  border-bottom: 1px solid #e7ebee;
+}
+.theme-zh .noticelist > .notice .message {
+  color: hsl(var(--muted-foreground));
+}
+.theme-zh .noticelist > .notice .message a {
+  color: inherit;
+}
+.theme-zh .noticelist > .notice .message a:hover {
+  color: #0084ff;
+}
+.theme-zh .noticelist > .notice .message .comment-info {
+  display: inline;
+  color: #8590a6;
+}
+.theme-zh .noticelist > .notice .message .quote-comment {
+  margin-top: 0.25rem;
+  color: hsl(var(--foreground));
+}
+.theme-zh .noticelist > .notice .message .reply-comment {
+  position: relative;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  margin-top: 0.5rem;
+  background-color: #e9ecef;
+}
+.theme-zh .noticelist > .notice .message .single-comment {
+  position: relative;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  margin-top: 0.5rem;
+  background-color: #f7f7f7;
+}
+.theme-zh .noticelist > .notice .message .single-comment a,
+.theme-zh .noticelist > .notice .message .reply-comment a {
+  color: hsl(var(--foreground));
+}
+/* 版务动作高亮（.handle，如「板块置顶」「移动处理」） */
+.theme-zh .noticelist > .notice .message .handle {
+  color: #0084ff;
+  font-weight: 600;
+}

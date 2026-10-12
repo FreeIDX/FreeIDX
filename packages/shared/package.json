@@ -1,0 +1,17 @@
+{
+  "name": "@freeidx/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./i18n/bundles": "./src/i18n/bundles.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

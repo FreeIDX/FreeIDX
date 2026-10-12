@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`快照（CI 回归基线，T2-5 工单要求） > code_block > code_block 1`] = `"<pre><code>if (a &lt; b) { console.log(1); }</code></pre>"`;
+
+exports[`快照（CI 回归基线，T2-5 工单要求） > font_legacy > font_legacy 1`] = `"<font face="微软雅黑" size="5" color="#ff0000">旧编辑器</font>"`;
+
+exports[`快照（CI 回归基线，T2-5 工单要求） > list_nested > list_nested 1`] = `"<ul><li>一<ul><li>内</li></ul></li><li>二</li></ul>"`;
+
+exports[`快照（CI 回归基线，T2-5 工单要求） > mixed_attack > mixed_attack 1`] = `"<b>粗</b><a href="">链接</a><iframe src=""></iframe>"`;
+
+exports[`快照（CI 回归基线，T2-5 工单要求） > rich_post > rich_post 1`] = `"<div class="quote"><p>引用行&nbsp;&nbsp;加粗</p><table style="width:100%; background:url(1.jpg) no-repeat;"><tbody><tr><td width="60"><img src="http://cdn.example.com/a.png" width="54" height="54" /></td></tr></tbody></table></div>"`;

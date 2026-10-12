@@ -1,0 +1,6 @@
+{
+  "_comment": "登记项目新增、字典(gen ∪ override)暂缺的词条：仅告警不阻断。补完 10 语言翻译后请移除对应条目；无法静态提取的动态 key 前缀也在此登记。",
+  "frontend": {},
+  "api": {},
+  "dynamicPrefixes": []
+}

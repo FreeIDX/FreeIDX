@@ -1,0 +1,117 @@
+/** i18n Provider：前台语言 = 用户偏好（右上角切换器，localStorage 持久）> 站点 setting.lang，默认 en-us（§10.3） */
+import { createContext, useContext, useEffect, useMemo, useCallback, useState, type ReactNode } from 'react';
+import { create } from 'zustand';
+import {
+  AVAILABLE_LOCALES,
+  builtinGroupName,
+  createFrontTranslator,
+  DEFAULT_LOCALE,
+  type FrontKey,
+  type LocaleBundles,
+} from '@freeidx/shared';
+import { EMPTY_BUNDLES, getLoadedBundle, loadLocaleBundle } from '@freeidx/shared/i18n/bundles';
+import { setUiLocale } from './api';
+import { useAuth } from '../store/auth';
+
+type T = (key: FrontKey, params?: Record<string, string | number>) => string;
+
+const I18nCtx = createContext<T>((k) => k);
+
+/* ---------------- 用户语言偏好（前台右上角切换器，浏览器本地持久） ---------------- */
+
+const LANG_PREF_KEY = 'freeidx.lang';
+
+function readLangPref(): string | null {
+  try {
+    return localStorage.getItem(LANG_PREF_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 首屏语言：bootstrap 到达前唯一可用的依据（用户偏好，非法值忽略 → 站点缺省 en-us）。
+ * main.tsx 据此在渲染前预载词条，使首次渲染即拿到可用词典，不出现「先显示 key 再补文案」的闪烁。
+ */
+export function initialLocale(): string {
+  const pref = readLangPref();
+  return pref && AVAILABLE_LOCALES.includes(pref) ? pref : DEFAULT_LOCALE;
+}
+
+interface LangPrefState {
+  /** null = 跟随站点语言 */
+  pref: string | null;
+  setPref: (lang: string | null) => void;
+}
+
+export const useLangPref = create<LangPrefState>((set) => ({
+  pref: readLangPref(),
+  setPref: (lang) => {
+    try {
+      if (lang) localStorage.setItem(LANG_PREF_KEY, lang);
+      else localStorage.removeItem(LANG_PREF_KEY);
+    } catch {
+      /* 隐私模式等 localStorage 不可用时仅本次会话生效 */
+    }
+    set({ pref: lang });
+  },
+}));
+
+/** 前台展示语言：用户偏好（非法值忽略）优先，否则站点语言 */
+export function useLang(): string {
+  const siteLang = useAuth((s) => s.setting?.lang ?? DEFAULT_LOCALE);
+  const pref = useLangPref((s) => s.pref);
+  return pref && AVAILABLE_LOCALES.includes(pref) ? pref : siteLang;
+}
+
+/**
+ * 语言包订阅（词典按需加载，见 @freeidx/shared/i18n/bundles）：渲染期同步返回可用词典。
+ *  - 目标语言已加载 → 直接返回；
+ *  - 未加载 → 沿用 DEFAULT_LOCALE 并后台发起加载，到位后切到目标语言。
+ * 与既有链路一致：站点语言本就来自 bootstrap，首屏同为「先 en-us 再切换」，不新增可见行为。
+ */
+export function useLocaleBundle(lang: string): LocaleBundles {
+  const [bundle, setBundle] = useState<LocaleBundles>(
+    () => getLoadedBundle(lang) ?? getLoadedBundle(DEFAULT_LOCALE) ?? EMPTY_BUNDLES,
+  );
+  useEffect(() => {
+    const hit = getLoadedBundle(lang);
+    if (hit) {
+      setBundle(hit);
+      return;
+    }
+    let alive = true;
+    void loadLocaleBundle(lang).then((b) => {
+      if (alive && b) setBundle(b);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lang]);
+  return bundle;
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const lang = useLang();
+  const bundle = useLocaleBundle(lang);
+  // <html lang> 与日期格式化 locale 跟随前台展示语言（SPA 壳静态 en-us 由运行时覆盖）
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    setUiLocale(lang);
+  }, [lang]);
+  const t = useMemo<T>(() => createFrontTranslator(bundle), [bundle]);
+  return <I18nCtx.Provider value={t}>{children}</I18nCtx.Provider>;
+}
+
+export function useT(): T {
+  return useContext(I18nCtx);
+}
+
+/**
+ * 内置用户组名展示：(gid, name) → 当前语言组名。
+ * DB 名未自定义时命中 `group_{gid}` 词条随语言切换；自定义/缺失词条原样返回（见 shared/builtinGroupName）。
+ */
+export function useGroupName(): (gid: number, name: string) => string {
+  const lang = useLang();
+  return useCallback((gid: number, name: string) => builtinGroupName(gid, name, lang), [lang]);
+}

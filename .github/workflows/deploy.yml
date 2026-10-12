@@ -1,0 +1,146 @@
+name: Deploy to Cloudflare
+
+# 生产发布：自动开通/复用 D1 与 KV，把真实 ID 只写进构建工作区（不提交），再部署单个 Worker。
+# 首次上线：手动触发并勾上 apply_migrations + run_seed；之后只推 main。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apply_migrations:
+        description: 先应用 D1 迁移（--remote），再部署
+        type: boolean
+        default: false
+      run_seed:
+        description: 导入 seed/seed.sql（初始版块 + 首管，幂等）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 前置检查
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::缺少 Secret CLOUDFLARE_API_TOKEN"; exit 1; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::缺少 Secret CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 开通或复用 D1 / KV，并回填 wrangler.toml
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+
+          # 用 node 解析而非 jq：node 由 setup-node 保证存在，jq 依赖 runner 镜像
+          d1_id() {
+            npx wrangler d1 list --json 2>/dev/null | node -e '
+              let s = "";
+              process.stdin.on("data", c => s += c).on("end", () => {
+                const hit = JSON.parse(s).find(x => x.name === "freeidx");
+                process.stdout.write(hit ? hit.uuid : "");
+              });'
+          }
+          kv_id() {
+            npx wrangler kv namespace list 2>/dev/null | node -e '
+              let s = "";
+              process.stdin.on("data", c => s += c).on("end", () => {
+                const hit = JSON.parse(s).find(x => x.title === "CACHE");
+                process.stdout.write(hit ? hit.id : "");
+              });'
+          }
+
+          DB=$(d1_id || true)
+          if [ -z "$DB" ] || [ "$DB" = "null" ]; then
+            echo "D1 数据库 freeidx 不存在，创建中…"
+            npx wrangler d1 create freeidx </dev/null >/dev/null
+            DB=$(d1_id)
+          fi
+          [ -n "$DB" ] && [ "$DB" != "null" ] || { echo "::error::拿不到 D1 freeidx 的 uuid"; exit 1; }
+
+          KV=$(kv_id || true)
+          if [ -z "$KV" ] || [ "$KV" = "null" ]; then
+            echo "KV 命名空间 CACHE 不存在，创建中…"
+            npx wrangler kv namespace create CACHE </dev/null >/dev/null
+            KV=$(kv_id)
+          fi
+          [ -n "$KV" ] && [ "$KV" != "null" ] || { echo "::error::拿不到 KV CACHE 的 id"; exit 1; }
+
+          sed -i -E "s|^database_id = .*|database_id = \"$DB\"|" wrangler.toml
+          sed -i -E "s|^id = .*|id = \"$KV\"|" wrangler.toml
+
+          if [ -n "${SITE_URL:-}" ]; then
+            case "$SITE_URL" in
+              https://[A-Za-z0-9._-]*)
+                sed -i -E "s|^SITE_URL = .*|SITE_URL = \"$SITE_URL\"|" wrangler.toml ;;
+              *)
+                echo "::error::仓库 Variable SITE_URL 需为 https:// 开头的纯域名，当前值不合法"; exit 1 ;;
+            esac
+          else
+            echo "::warning::未设置 Variable SITE_URL，沿用仓库默认 http://localhost:8787（邮件链接与 canonical 会用错域名）"
+          fi
+
+          echo "D1=$DB  KV=$KV"
+          grep -E '^(database_id|id|SITE_URL) ' wrangler.toml
+
+      - name: 应用 D1 迁移
+        if: ${{ inputs.apply_migrations }}
+        working-directory: apps/api
+        run: npx wrangler d1 migrations apply freeidx --remote
+
+      - name: 导入种子数据
+        if: ${{ inputs.run_seed }}
+        working-directory: apps/api
+        run: npx wrangler d1 execute freeidx --remote --file=./seed/seed.sql
+
+      - name: 构建前端
+        run: pnpm --filter @freeidx/web build
+        env:
+          # 未设置时前端不渲染人机验证组件（Turnstile.tsx:28），不影响部署
+          VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+
+      - name: 部署 Worker（含前端静态资源）
+        working-directory: apps/api
+        run: npx wrangler deploy
+
+      - name: 配置 R2 生命周期（tmp/ 前缀 1 天后过期）
+        working-directory: apps/api
+        run: |
+          # 临时附件（上传但未提交）由 Worker 每小时档 GC（先删对象再删行）；
+          # 桶上生命周期规则是最终兜底：即使 worker GC 因额度/异常没跑到，对象也不会永久残留。
+          # 权限需 API Token 含 Workers R2 Storage Write；失败只告警，不阻断发布。
+          if npx wrangler r2 bucket lifecycle set freeidx-files --file ./r2-lifecycle.json; then
+            echo "R2 生命周期规则已配置（tmp/ 1 天）"
+          else
+            echo "::warning::R2 生命周期配置失败，请到 Dashboard → R2 → freeidx-files → Settings → Object Lifecycle Rules 手动添加「前缀 tmp/、过期 1 天」"
+          fi
+
+      - name: 写入运行摘要
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "## 部署完成"
+            echo ""
+            echo "- 站点：${SITE_URL:-https://freeidx-api.<你的子域>.workers.dev}"
+            echo "- D1/KV ID 由本次构建解析并回填，仓库里保持占位值"
+            echo "- 运行时密钥（JWT_SECRET 等）在 Cloudflare 后台 Secrets，本流水线不覆盖"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,10 @@
+{
+ "_comment": "硬编码中文基线：含中文且未走 t(...) 的 AST 节点文本（path::归一化文本）。CI 仅拦截此清单之外的新增项。清理存量后重跑 --update 收紧。",
+ "generatedFrom": [
+  "apps/web/src",
+  "apps/api/src",
+  "packages/shared/src"
+ ],
+ "count": 0,
+ "entries": []
+}

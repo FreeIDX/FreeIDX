@@ -1,0 +1,28 @@
+{
+  "name": "freeidx",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "dev:api": "pnpm --filter @freeidx/api dev",
+    "deploy:api": "pnpm --filter @freeidx/api deploy",
+    "db:apply": "pnpm --filter @freeidx/api db:apply",
+    "db:seed": "pnpm --filter @freeidx/api db:seed",
+    "i18n:types": "node scripts/gen-i18n-types.mjs && node scripts/gen-i18n-groupnames.mjs",
+    "i18n:check": "node scripts/gen-i18n-types.mjs --check && node scripts/gen-i18n-groupnames.mjs --check && node scripts/audit-i18n.mjs && node scripts/check-i18n.mjs && node scripts/check-hardcoded-zh.mjs && node scripts/check-i18n-values.mjs",
+    "i18n:baseline": "node scripts/check-hardcoded-zh.mjs --update",
+    "i18n:progress": "node scripts/i18n-progress.mjs"
+  },
+  "devDependencies": {
+    "eslint": "^9.34.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.3.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.40.0"
+  }
+}

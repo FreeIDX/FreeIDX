@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 门禁 1：类型检查
+      - run: pnpm typecheck
+      # 门禁 1.5：i18n 生成物与 PHP 源一致（T1-5，一次生成纳入 CI）
+      - run: pnpm i18n:check
+      # 门禁 2：单测（含三预算断言）
+      - run: pnpm test
+      # 门禁 3：D1 迁移 dry-run（本地 SQLite 全量应用）
+      - name: D1 migrations dry-run
+        working-directory: apps/api
+        run: |
+          npx wrangler d1 create freeidx --local || true
+          npx wrangler d1 migrations apply freeidx --local
+      # 门禁 4：lint
+      - run: pnpm lint
+
+  deploy-preview:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy Worker preview
+        working-directory: apps/api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --dry-run
+      - name: Build Pages frontend
+        run: pnpm --filter @freeidx/web build
+      # prod 发布为手动门禁（§13.4）：wrangler deploy --env prod 由人工触发

@@ -1,0 +1,71 @@
+# ==================== 依赖 ====================
+node_modules/
+.pnpm-store/
+.yarn/
+jspm_packages/
+
+# ==================== 构建产物 ====================
+dist/
+build/
+.output/
+coverage/
+*.tsbuildinfo
+
+# ==================== 测试产物 ====================
+# 注意：apps/api/test 下的 __snapshots__/*.snap 属于测试基线，必须提交，不要屏蔽
+test-results/
+playwright-report/
+.nyc_output/
+
+# ==================== 缓存与本地运行状态 ====================
+.turbo/
+.wrangler/
+.cache/
+.vite/
+.parcel-cache/
+.sass-cache/
+.eslintcache
+*.pid
+
+# ==================== 环境变量与密钥（严禁提交）====================
+.env
+.env.*
+!.env.example
+*.local
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx
+!*.pub
+
+# ==================== 日志与临时文件 ====================
+*.log
+logs/
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ==================== 系统文件 ====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ==================== 编辑器与 IDE ====================
+.vscode/
+.idea/
+.trae/
+.codebuddy/
+.codeartsdoer/
+.history/
+.merkle-snapshot.json
