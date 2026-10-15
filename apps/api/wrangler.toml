@@ -20,8 +20,9 @@ database_name = "freeidx"
 database_id = "00000000-0000-0000-0000-000000000000" # TODO: wrangler d1 create freeidx 后回填
 
 [[kv_namespaces]]
-binding = "CACHE"
-id = "00000000-0000-0000-0000-000000000000" # TODO: wrangler kv namespace create CACHE 后回填
+binding = "CACHE" # 代码中经 env.CACHE 访问，保持不变
+# 云端命名空间名用 freeidx-cache（避免与其他项目重名），CI 自动创建/复用
+id = "00000000-0000-0000-0000-000000000000" # TODO: wrangler kv namespace create freeidx-cache 后回填
 
 [[r2_buckets]]
 binding = "FILES"

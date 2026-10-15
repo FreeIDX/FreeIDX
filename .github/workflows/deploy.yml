@@ -64,7 +64,7 @@ jobs:
             npx wrangler kv namespace list 2>/dev/null | node -e '
               let s = "";
               process.stdin.on("data", c => s += c).on("end", () => {
-                const hit = JSON.parse(s).find(x => x.title === "CACHE");
+                const hit = JSON.parse(s).find(x => x.title === "freeidx-cache");
                 process.stdout.write(hit ? hit.id : "");
               });'
           }
@@ -79,11 +79,11 @@ jobs:
 
           KV=$(kv_id || true)
           if [ -z "$KV" ] || [ "$KV" = "null" ]; then
-            echo "KV 命名空间 CACHE 不存在，创建中…"
-            npx wrangler kv namespace create CACHE </dev/null >/dev/null
+            echo "KV 命名空间 freeidx-cache 不存在，创建中…"
+            npx wrangler kv namespace create freeidx-cache </dev/null >/dev/null
             KV=$(kv_id)
           fi
-          [ -n "$KV" ] && [ "$KV" != "null" ] || { echo "::error::拿不到 KV CACHE 的 id"; exit 1; }
+          [ -n "$KV" ] && [ "$KV" != "null" ] || { echo "::error::拿不到 KV freeidx-cache 的 id"; exit 1; }
 
           sed -i -E "s|^database_id = .*|database_id = \"$DB\"|" wrangler.toml
           sed -i -E "s|^id = .*|id = \"$KV\"|" wrangler.toml
