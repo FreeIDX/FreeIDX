@@ -138,23 +138,39 @@ interface CardOut {
 export async function generateCards(db: D1b, input: CardGenInput, ts: number): Promise<CardOut[]> {
   const n = Math.max(1, Math.min(200, Math.trunc(input.count) || 1));
   const created: CardOut[] = [];
-  for (let i = 0; i < n; i++) {
-    const code = genCardCode();
+  // 多值 INSERT 分段提交：每段 20 张 = 100 绑定参数（D1 单语句上限）。逐条 INSERT 会在 count≳45 时
+  // 撞 HARD_D1_QUERIES=50 预算（BudgetError 部分提交无回滚，管理员重试产生重复批次），N 条查询须收敛为 ceil(N/20) 条。
+  const SEG = 20;
+  for (let off = 0; off < n; off += SEG) {
+    const m = Math.min(SEG, n - off);
+    const values = Array.from({ length: m }, () => '(?,?,?,0,?,?)').join(',');
+    const params: (string | number)[] = [];
+    for (let i = 0; i < m; i++) {
+      const code = genCardCode();
+      params.push(code, input.planId, input.batchNo, ts, input.expireDate);
+      created.push({
+        id: 0,
+        code,
+        plan_id: input.planId,
+        batch_no: input.batchNo,
+        status: 0,
+        redeemed_uid: 0,
+        redeemed_date: 0,
+        expire_date: input.expireDate,
+        create_date: ts,
+      });
+    }
     const r = await db
-      .prepare<{ id: number }>('INSERT INTO bbs_card (code,plan_id,batch_no,status,create_date,expire_date) VALUES (?,?,?,0,?,?) RETURNING id')
-      .bind(code, input.planId, input.batchNo, ts, input.expireDate)
-      .first<{ id: number }>();
-    created.push({
-      id: Number(r?.id ?? 0),
-      code,
-      plan_id: input.planId,
-      batch_no: input.batchNo,
-      status: 0,
-      redeemed_uid: 0,
-      redeemed_date: 0,
-      expire_date: input.expireDate,
-      create_date: ts,
-    });
+      .prepare<{ id: number }>(
+        `INSERT INTO bbs_card (code,plan_id,batch_no,status,create_date,expire_date) VALUES ${values} RETURNING id`,
+      )
+      .bind(...params)
+      .all();
+    const ids = (r.results ?? []).map((x) => Number(x.id));
+    for (let i = 0; i < m; i++) {
+      const row = created[off + i];
+      if (row) row.id = ids[i] ?? 0;
+    }
   }
   return created;
 }

@@ -9,8 +9,8 @@
 import { Code, LEVEL_GROUP_MIN, ORDER_TRANSITIONS, OrderStatus, type OrderStatusValue, type PayOrder } from '@freeidx/shared';
 import { AppError } from '../middleware/envelope';
 import { t0, type ApiT } from './i18n';
-import type { D1b } from './db';
-import { applyPointChange } from './points';
+import type { D1b, Stmt } from './db';
+import { creditDeltaStmts } from './points';
 
 interface Core {
   db: D1b;
@@ -307,27 +307,52 @@ export async function fulfillOrder(core: Core, orderNo: string, ts: number, t: A
     if (cur) return cur; // 已被他方履约/关单/退款：交由状态机兜底，不重复发放
     throw new AppError(Code.SYSTEM_ERROR, t('order.fulfillFailed'));
   }
-  if (durationDays > 0) {
-    // 续期基于 max(现值, now)，未过期用户叠加、过期用户从当下起算
-    await core.db
-      .prepare('UPDATE bbs_user SET vip_expire_at = MAX(vip_expire_at, ?) + ? WHERE uid = ?')
-      .bind(ts, durationDays * 86400, order.uid)
-      .run();
-  }
-  // 挂组（0004/0005）：会员体系与用户组合一——履约即把买家挂入计划关联组（gid>=100）；
-  // 首次挂组用 CASE 记下原组到 vip_from_gid（续费/换组不覆盖），到期由 cron demoteExpiredVip 回落；
-  // `gid >= ?` 守卫：管理组（<100）不受购买影响，防误配提权。
-  const targetGid = Math.trunc(Number(plan.gid ?? 0));
-  if (targetGid >= LEVEL_GROUP_MIN) {
-    await core.db
-      .prepare(
-        'UPDATE bbs_user SET gid = ?, vip_from_gid = CASE WHEN vip_from_gid > 0 THEN vip_from_gid ELSE gid END WHERE uid = ? AND gid >= ?',
-      )
-      .bind(targetGid, order.uid, LEVEL_GROUP_MIN)
-      .run();
-  }
-  if (credits > 0) {
-    await applyPointChange(core, { uid: order.uid, change: credits, reason: 'order', bizKey: `order:${orderNo}`, ts });
+  // 发放语句（VIP 续期 + 挂组 + perks 积分）合入单一 DB.batch() 事务：
+  //  - 要么全部生效、要么全部回滚，杜绝「VIP 延长了但积分没到账」的半履约；
+  //  - 发放整批失败时下方回滚状态翻转，订单留在 paid——webhook 重试/对账/后台 /settle 可重新履约，
+  //    杜绝「已 fulfilled 但权益永久缺失」（FULFILLED 幂等早退会挡死一切补发路径）。
+  try {
+    const stmts: Stmt[] = [];
+    if (durationDays > 0) {
+      // 续期基于 max(现值, now)，未过期用户叠加、过期用户从当下起算
+      stmts.push(
+        core.db
+          .prepare('UPDATE bbs_user SET vip_expire_at = MAX(vip_expire_at, ?) + ? WHERE uid = ?')
+          .bind(ts, durationDays * 86400, order.uid),
+      );
+    }
+    // 挂组（0004/0005）：会员体系与用户组合一——履约即把买家挂入计划关联组（gid>=100）；
+    // 首次挂组用 CASE 记下原组到 vip_from_gid（续费/换组不覆盖），到期由 cron demoteExpiredVip 回落；
+    // `gid >= ?` 守卫：管理组（<100）不受购买影响，防误配提权。
+    const targetGid = Math.trunc(Number(plan.gid ?? 0));
+    if (targetGid >= LEVEL_GROUP_MIN) {
+      stmts.push(
+        core.db
+          .prepare(
+            'UPDATE bbs_user SET gid = ?, vip_from_gid = CASE WHEN vip_from_gid > 0 THEN vip_from_gid ELSE gid END WHERE uid = ? AND gid >= ?',
+          )
+          .bind(targetGid, order.uid, LEVEL_GROUP_MIN),
+      );
+    }
+    if (credits > 0) {
+      // perks.credits 发放与挂组同批（bizKey 唯一：重复发放整批回滚，幂等由本函数入口守卫）
+      stmts.push(
+        ...creditDeltaStmts(core, { uid: order.uid, creditType: 1, change: credits, reason: 'order', bizKey: `order:${orderNo}`, ts }),
+      );
+    }
+    if (stmts.length) await core.db.batch(stmts);
+  } catch (e) {
+    // 回滚翻转（fulfilled→paid）：条件守卫 status=FULFILLED，不误伤并发退款（refunded 终态）。
+    // 回滚自身失败（D1 持续故障）只记错误不掩盖原始异常——订单停留 fulfilled 与旧行为一致，不更糟。
+    try {
+      await core.db
+        .prepare('UPDATE bbs_order SET status = ?, fulfilled_date = 0 WHERE order_no = ? AND status = ?')
+        .bind(OrderStatus.PAID, orderNo, OrderStatus.FULFILLED)
+        .run();
+    } catch (rb) {
+      console.error('[order] fulfill rollback failed:', rb instanceof Error ? rb.message : rb);
+    }
+    throw e;
   }
   // 履约改了 vip_expire_at / gid：user:{uid} 缓存（loadViewer，L0+L2/30s）必须立即失效，
   // 否则买家在缓存窗口内仍是旧组（会员组权限/下载等权益不一致）。
@@ -355,9 +380,13 @@ export async function demoteExpiredVip(
     .all();
   const rows = res.results ?? [];
   for (const r of rows) {
+    // UPDATE 复查 SELECT 全部条件（TOCTOU 防护）：SELECT 与 UPDATE 之间可能发生续费
+    // （vip_expire_at 被顺延到未来）或管理员调组（gid < 100），此时绝不可降级。
     await db
-      .prepare('UPDATE bbs_user SET gid = ?, vip_from_gid = 0 WHERE uid = ? AND vip_from_gid > 0')
-      .bind(Number(r.vip_from_gid), Number(r.uid))
+      .prepare(
+        'UPDATE bbs_user SET gid = ?, vip_from_gid = 0 WHERE uid = ? AND vip_from_gid > 0 AND vip_expire_at > 0 AND vip_expire_at < ? AND gid >= ?',
+      )
+      .bind(Number(r.vip_from_gid), Number(r.uid), ts, LEVEL_GROUP_MIN)
       .run();
   }
   return rows.map((r) => ({ uid: Number(r.uid), fromGid: Number(r.vip_from_gid) }));

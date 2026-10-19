@@ -229,7 +229,8 @@ describe('会员挂组/到期回落（0004/0005：会员体系与用户组合一
     const rows = await demoteExpiredVip(core.db, 1700000200);
     expect(rows).toEqual([{ uid: 9, fromGid: 101 }]);
     const upd = calls.find((c) => /UPDATE bbs_user SET gid = \?, vip_from_gid = 0/.test(c.sql));
-    expect(upd?.params).toEqual([101, 9]);
+    // UPDATE 复查 SELECT 全部条件（TOCTOU 防护）：fromGid, uid, ts, LEVEL_GROUP_MIN
+    expect(upd?.params).toEqual([101, 9, 1700000200, 100]);
   });
 
   it('demoteExpiredVip：无到期候选 → 空数组不写库', async () => {

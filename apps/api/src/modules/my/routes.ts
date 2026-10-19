@@ -16,6 +16,7 @@ import { remember } from '../../core/cache';
 import { USER_PUBLIC_COLS, THREAD_LIST_COLS_T } from '../../core/db/columns';
 import { cursorCond } from '../../core/db/paginate';
 import { hashPassword, verifyClientPassword } from '../../core/auth';
+import { destroyUserSessions } from '../../core/auth/session';
 import { isPassword } from '../../core/auth/validate';
 import { loadExtConfig } from '../../core/ext-store';
 import { LIGHT_EXT_ID, parseLightConfig } from '../../extensions/light';
@@ -317,7 +318,14 @@ async function changePassword(c: Ctx): Promise<Response> {
   const perr = isPassword(np, t);
   if (perr) throw new AppError(Code.FORM_PASSWORD_MISMATCH, perr);
   const stored = await hashPassword(np);
-  await db.prepare('UPDATE bbs_user SET password = ?, salt = ? WHERE uid = ?').bind(stored, '', v.uid).run();
+  await db
+    .prepare('UPDATE bbs_user SET password = ?, salt = ?, token_version = token_version + 1 WHERE uid = ?')
+    .bind(stored, '', v.uid)
+    .run();
+  // 改密 = 全端登出（对齐 auth 密码重置三件套）：token_version++ 使 JWT 轨（at/admin_at）失效；
+  // 会话轨 sid 读取不校验 tv，须显式删除该用户所有 bbs_session 行；user:{uid} 缓存立即失效。
+  await destroyUserSessions(db, v.uid);
+  await cache.del(`user:${v.uid}`);
   return ok(c, t('my.passwordChanged'), { data: { uid: v.uid } });
 }
 

@@ -380,7 +380,8 @@ async function createReply(c: Ctx): Promise<Response> {
     core.db.prepare('INSERT INTO bbs_mypost (uid,tid,pid) VALUES (?,?,?)').bind(viewer.uid, tid, pid) as unknown as Stmt,
   ];
   // 审核置位（check_or_not(组, 板块, 'post') → 回帖 ok=0）
-  if (checkOrNot(ctx.grouplist[viewer.gid], ctx.forumlist[fid], 'post')) {
+  const replyPending = checkOrNot(ctx.grouplist[viewer.gid], ctx.forumlist[fid], 'post');
+  if (replyPending) {
     replyStmts.push(
       core.db.prepare('UPDATE bbs_post SET ok = ? WHERE pid = ? AND isfirst = 0').bind(CheckStatus.PENDING, pid) as unknown as Stmt,
     );
@@ -395,17 +396,20 @@ async function createReply(c: Ctx): Promise<Response> {
   // 三币种发放（有线则文案=积分串，无线才回落「回帖成功」）→ 按经验重算等级组
   const gain = await grantForPost(core, { uid: viewer.uid, isfirst: 0, pid, ts: ts });
   await upgradeAfterGrant(core, viewer.uid, ctx.grouplist, viewer.gid);
-  await sendReplyNotices(core, {
-    tid,
-    pid,
-    fromUid: viewer.uid,
-    threadUid: Number(thread.uid),
-    subject: String(thread.subject),
-    message,
-    quoteUid,
-    quoteMessage,
-    ts,
-  }, t);
+  // 待审回帖不发通知：通知正文嵌入回帖原文，若即时发出则绕过审核直接触达主题作者/被引用者（被拒后无法撤回）。
+  if (!replyPending) {
+    await sendReplyNotices(core, {
+      tid,
+      pid,
+      fromUid: viewer.uid,
+      threadUid: Number(thread.uid),
+      subject: String(thread.subject),
+      message,
+      quoteUid,
+      quoteMessage,
+      ts,
+    }, t);
+  }
   await scheduleSeo(core, c, tid, 'gen');
 
   return ok(c, gain || t('write.replyDone'), { data: { pid, tid } });
@@ -505,8 +509,9 @@ async function updatePost(c: Ctx): Promise<Response> {
   if (isfirst) {
     const newFid = Number(b.fid ?? fid);
     const subject = b.subject !== undefined ? b.subject.toString() : thread.subject;
-    if (subject !== thread.subject && codeLen(subject) > 80) {
-      throw new AppError(Code.VALIDATION_ERROR, t('write.subjectMax80'));
+    // 标题上限与创建口径统一（128，write.subjectTooLong）：历史 80 上限会使 81~128 字的存量标题一旦改动即无法保存
+    if (subject !== thread.subject && codeLen(subject) > 128) {
+      throw new AppError(Code.VALIDATION_ERROR, t('write.subjectTooLong'));
     }
     const arr: Record<string, number | string> = {};
     if (newFid !== fid) {

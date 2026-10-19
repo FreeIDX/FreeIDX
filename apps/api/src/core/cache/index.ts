@@ -118,10 +118,16 @@ export class Cache {
     if (policy.layers.includes('L1')) await this.kvPut(`fi:${key}`, v, ttl);
     if (policy.layers.includes('L2')) {
       this.l2Writes++;
-      await this.db
-        .prepare('REPLACE INTO bbs_cache (k, v, expiry) VALUES (?, ?, ?)')
-        .bind(key, v, ttl > 0 ? now + ttl : 0)
-        .run();
+      try {
+        await this.db
+          .prepare('REPLACE INTO bbs_cache (k, v, expiry) VALUES (?, ?, ?)')
+          .bind(key, v, ttl > 0 ? now + ttl : 0)
+          .run();
+      } catch (e) {
+        // L2 同 L1 一样 fail-soft（§7 契约「缓存操作失败不得升级为业务失败」）：
+        // D1 写故障/行预算耗尽时只告警，读路径回落 loader，陈旧窗口由 L0(≤30s)/TTL 兜底。
+        console.warn('[cache] L2 set failed:', e instanceof Error ? e.message : e);
+      }
     }
   }
 
@@ -132,7 +138,12 @@ export class Cache {
     this.loaded.delete(key);
     if (policy.layers.includes('L1')) await this.kvDel(`fi:${key}`);
     if (policy.layers.includes('L2')) {
-      await this.db.prepare('DELETE FROM bbs_cache WHERE k = ?').bind(key).run();
+      try {
+        await this.db.prepare('DELETE FROM bbs_cache WHERE k = ?').bind(key).run();
+      } catch (e) {
+        // fail-soft 同上：业务写已提交时 del 失败绝不能把整个请求打成 500（否则用户重试 = 重复发帖）。
+        console.warn('[cache] L2 del failed:', e instanceof Error ? e.message : e);
+      }
     }
   }
 

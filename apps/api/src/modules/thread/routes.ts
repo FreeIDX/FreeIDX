@@ -393,8 +393,9 @@ export function threadRoutes(): Hono<ReadEnv> {
     const matchParams: string[] = [];
     for (const lk of termLikes) {
       if (range === 'all') {
+        // 楼层正文匹配须过审（p.ok=1）：待审/回收楼层正文不得被搜索命中（审核可见性口径与主题级 canSeeUnapproved 对齐）
         conds.push(
-          `(subject LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM ${P} p WHERE p.tid = ${T}.tid AND p.message LIKE ? ESCAPE '\\'))`,
+          `(subject LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM ${P} p WHERE p.tid = ${T}.tid AND p.ok = 1 AND p.message LIKE ? ESCAPE '\\'))`,
         );
         matchParams.push(lk, lk);
       } else {
@@ -410,10 +411,10 @@ export function threadRoutes(): Hono<ReadEnv> {
       .first<{ c: number }>();
     const total = Number(cnt?.c ?? 0);
     const off = shallowOffset(page, size);
-    // range=all 追加命中正文摘要（相关子查询取首个命中楼层的 message_fmt，随行下发，前端高亮）
+    // range=all 追加命中正文摘要（相关子查询取首个命中楼层的 message_fmt，随行下发，前端高亮；仅取已过审楼层）
     const snippetSql =
       range === 'all' && termLikes.length
-        ? `, (SELECT p.message_fmt FROM ${P} p WHERE p.tid = ${T}.tid AND p.message LIKE ? ESCAPE '\\' ORDER BY p.pid ASC LIMIT 1) AS snippet_raw`
+        ? `, (SELECT p.message_fmt FROM ${P} p WHERE p.tid = ${T}.tid AND p.ok = 1 AND p.message LIKE ? ESCAPE '\\' ORDER BY p.pid ASC LIMIT 1) AS snippet_raw`
         : '';
     const r = await db
       .prepare<ThreadRow & { snippet_raw?: string | null }>(
@@ -732,14 +733,20 @@ export function threadRoutes(): Hono<ReadEnv> {
     ]);
     const ctx = makeAccessCtx(viewer, forumlist, grouplist);
     const head = await db
-      .prepare<{ pid: number; uid: number; create_date: number; message_fmt: string; fid: number }>(
-        `SELECT p.pid,p.uid,p.create_date,p.message_fmt,t.fid AS fid FROM ${P} p INNER JOIN ${T} t ON t.tid = p.tid WHERE p.pid = ?`,
+      .prepare<{ pid: number; uid: number; create_date: number; message_fmt: string; fid: number; pok: number; tok: number; tuid: number }>(
+        `SELECT p.pid,p.uid,p.create_date,p.message_fmt,p.ok AS pok,t.fid AS fid,t.ok AS tok,t.uid AS tuid FROM ${P} p INNER JOIN ${T} t ON t.tid = p.tid WHERE p.pid = ?`,
       )
       .bind(pid)
-      .first<{ pid: number; uid: number; create_date: number; message_fmt: string; fid: number }>();
+      .first<{ pid: number; uid: number; create_date: number; message_fmt: string; fid: number; pok: number; tok: number; tuid: number }>();
     if (!head) throw new AppError(Code.NOT_FOUND, t('common.postNotFound'));
     if (!forumAccessUser(ctx, Number(head.fid), 'allowread')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
     const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
+    // head 楼层与所属主题均须过审（或访问者为版务/作者）：否则待审/回收站内容可借本端点 head 字段泄露
+    // （口径与帖内楼层列表的 canSeeUnapproved 一致；主题不可见时整端点 404）。
+    const threadVisible = canSeeUnapproved(Number(head.tok), { seeCheck, isAuthor: Number(head.tuid) === viewer.uid });
+    if (!threadVisible || !canSeeUnapproved(Number(head.pok), { seeCheck, isAuthor: Number(head.uid) === viewer.uid })) {
+      throw new AppError(Code.NOT_FOUND, t('common.postNotFound'));
+    }
     const off = shallowOffset(page, size);
     const [cnt, r] = await Promise.all([
       db.prepare<{ c: number }>(`SELECT COUNT(*) AS c FROM ${P} WHERE quotepid = ?`).bind(pid).first<{ c: number }>(),
@@ -751,7 +758,9 @@ export function threadRoutes(): Hono<ReadEnv> {
         .all(),
     ]);
     const total = Number(cnt?.c ?? 0);
-    const rows = r.results.filter((x) => canSeeUnapproved(Number(x.ok), { seeCheck, isAuthor: Number(x.uid) === viewer.uid }));
+    const rows = r.results.filter(
+      (x) => canSeeUnapproved(Number(x.ok), { seeCheck, isAuthor: Number(x.uid) === viewer.uid }) && threadVisible,
+    );
     const uids = [...new Set([Number(head.uid), ...rows.map((x) => Number(x.uid))])];
     const usersMap = new Map<number, { username: string; avatar: number; avatarAuto: string }>();
     if (uids.length) {

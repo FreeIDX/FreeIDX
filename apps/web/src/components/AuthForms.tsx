@@ -50,6 +50,7 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
+  const [tsNonce, setTsNonce] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -63,6 +64,9 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     } catch (ex) {
       setErr(apiErrorMessage(ex));
     } finally {
+      // token 一次性（siteverify 校验即消耗）⇒ 不论成败都重挂换发，否则密码错一次后无法重试
+      setToken('');
+      setTsNonce((n) => n + 1);
       setBusy(false);
     }
   };
@@ -87,7 +91,7 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
-      <Turnstile onToken={setToken} />
+      <Turnstile key={tsNonce} onToken={setToken} />
       {err && <p className="text-sm text-destructive">{err}</p>}
       <button type="submit" disabled={!account || !password || busy} className={authSubmitCls}>
         <SubmitInner busy={busy}>{t('login')}</SubmitInner>
@@ -110,6 +114,7 @@ export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
   const [password, setPassword] = useState('');
   const [emailCode, setEmailCode] = useState('');
   const [token, setToken] = useState('');
+  const [tsNonce, setTsNonce] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
@@ -152,6 +157,9 @@ export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
     } catch (ex) {
       setErr(apiErrorMessage(ex));
     } finally {
+      // token 一次性：发码即消耗 ⇒ 不论成败都重挂换发，注册提交需重新获取
+      setToken('');
+      setTsNonce((n) => n + 1);
       setSending(false);
     }
   };
@@ -166,6 +174,9 @@ export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
     } catch (ex) {
       setErr(apiErrorMessage(ex));
     } finally {
+      // token 一次性 ⇒ 不论成败都重挂换发
+      setToken('');
+      setTsNonce((n) => n + 1);
       setBusy(false);
     }
   };
@@ -224,7 +235,7 @@ export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
           </button>
         </div>
       )}
-      <Turnstile onToken={setToken} />
+      <Turnstile key={tsNonce} onToken={setToken} />
       {notice && <p className="text-sm text-success">{notice}</p>}
       {err && <p className="text-sm text-destructive">{err}</p>}
       <button type="submit" disabled={!username || !email || !password || busy} className={authSubmitCls}>

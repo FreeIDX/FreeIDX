@@ -11,7 +11,7 @@ import { getCookie } from 'hono/cookie';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { readAdminToken } from '../../core/auth/admin';
-import { NoticeType, noticeSend } from '../../core/notice';
+import { NoticeType, noticeSend, escapeHtml } from '../../core/notice';
 import type { Stmt } from '../../core/db';
 import { core, intParam, totalPageOf, type ReadEnv } from '../shared';
 
@@ -58,7 +58,9 @@ export function adminNoticeRoutes(): Hono<ReadEnv> {
     const b = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!b) throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
     const recvuid = Number(b.recvuid);
-    const message = String(b.message ?? '').trim();
+    // 发送入口为纯文本语义，但前台 MePage / 后台列表均以 innerHTML 渲染 notice message：
+    // 与 sendPm 同口径先转义，杜绝经系统通知注入任意 HTML/脚本（存储型 XSS）。
+    const message = escapeHtml(String(b.message ?? '').trim());
     if (!message) throw new AppError(Code.VALIDATION_ERROR, t('admin.contentRequired'));
     if (!Number.isInteger(recvuid) || recvuid <= 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.recvRequired'));
     const target = await db.prepare<{ uid: number }>('SELECT uid FROM bbs_user WHERE uid = ?').bind(recvuid).first<{ uid: number }>();

@@ -28,6 +28,7 @@ export function ResetPwPage() {
 
   const [email, setEmail] = useState(emailFromLink);
   const [turnstile, setTurnstile] = useState('');
+  const [tsNonce, setTsNonce] = useState(0);
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [busy, setBusy] = useState(false);
@@ -55,6 +56,9 @@ export function ResetPwPage() {
     } catch (ex) {
       setErr(apiErrorMessage(ex));
     } finally {
+      // token 一次性（siteverify 校验即消耗）⇒ 不论成败都重挂换发，失败后可立即重试
+      setTurnstile('');
+      setTsNonce((n) => n + 1);
       setBusy(false);
     }
   };
@@ -165,7 +169,7 @@ export function ResetPwPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
-                    <Turnstile onToken={setTurnstile} />
+                    <Turnstile key={tsNonce} onToken={setTurnstile} />
                     {notice && <p className="text-sm text-success">{notice}</p>}
                     {err && <p className="text-sm text-destructive">{err}</p>}
                     {submitButton}
