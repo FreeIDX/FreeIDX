@@ -51,14 +51,16 @@ function baseRules(): SqlRule[] {
     { test: /FROM bbs_thread WHERE tid = \?/, first: () => threadRow() },
     // 引用/编辑/删除：按 pid 读回帖
     { test: /SELECT pid,tid,uid,isfirst FROM bbs_post WHERE pid/, first: (p: readonly unknown[]) => ({ pid: Number(p[0]), tid: 9, uid: 1, isfirst: 0 }) },
+    // 删除回帖：postPurgeStmts 联表读取（B1 后含 ok/create_date/fid；ok=1 → 回退 thread.posts/todayposts）
+    { test: /SELECT p\.pid,p\.tid,p\.uid,p\.isfirst,p\.ok,p\.create_date,t\.fid FROM bbs_post p INNER JOIN bbs_thread/, first: (p: readonly unknown[]) => ({ pid: Number(p[0]), tid: 9, uid: 1, isfirst: 0, ok: 1, create_date: 1699999000, fid: 1 }) },
     { test: /SELECT pid,tid,uid,message FROM bbs_post WHERE pid/, first: { pid: 5, tid: 9, uid: 2, message: '<p>被引用内容</p>' } },
     // 级联删作者聚合（isfirst=0：首帖不计入 user.posts）+ lastpid 回退
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid = \? AND isfirst = 0 GROUP BY uid/, rows: [{ uid: 1, c: 1 }, { uid: 2, c: 3 }] },
     // 删除回扣楼层列表（级联删逐楼层扣 post_*）
     { test: /SELECT pid,uid FROM bbs_post WHERE tid = \? AND isfirst = 0/, rows: [{ pid: 101, uid: 2 }] },
     { test: /SELECT pid,uid,create_date FROM bbs_post WHERE tid = \? ORDER BY pid DESC/, first: { pid: 87, uid: 2, create_date: 1700000000 } },
-    // 删末帖回退 lastpid（purge：pid <> ? 排除自身取倒数第二楼）
-    { test: /SELECT pid,uid,create_date FROM bbs_post WHERE tid = \? AND pid <> \? ORDER BY pid DESC/, first: { pid: 86, uid: 2, create_date: 1699999000 } },
+    // 删末帖回退 lastpid（purge：pid <> ? 排除自身取倒数第二楼；B1 后仅取已过审楼层）
+    { test: /SELECT pid,uid,create_date FROM bbs_post WHERE tid = \? AND pid <> \? AND ok = 1/, first: { pid: 86, uid: 2, create_date: 1699999000 } },
     // 写：INSERT RETURNING
     { test: /INSERT INTO bbs_post/, first: { pid: 100 }, rows: [{ pid: 100 }] },
     { test: /INSERT INTO bbs_thread/, first: { tid: 500 }, rows: [{ tid: 500 }] },
@@ -68,7 +70,7 @@ function baseRules(): SqlRule[] {
     { test: /UPDATE bbs_post|UPDATE bbs_thread|UPDATE bbs_forum|UPDATE bbs_user/, rows: [] },
     { test: /INSERT INTO bbs_mythread|INSERT INTO bbs_mypost/, rows: [] },
     { test: /UPDATE bbs_thread_top/, rows: [] },
-    { test: /DELETE FROM bbs_post|DELETE FROM bbs_thread|DELETE FROM bbs_mythread|DELETE FROM bbs_mypost|DELETE FROM bbs_thread_top|DELETE FROM bbs_attach/, rows: [] },
+    { test: /DELETE FROM bbs_post|DELETE FROM bbs_thread|DELETE FROM bbs_mythread|DELETE FROM bbs_mypost|DELETE FROM bbs_thread_top|DELETE FROM bbs_attach|DELETE FROM bbs_like|DELETE FROM bbs_favorite|DELETE FROM bbs_post_like|DELETE FROM bbs_paylist/, rows: [] },
   ];
 }
 
@@ -184,16 +186,20 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     expect(Number(ins2?.params[5])).toBe(0); // quotepid 归零入库
   });
 
-  it('回帖计数：thread posts+1 / user posts+1 / forum todayposts+1（非 threads）', async () => {
+  it('回帖计数：thread posts+1 / user posts+1 / forum todayposts+1（非 threads）+ 尾列补 lastusername', async () => {
     const r = makeEnv(baseRules());
     await app.request('/api/threads/9/posts', { method: 'POST', headers: authed(r), body: JSON.stringify({ message: '回复', doctype: 0 }) }, r.env as never);
     const sqls = r.calls.map((c) => c.sql).join('\n');
     expect(sqls).toMatch(/posts = posts \+ 1/);
     expect(sqls).toMatch(/todayposts = todayposts \+ 1/);
     expect(sqls).not.toMatch(/forum SET threads/);
+    // §20.2 结构性修复：回帖尾列必须带 lastusername（= 回帖者当前用户名），否则"最后回复 by X"恒显示楼主名
+    const tail = r.calls.find((c) => /UPDATE bbs_thread SET posts = posts \+ 1, lastpid = \?, lastuid = \?, last_date = \?, lastusername = \?/.test(c.sql));
+    expect(tail).toBeTruthy();
+    expect(String(tail?.params[3])).toBe('admin');
   });
 
-  it('编辑 isfirst：改 subject + 移动版块触发 forum threads ±1 + thread_top fid 更新', async () => {
+  it('编辑 isfirst：改 subject + 移动版块触发 forum threads ±1 + thread_top fid 更新 + forumlist 缓存失效', async () => {
     const rules = baseRules();
     const pr = rules.find((x) => /SELECT pid,tid,uid,isfirst FROM bbs_post WHERE pid/.test(x.test.source));
     if (pr) pr.first = (p: readonly unknown[]) => ({ pid: Number(p[0]), tid: 9, uid: 1, isfirst: 1 });
@@ -206,6 +212,7 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     expect(sqls).toMatch(/threads = threads \+ 1 WHERE fid/);
     expect(sqls).toMatch(/threads = threads - 1 WHERE fid/);
     expect(sqls).toMatch(/UPDATE bbs_thread_top SET fid/);
+    expect(r.calls.some((c) => /DELETE FROM bbs_cache/.test(c.sql) && String(c.params[0]) === 'forumlist')).toBe(true);
   });
 
   it('编辑：非版主且主题已关闭 → 拒绝', async () => {
@@ -226,7 +233,20 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     expect(sqls).toMatch(/posts = posts - 1/);
     expect(sqls).toMatch(/DELETE FROM bbs_post WHERE pid/);
     expect(sqls).toMatch(/DELETE FROM bbs_mypost/);
+    expect(sqls).toMatch(/DELETE FROM bbs_post_like WHERE pid/); // B3：楼层点赞随删
     expect(sqls).toMatch(/UPDATE bbs_thread SET lastpid/); // 删的是最后回帖 → 回退
+    expect(sqls).toMatch(/lastusername = \(SELECT username FROM bbs_user WHERE uid = \?\)/); // §20.2：回退同步补 lastusername（标量子查询取新尾作者当前用户名）
+  });
+
+  it('删除待审回帖（ok=0）：不回退 thread.posts（发帖时未计入），user.posts 仍回退', async () => {
+    const rules = baseRules();
+    rules.find((x) => /INNER JOIN bbs_thread/.test(x.test.source))!.first = (p: readonly unknown[]) => ({ pid: Number(p[0]), tid: 9, uid: 1, isfirst: 0, ok: 0, create_date: 1699999000, fid: 1 });
+    const r = makeEnv(rules);
+    const res = await app.request('/api/posts/88', { method: 'DELETE', headers: authed(r) }, r.env as never);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const sqls = r.calls.map((c) => c.sql).join('\n');
+    expect(sqls).toMatch(/UPDATE bbs_user SET posts = posts - 1/);
+    expect(sqls).not.toMatch(/UPDATE bbs_thread SET posts = posts - 1/);
   });
 
   it('删除首帖：级联删主题 + forum threads-1 + 各作者 posts 回退', async () => {

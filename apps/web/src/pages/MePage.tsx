@@ -16,6 +16,7 @@ import {
   fmtDate,
   getMyCreditRecord,
   getMyCredits,
+  getMyPoints,
   getMyPurchased,
   getMyV,
   getRankList,
@@ -36,6 +37,7 @@ import { Icon } from '../components/icons';
 import { FollowUserList } from '../components/FollowUserList';
 import { Pagination } from '../components/Pagination';
 import { ThreadList } from '../components/ThreadList';
+import { UserReplyList } from '../components/UserReplyList';
 import { useCursorThreads } from '../hooks/useCursorThreads';
 import { Button, Card, CardTabs, IconInput, UserCountTile, UserInfoRow, UserSideItem, cx, inputCls } from '../components/ui';
 import { useAuth } from '../store/auth';
@@ -45,16 +47,17 @@ import { useT, useGroupName } from '../lib/i18n';
 import type { UserProfile } from './UserPage';
 
 type Tab = 'info' | 'password' | 'avatar' | 'background';
-type Section = 'profile' | 'threads' | 'favorites' | 'likes' | 'follow' | 'notices' | 'ranklist' | 'purchased' | 'credits' | 'trade' | 'record' | 'vapply';
+type Section = 'profile' | 'threads' | 'replies' | 'favorites' | 'likes' | 'follow' | 'notices' | 'ranklist' | 'purchased' | 'credits' | 'points' | 'trade' | 'record' | 'vapply';
 
 /** 预设头像清单（0..56 共 57 张，与后端白名单 /avatars/0..56.png 一致） */
 const AVATAR_PRESETS = Array.from({ length: 57 }, (_v, i) => `/avatars/${i}.png`);
 
 /** 移动端横向菜单按钮（<lg；财富管理合并积分/交易/记录） */
-const MOBILE_NAV: { to: string; key: 'profile_short' | 'post' | 'credits_label' | 'ranking_short' | 'favorites_short' | 'messages_short' | 'verify_short' | 'my_follow' | 'my_likes'; match: (s: Section) => boolean }[] = [
+const MOBILE_NAV: { to: string; key: 'profile_short' | 'post' | 'my_replies' | 'credits_label' | 'ranking_short' | 'favorites_short' | 'messages_short' | 'verify_short' | 'my_follow' | 'my_likes'; match: (s: Section) => boolean }[] = [
   { to: '/me', key: 'profile_short', match: (s) => s === 'profile' },
   { to: '/me?s=threads', key: 'post', match: (s) => s === 'threads' },
-  { to: '/me?s=credits', key: 'credits_label', match: (s) => s === 'credits' || s === 'trade' || s === 'record' },
+  { to: '/me?s=replies', key: 'my_replies', match: (s) => s === 'replies' },
+  { to: '/me?s=credits', key: 'credits_label', match: (s) => s === 'credits' || s === 'points' || s === 'trade' || s === 'record' },
   { to: '/me?s=ranklist', key: 'ranking_short', match: (s) => s === 'ranklist' },
   { to: '/me?s=favorites', key: 'favorites_short', match: (s) => s === 'favorites' },
   { to: '/me?s=likes', key: 'my_likes', match: (s) => s === 'likes' },
@@ -72,7 +75,9 @@ export function MePage() {
   const section: Section =
     s === 'threads'
       ? 'threads'
-      : s === 'favorites'
+      : s === 'replies'
+        ? 'replies'
+        : s === 'favorites'
         ? 'favorites'
         : s === 'likes'
           ? 'likes'
@@ -86,7 +91,9 @@ export function MePage() {
                   ? 'purchased'
                   : s === 'credits'
                     ? 'credits'
-                    : s === 'trade'
+                    : s === 'points'
+                      ? 'points'
+                      : s === 'trade'
                       ? 'trade'
                       : s === 'record'
                         ? 'record'
@@ -166,6 +173,10 @@ export function MePage() {
       setOldPw('');
       setNewPw('');
       setNewPw2('');
+      // 改密 = 服务端全端登出（tv+1 废 JWT + 删该用户全部 session）：本地登录态必须同步刷新
+      // 为游客，否则界面仍显示已登录、后续请求逐一 NOT_LOGIN。刷新后本页回落到「请先登录」
+      // 引导（下方 me 早退分支），用户以新密码重新登录即闭环。
+      await refresh();
     } catch (e) {
       setPwErr(apiErrorMessage(e, t('modify_failed')));
     } finally {
@@ -315,6 +326,7 @@ export function MePage() {
             <div className="border-t border-zh-line px-2 py-1.5">
               <UserSideItem to="/me" label={t('personal_profile')} active={section === 'profile'} icon="user" />
               <UserSideItem to="/me?s=threads" label={t('my_posts')} active={section === 'threads'} icon="edit" />
+              <UserSideItem to="/me?s=replies" label={t('my_replies')} active={section === 'replies'} icon="message" />
               {/* 已购 + 财富管理（插在“我的帖子”之后） */}
               <UserSideItem to="/me?s=purchased" label={t('purchased_label')} active={section === 'purchased'} icon="cart" />
               <UserSideItem
@@ -509,6 +521,11 @@ export function MePage() {
               )}
             </div>
           </section>
+        ) : section === 'replies' ? (
+          <section className="zh-card mb-4 overflow-hidden">
+            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('my_replies')}</div>
+            <UserReplyList active />
+          </section>
         ) : section === 'favorites' ? (
           <section className="zh-card mb-4 overflow-hidden">
             <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('my_favorites')}</div>
@@ -570,6 +587,8 @@ export function MePage() {
           <PurchasedSection active={section === 'purchased'} />
         ) : section === 'credits' ? (
           <CreditsSection />
+        ) : section === 'points' ? (
+          <PointsSection />
         ) : section === 'trade' ? (
           <TradeSection />
         ) : section === 'vapply' ? (
@@ -938,14 +957,15 @@ function RanklistSection({ active }: { active: boolean }) {
 
 /* ---------------- 财富管理（积分/交易/记录/已购） ---------------- */
 
-/** 积分家族页签（积分 + 交易/记录） */
-function CreditNavTabs({ current }: { current: 'credits' | 'trade' | 'record' }) {
+/** 积分家族页签（积分 + 流水 + 交易/记录） */
+function CreditNavTabs({ current }: { current: 'credits' | 'points' | 'trade' | 'record' }) {
   const t = useT();
   return (
     <div className="zh-card-header px-4 py-2.5">
       <CardTabs
         items={[
           { k: 'credits', text: t('credits_label'), active: current === 'credits', to: '/me?s=credits' },
+          { k: 'points', text: t('points_log_label'), active: current === 'points', to: '/me?s=points' },
           { k: 'trade', text: t('trade_label'), active: current === 'trade', to: '/me?s=trade' },
           { k: 'record', text: t('record_label'), active: current === 'record', to: '/me?s=record' },
         ]}
@@ -1006,6 +1026,70 @@ function CreditsSection() {
           </>
         )}
       </div>
+    </section>
+  );
+}
+
+/** 积分流水（my-points）：bbs_point_log 权威账本——签到/发帖奖励/精华结算/管理员调整等 15 类变动明细，
+ *  与「记录」tab（user_pay 交易单）互补：交易单只覆盖购买/兑换/转账 4 类，账本全覆盖经验币种。 */
+function PointsSection() {
+  const t = useT();
+  const [search] = useSearchParams();
+  const page = posInt(search.get('p'));
+  const q = useQuery({ queryKey: ['my-points', page], queryFn: () => getMyPoints(page) });
+  const rows = q.data?.list ?? [];
+  const href = (p: number) => `/me?s=points${p > 1 ? `&p=${p}` : ''}`;
+  const reasonLabel = (reason: string): string => {
+    switch (reason) {
+      case 'thread': return t('point_reason_thread');
+      case 'reply': return t('reply_btn');
+      case 'daily_first': return t('point_reason_daily_first');
+      case 'attach_purchase': return t('point_reason_attach_purchase');
+      case 'attach_income': return t('point_reason_attach_income');
+      case 'order': return t('point_reason_order');
+      case 'admin': return t('point_reason_admin');
+      case 'register': return t('point_reason_register');
+      case 'thread_purchase': return t('point_reason_thread_purchase');
+      case 'thread_income': return t('point_reason_thread_income');
+      case 'transfer_out': return t('point_reason_transfer_out');
+      case 'transfer_in': return t('point_reason_transfer_in');
+      case 'digest': return t('digest_label');
+      case 'checkin': return t('point_reason_checkin');
+      case 'v_apply': return t('point_reason_v_apply');
+      default: return reason;
+    }
+  };
+  return (
+    <section className="zh-card mb-4 overflow-hidden">
+      <CreditNavTabs current="points" />
+      {q.isError && <p className="px-5 py-3 text-sm text-destructive">{(q.error as Error).message}</p>}
+      <div className="overflow-x-auto px-4 pb-1">
+        {/* bootstrap .table：表头浅底灰字、行底发丝线 + hover 换底色（与「记录」同款） */}
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-lt-soft text-[13px] text-lt-grey">
+              <th className="px-3 py-3 text-left font-medium">{t('time_label')}</th>
+              <th className="px-3 py-3 text-left font-medium">{t('type_label')}</th>
+              <th className="px-3 py-3 text-left font-medium">{t('point_log_change')}</th>
+              <th className="px-3 py-3 text-left font-medium">{t('point_log_balance')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-zh-line hover:bg-zh-row-hover">
+                <td className="whitespace-nowrap px-3 py-3">{fmtDate(r.create_date)}</td>
+                <td className="px-3 py-3">{reasonLabel(r.reason)}</td>
+                <td className={`px-3 py-3 tabular-nums ${r.change > 0 ? 'text-success' : r.change < 0 ? 'text-destructive' : ''}`}>
+                  {r.change > 0 ? `+${r.change}` : r.change}
+                </td>
+                <td className="px-3 py-3 tabular-nums">{r.balance}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!q.isError && !q.isLoading && rows.length === 0 && <p className="py-6 text-center text-sm text-lt-grey">{t('no_data')}</p>}
+      </div>
+      <Pagination page={page} totalPage={q.data?.total_page ?? 1} href={href} />
     </section>
   );
 }

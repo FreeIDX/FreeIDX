@@ -9,7 +9,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Image as TiptapImage } from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
-import { uploadAttachment } from '../lib/api';
+import { deleteAttachment, uploadAttachment } from '../lib/api';
 import { apiErrorMessage } from '../lib/errors';
 import { useT } from '../lib/i18n';
 import { Turnstile, turnstileDisabled } from './Turnstile';
@@ -168,6 +168,8 @@ export function Composer(props: ComposerProps) {
   };
 
   const removeAttach = (aid: number) => {
+    // 尽力而为地立即回收暂存附件（R2 对象 + 行；仅 status=0 可删）；失败静默——attachGc 24h 兜底，不阻断前端移除
+    void deleteAttachment(aid).catch(() => undefined);
     const next = attachRef.current.filter((a) => a.aid !== aid);
     attachRef.current = next;
     setAttach(next);

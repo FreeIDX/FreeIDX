@@ -238,8 +238,13 @@ async function verifyWebhook(req: Request, cfg: StripeCfg): Promise<ProviderEven
   const orderNo = String(meta?.['order_no'] ?? obj['client_reference_id'] ?? '').trim();
   const base = { providerRef, ...(orderNo ? { orderNo } : {}) };
   const type = String(evt.type ?? '');
-  if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded' || type === 'payment_intent.succeeded') {
+  // Checkout Session 事件金额在 amount_total；PaymentIntent 事件金额在 amount（无 amount_total）。
+  // 二者字段名不同，必须按对象类型分别取，否则 payment_intent.succeeded 取到 undefined → 金额一致性校验被跳过。
+  if (type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
     return { ...base, status: 'paid', amountCents: Number(obj['amount_total'] ?? 0) || undefined, raw: obj };
+  }
+  if (type === 'payment_intent.succeeded') {
+    return { ...base, status: 'paid', amountCents: Number(obj['amount'] ?? 0) || undefined, raw: obj };
   }
   if (type === 'charge.refunded' || type === 'refund.created') {
     return { ...base, status: 'refunded', raw: obj };

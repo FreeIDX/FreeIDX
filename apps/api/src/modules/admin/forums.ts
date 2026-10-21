@@ -333,7 +333,6 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     if (oldIcon) await filesBucket(c.env).delete(oldIcon).catch(() => undefined);
 
     await cache.del('forumlist');
-    await cache.del('thread_top_list');
     if (tids.length) {
       await patchRuntime(cache, { threads: -tids.length });
       await invalidateSeo({ db, cache, env: c.env }, c, tids);
@@ -472,7 +471,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     if (b.subject !== undefined) {
       subject = String(b.subject).trim();
       if (!subject) throw new AppError(Code.VALIDATION_ERROR, t('common.paramError'));
-      if ([...subject].length > 80) throw new AppError(Code.VALIDATION_ERROR, t('write.subjectMax80'));
+      if ([...subject].length > 128) throw new AppError(Code.VALIDATION_ERROR, t('write.subjectTooLong'));
       if (subject !== String(th.subject)) {
         stmts.push(db.prepare('UPDATE bbs_thread SET subject = ? WHERE tid = ?').bind(subject, tid) as unknown as Stmt);
       }
@@ -505,7 +504,6 @@ export function adminForumRoutes(): Hono<ReadEnv> {
 
     await db.batch(stmts);
     if (moved) await cache.del('forumlist');
-    await cache.del('thread_top_list'); // 列表快照（标题/版块变更）
     await invalidateSeo({ db, cache, env: c.env }, c, [tid]);
     return ok(c, t('common.saved'), { data: { tid } });
   });

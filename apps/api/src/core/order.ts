@@ -227,6 +227,22 @@ export async function listPendingForReconcile(db: D1b, sinceTs: number, limit = 
   return r.results.map(mapOrder);
 }
 
+/**
+ * 超期 pending 外部订单：创建早于 beforeTs 且仍 pending 的非卡密单（C5 超时关单候选）。
+ * 支付渠道会话有效期远短于此（Stripe Checkout 24h、PayPal order 数天），超期仍未支付即不可再付；
+ * 由对账 cron 逐单复核（付费则补单，否则关单），避免中途放弃支付的订单永久停留 pending。
+ * ORDER BY id ASC + LIMIT：老单优先处理，余量下轮继续。
+ */
+export async function listStalePending(db: D1b, beforeTs: number, limit = 100): Promise<OrderRow[]> {
+  const r = await db
+    .prepare<Record<string, unknown>>(
+      `SELECT ${ORDER_COLS} FROM bbs_order WHERE status = ? AND provider <> '' AND provider <> 'card' AND created_date < ? ORDER BY id ASC LIMIT ?`,
+    )
+    .bind(OrderStatus.PENDING, beforeTs, limit)
+    .all();
+  return r.results.map(mapOrder);
+}
+
 /** 下单：读取计划价、落 pending 订单（provider 由上层支付装配补充） */
 export async function createOrder(
   core: Core,
@@ -272,6 +288,10 @@ export async function markPaid(db: D1b, orderNo: string, providerRef: string, ts
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/UNIQUE constraint failed: bbs_order.provider_ref/i.test(msg)) {
+      // provider_ref 撞唯一约束有两种可能：同一单重复回调（status 守卫已在上面早退，走不到这里），
+      // 或两个订单共享同一外部引用（串单/通道重复建单）——后者是异常，必须日志暴露，
+      // 否则本订单静默停留 pending（编排层见 status!==paid 即 ignored），运维无从发现。
+      console.warn(`[order] ${t('pay.logMarkPaidDup', { orderNo, providerRef })}`);
       const again = await getOrder(db, orderNo);
       if (again) return again;
     }

@@ -40,10 +40,13 @@ type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
 const nonceOf = (): string => Math.random().toString(36).slice(2, 10);
 
-/** 流水的 reason → 前端展示映射的合法值（过滤用） */
+/** 流水的 reason → 前端展示映射的合法值（过滤用）。
+ *  与实际写入点对齐（§20.3 批次 3E 枚举漂移修正）：
+ *  - 'v_apply'（v/routes.ts 申请扣费）与 'checkin'（extensions/checkin.ts 签到）补进筛选；
+ *  - 'exchange' 移除——兑换只动 golds/rmbs 不写 point_log，属幽灵枚举（三处声明零写入点）。 */
 const REASONS = new Set([
   'thread', 'reply', 'daily_first', 'attach_purchase', 'attach_income', 'order', 'admin', 'register',
-  'thread_purchase', 'thread_income', 'exchange', 'transfer_out', 'transfer_in', 'digest',
+  'thread_purchase', 'thread_income', 'transfer_out', 'transfer_in', 'digest', 'checkin', 'v_apply',
 ]);
 
 /** 后台写库的普通语句（D1b.prepare 链式类型见 §D1b） */

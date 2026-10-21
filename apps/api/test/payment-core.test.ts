@@ -21,6 +21,7 @@ import {
   issueRefund,
   linkProviderRef,
   reconcilePending,
+  sweepStaleOrders,
 } from '../src/core/payment/orchestrator';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
 
@@ -271,6 +272,67 @@ describe('reconcilePending（掉单对账 cron 编排）', () => {
     const { core } = makeCore([EXT_STATE({ stripe: { installed: 1, enable: 1 } }), listRule, orderSeq, { test: /UPDATE bbs_order/, rows: [], changes: 1 }]);
     const report = await reconcilePending(core, undefined, 1700000000 + 3600);
     expect(report).toMatchObject({ scanned: 1, recovered: 0, failed: 1 });
+  });
+});
+
+describe('sweepStaleOrders（超期关单 cron 编排）', () => {
+  const STALE_ORDER = { order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'pending', provider: 'stripe', provider_ref: '', created_date: 1700000000, paid_date: 0, fulfilled_date: 0 };
+  const listRule: SqlRule = { test: /FROM bbs_order WHERE status = \? AND provider/, rows: [STALE_ORDER] };
+
+  it('超期单 queryOrder=pending → closeOrder 关单，计入 closed', async () => {
+    registerProvider(mockProvider('stripe', { query: 'pending' }), { installed: 1, enable: 1 });
+    let reads = 0;
+    const orderSeq: SqlRule = {
+      test: /FROM bbs_order WHERE order_no = \?/,
+      first: () => ({ ...STALE_ORDER, created_date: 1, status: reads++ === 0 ? 'pending' : 'closed' }),
+    };
+    const { core, calls } = makeCore([EXT_STATE({ stripe: { installed: 1, enable: 1 } }), listRule, orderSeq, { test: /UPDATE bbs_order/, rows: [], changes: 1 }]);
+    const report = await sweepStaleOrders(core, undefined, 1700000000 + 72 * 3600 + 60);
+    expect(report).toMatchObject({ scanned: 1, closed: 1, recovered: 0, failed: 0 });
+    expect(calls.some((c) => /UPDATE bbs_order SET status = \?/.test(c.sql))).toBe(true);
+  });
+
+  it('超期单 queryOrder=paid → 补款履约，计入 recovered', async () => {
+    registerProvider(mockProvider('stripe', { query: 'paid' }), { installed: 1, enable: 1 });
+    let reads = 0;
+    const orderSeq: SqlRule = {
+      test: /FROM bbs_order WHERE order_no = \?/,
+      first: () => ({ ...STALE_ORDER, provider_ref: reads > 0 ? 'recon:FI1' : '', created_date: 1, status: reads++ === 0 ? 'pending' : 'paid' }),
+    };
+    const { core } = makeCore([
+      EXT_STATE({ stripe: { installed: 1, enable: 1 } }),
+      listRule,
+      orderSeq,
+      { test: /FROM bbs_order WHERE provider_ref = \?/, first: null },
+      { test: /UPDATE bbs_order SET provider_ref/, rows: [] },
+      { test: /UPDATE bbs_order/, rows: [], changes: 1 },
+      { test: /FROM bbs_vip_plan WHERE id/, first: { id: 3, name: 'Y', duration_days: 0, price_cents: 1900, currency: 'CNY', perks: '{}', enabled: 1, sort: 0 } },
+    ]);
+    const report = await sweepStaleOrders(core, undefined, 1700000000 + 72 * 3600 + 60);
+    expect(report).toMatchObject({ scanned: 1, closed: 0, recovered: 1 });
+  });
+
+  it('queryOrder 抛错（通道故障）→ 不关单，保留 pending 待下轮，计入 failed', async () => {
+    const broken: PaymentProvider = { ...mockProvider('stripe', {}), queryOrder: async () => { throw new Error('boom'); } };
+    registerProvider(broken, { installed: 1, enable: 1 });
+    const { core, calls } = makeCore([EXT_STATE({ stripe: { installed: 1, enable: 1 } }), listRule]);
+    const report = await sweepStaleOrders(core, undefined, 1700000000 + 72 * 3600 + 60);
+    expect(report).toMatchObject({ scanned: 1, closed: 0, recovered: 0, failed: 1 });
+    expect(calls.some((c) => /UPDATE bbs_order SET status = \?/.test(c.sql))).toBe(false);
+  });
+
+  it('无 queryOrder 能力的通道 → 超期未付直接关单（防御分支）', async () => {
+    const noQuery = { ...mockProvider('stripe', {}) } as Partial<PaymentProvider>;
+    delete noQuery.queryOrder;
+    registerProvider(noQuery as PaymentProvider, { installed: 1, enable: 1 });
+    let reads = 0;
+    const orderSeq: SqlRule = {
+      test: /FROM bbs_order WHERE order_no = \?/,
+      first: () => ({ ...STALE_ORDER, created_date: 1, status: reads++ === 0 ? 'pending' : 'closed' }),
+    };
+    const { core } = makeCore([EXT_STATE({ stripe: { installed: 1, enable: 1 } }), listRule, orderSeq, { test: /UPDATE bbs_order/, rows: [], changes: 1 }]);
+    const report = await sweepStaleOrders(core, undefined, 1700000000 + 72 * 3600 + 60);
+    expect(report).toMatchObject({ scanned: 1, closed: 1 });
   });
 });
 

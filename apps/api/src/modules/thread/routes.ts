@@ -805,10 +805,26 @@ export function threadRoutes(): Hono<ReadEnv> {
   /** GET /api/threads/:tid/favoriters：收藏者列表（按收藏时间倒序，≤50 人） */
   app.get('/api/threads/:tid/favoriters', async (c) => {
     const t = c.get('t');
-    const { db } = core(c);
+    const { db, cache } = core(c);
     const tid = intParam(c.req.param('tid'));
-    const th = await db.prepare<{ tid: number }>(`SELECT tid FROM ${T} WHERE tid = ?`).bind(tid).first<{ tid: number }>();
+    // 可见性口径与收藏 toggle / 其它读路径一致：无权版块与未过审/回收站主题的收藏者不可查，
+    // 否则可借本端点探测不可见主题存在性、并泄露私密版块主题的收藏者社交关系。
+    const [forumlist, grouplist, viewer] = await Promise.all([
+      loadForumlist(cache, db),
+      loadGrouplist(cache, db),
+      loadViewer(cache, db, c),
+    ]);
+    const ctx = makeAccessCtx(viewer, forumlist, grouplist);
+    const th = await db
+      .prepare<{ fid: number; ok: number; uid: number }>(`SELECT fid,ok,uid FROM ${T} WHERE tid = ?`)
+      .bind(tid)
+      .first<{ fid: number; ok: number; uid: number }>();
     if (!th) throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
+    if (!forumAccessUser(ctx, Number(th.fid), 'allowread')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
+    const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
+    if (!canSeeUnapproved(Number(th.ok), { seeCheck, isAuthor: Number(th.uid) === viewer.uid })) {
+      throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
+    }
     const [r, cnt] = await Promise.all([
       db
         .prepare<{ uid: number; username: string; avatar: number }>(
@@ -829,16 +845,34 @@ export function threadRoutes(): Hono<ReadEnv> {
     const viewer = await loadViewer(cache, db, c);
     if (viewer.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('common.pleaseLogin'));
     const tid = intParam(c.req.param('tid'));
-    const th = await db.prepare<{ tid: number }>(`SELECT tid FROM ${T} WHERE tid = ?`).bind(tid).first<{ tid: number }>();
+    // 可见性口径与收藏 toggle 一致（防借点赞成功与否反查探测不可见主题）
+    const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
+    const ctx = makeAccessCtx(viewer, forumlist, grouplist);
+    const th = await db
+      .prepare<{ fid: number; ok: number; uid: number }>(`SELECT fid,ok,uid FROM ${T} WHERE tid = ?`)
+      .bind(tid)
+      .first<{ fid: number; ok: number; uid: number }>();
     if (!th) throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
-    const existing = await db
+    if (!forumAccessUser(ctx, Number(th.fid), 'allowread')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
+    const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
+    if (!canSeeUnapproved(Number(th.ok), { seeCheck, isAuthor: Number(th.uid) === viewer.uid })) {
+      throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
+    }
+    let existing = await db
       .prepare<{ uid: number }>('SELECT uid FROM bbs_like WHERE uid = ? AND tid = ?')
       .bind(viewer.uid, tid)
       .first<{ uid: number }>();
     if (existing) {
       await db.batch([db.prepare('DELETE FROM bbs_like WHERE uid = ? AND tid = ?').bind(viewer.uid, tid) as unknown as Stmt]);
     } else {
-      await db.prepare('INSERT INTO bbs_like (uid, tid, create_date) VALUES (?, ?, ?)').bind(viewer.uid, tid, now()).run();
+      try {
+        await db.prepare('INSERT INTO bbs_like (uid, tid, create_date) VALUES (?, ?, ?)').bind(viewer.uid, tid, now()).run();
+      } catch (e) {
+        // 并发双击：两请求都查到「未赞」，第二个撞唯一约束 → 按已点赞幂等成功（不 500、不误取消）
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/UNIQUE constraint failed/i.test(msg)) throw e;
+        existing = { uid: viewer.uid };
+      }
     }
     const cnt = await db
       .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_like WHERE tid = ?')
@@ -849,7 +883,8 @@ export function threadRoutes(): Hono<ReadEnv> {
 
   /**
    * POST /api/posts/:pid/like：楼层点赞/取消赞 toggle（bbs_post_like 唯一键防重）。
-   *  与主题点赞（bbs_like）独立；返回该楼层最新点赞数与当前访问者态。
+   *  和主题点赞（bbs_like）独立；返回该楼层最新点赞数与当前访问者态。
+   *  可见性口径同帖内楼层列表：版块 allowread + 主题/楼层审核位（版务与作者可见待审）。
    */
   app.post('/api/posts/:pid/like', async (c) => {
     const t = c.get('t');
@@ -858,22 +893,38 @@ export function threadRoutes(): Hono<ReadEnv> {
     if (viewer.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('common.pleaseLogin'));
     if (!(await lightOn(cache, db))) throw new AppError(Code.NOT_FOUND, t('light.featureDisabled'));
     const pid = intParam(c.req.param('pid'));
+    const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
+    const ctx = makeAccessCtx(viewer, forumlist, grouplist);
     const post = await db
-      .prepare<{ pid: number; tid: number }>('SELECT pid,tid FROM bbs_post WHERE pid = ?')
+      .prepare<{ pid: number; tid: number; pok: number; puid: number; fid: number; tok: number; tuid: number }>(
+        `SELECT p.pid,p.tid,p.ok AS pok,p.uid,t.fid,t.ok AS tok,t.uid AS tuid FROM ${P} p INNER JOIN ${T} t ON t.tid = p.tid WHERE p.pid = ?`,
+      )
       .bind(pid)
-      .first<{ pid: number; tid: number }>();
+      .first<{ pid: number; tid: number; pok: number; puid: number; fid: number; tok: number; tuid: number }>();
     if (!post) throw new AppError(Code.NOT_FOUND, t('common.postNotFound'));
-    const existing = await db
+    if (!forumAccessUser(ctx, Number(post.fid), 'allowread')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
+    const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
+    const threadVisible = canSeeUnapproved(Number(post.tok), { seeCheck, isAuthor: Number(post.tuid) === viewer.uid });
+    const postVisible = canSeeUnapproved(Number(post.pok), { seeCheck, isAuthor: Number(post.puid) === viewer.uid });
+    if (!threadVisible || !postVisible) throw new AppError(Code.NOT_FOUND, t('common.postNotFound'));
+    let existing = await db
       .prepare<{ uid: number }>('SELECT uid FROM bbs_post_like WHERE uid = ? AND pid = ?')
       .bind(viewer.uid, pid)
       .first<{ uid: number }>();
     if (existing) {
       await db.batch([db.prepare('DELETE FROM bbs_post_like WHERE uid = ? AND pid = ?').bind(viewer.uid, pid) as unknown as Stmt]);
     } else {
-      await db
-        .prepare('INSERT INTO bbs_post_like (uid,pid,tid,create_date) VALUES (?,?,?,?)')
-        .bind(viewer.uid, pid, Number(post.tid), now())
-        .run();
+      try {
+        await db
+          .prepare('INSERT INTO bbs_post_like (uid,pid,tid,create_date) VALUES (?,?,?,?)')
+          .bind(viewer.uid, pid, Number(post.tid), now())
+          .run();
+      } catch (e) {
+        // 并发双击撞唯一约束 → 按已点赞幂等成功（同主题点赞口径）
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/UNIQUE constraint failed/i.test(msg)) throw e;
+        existing = { uid: viewer.uid };
+      }
     }
     const cnt = await db
       .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_post_like WHERE pid = ?')
@@ -881,6 +932,7 @@ export function threadRoutes(): Hono<ReadEnv> {
       .first<{ c: number }>();
     return ok(c, existing ? t('thread.likeCancelled') : t('thread.liked'), { data: { likes: Number(cnt?.c ?? 0), liked: !existing } });
   });
+
 
   /**
    * GET /api/threads/:tid/hot-posts?limit=&threshold=&includeFirst=

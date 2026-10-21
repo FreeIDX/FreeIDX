@@ -233,6 +233,7 @@ function UserMenu() {
     [t('my_posts'), '/me?s=threads'],
     [t('my_favorites'), '/me?s=favorites'],
     ...(light.headerGoldCount ? ([[t('my_credits'), '/me?s=credits']] as [string, string][]) : []),
+    [t('vip_entry'), '/vip'],
     [t('ranking_short'), '/rank'],
     [t('my_main_page'), `/user/${me.uid}`],
     ...(me.gid === GroupId.ADMIN ? ([[t('admin_backend'), '/admin']] as [string, string][]) : []),

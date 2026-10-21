@@ -25,7 +25,7 @@ import { isEmail, isPassword, isUsername } from '../../core/auth/validate';
 import { destroyUserSessions, ipToLong, ipToStr } from '../../core/auth/session';
 
 import { core, getExecCtx, intParam, patchRuntime, randomPresetAvatar, totalPageOf, type ReadEnv } from '../shared';
-import { attachKeysForUserPurge, purgeR2Objects } from '../../core/purge';
+import { attachKeysForUserPurge, purgeR2Objects, userPurgeStmts } from '../../core/purge';
 import type { Cache } from '../../core/cache';
 
 type Ctx = Context<ReadEnv>;
@@ -42,6 +42,22 @@ async function readJson(c: Ctx): Promise<Record<string, unknown>> {
   } catch {
     throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
   }
+}
+
+/** 改名反规范化回写（§5.2/§20 设计承诺落地，照 backfillAvatar 模式）：
+ *  username 按 uid、lastusername 按 lastuid 各一条全量 UPDATE，`<> 新值` 守卫使
+ *  rows_written = 实际需改行（改名极低频，5000 帖作者一次改名 ≈ 5000 行，占免费层
+ *  10 万行写/天 5%）。waitUntil 旁路不占请求时长；失败尽力而为——cronDaily 校准批
+ *  中的 lastusername 自愈语句每日兜底。 */
+async function backfillUsername(c: Context<ReadEnv>, uid: number, username: string): Promise<void> {
+  const db = c.get('db');
+  const q = Promise.all([
+    db.prepare('UPDATE bbs_thread SET username = ? WHERE uid = ? AND username <> ?').bind(username, uid, username).run(),
+    db.prepare('UPDATE bbs_thread SET lastusername = ? WHERE lastuid = ? AND lastusername <> ?').bind(username, uid, username).run(),
+  ]);
+  const ex = await getExecCtx(c);
+  if (ex?.waitUntil) ex.waitUntil(q);
+  else await q;
 }
 
 export function adminUserRoutes(): Hono<ReadEnv> {
@@ -129,6 +145,7 @@ export function adminUserRoutes(): Hono<ReadEnv> {
     const b = await readJson(c);
     const set: string[] = [];
     const vals: (number | string)[] = [];
+    let renamedTo = '';
 
     if ('email' in b) {
       const email = String(b.email ?? '').trim().toLowerCase();
@@ -150,6 +167,7 @@ export function adminUserRoutes(): Hono<ReadEnv> {
         if (dup) throw new AppError(Code.FORM_USERNAME_EXISTS, t('auth.usernameExists'));
         set.push('username = ?');
         vals.push(username);
+        renamedTo = username;
       }
     }
     if ('gid' in b) {
@@ -186,6 +204,7 @@ export function adminUserRoutes(): Hono<ReadEnv> {
     await db.prepare(`UPDATE bbs_user SET ${set.join(', ')} WHERE uid = ?`).bind(...vals).run();
     if (resetSessions) await destroyUserSessions(db, uid);
     await cache.del(`user:${uid}`);
+    if (renamedTo) await backfillUsername(c, uid, renamedTo);
     return ok(c, t('common.updated'), { data: { uid } });
   });
 
@@ -287,56 +306,20 @@ export function adminUserRoutes(): Hono<ReadEnv> {
 /** 系统保护组集合（删组保护同集合） */
 const SYSTEM_GROUP_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 101];
 
-/** 用户硬删级联（主题级联删 + 他人回帖计数回退 + 附件/倒排行清理 + R2 对象尽力清理） */
+/** 用户硬删级联（复用 core/purge.ts userPurgeStmts：主题级联删 + 计数回退 + 孤儿清理 + session/notice；附件/头像 R2 尽力清理） */
 async function deleteUserCascade(db: D1b, cache: Cache, uid: number, c: Ctx): Promise<void> {
-  const threads = await db.prepare<{ tid: number }>('SELECT tid FROM bbs_thread WHERE uid = ?').bind(uid).all();
-  const tids: number[] = threads.results.map((r) => Number(r.tid)).filter((x) => x > 0);
-
-  const stmts: Stmt[] = [];
-  if (tids.length) {
-    const inList = tids.map(() => '?').join(',');
-    const others = await db
-      .prepare<{ uid: number; c: number }>(`SELECT uid, COUNT(*) AS c FROM bbs_post WHERE tid IN (${inList}) AND uid <> ? GROUP BY uid`)
-      .bind(...tids, uid)
-      .all();
-    for (const r of others.results) {
-      const u = Number(r.uid);
-      if (u > 0) stmts.push(db.prepare('UPDATE bbs_user SET posts = posts - ? WHERE uid = ?').bind(Number(r.c), u) as unknown as Stmt);
-    }
-    const replies = await db
-      .prepare<{ tid: number; c: number }>('SELECT tid, COUNT(*) AS c FROM bbs_post WHERE uid = ? AND isfirst = 0 GROUP BY tid')
-      .bind(uid)
-      .all();
-    const own = new Set(tids);
-    for (const r of replies.results) {
-      const tid = Number(r.tid);
-      if (own.has(tid)) continue;
-      stmts.push(db.prepare('UPDATE bbs_thread SET posts = posts - ? WHERE tid = ?').bind(Number(r.c), tid) as unknown as Stmt);
-    }
-    stmts.push(
-      db.prepare(`DELETE FROM bbs_post WHERE tid IN (${inList})`).bind(...tids) as unknown as Stmt,
-      // 倒排按 tid 维度同清：漏掉会留下指向已删主题的孤儿行（他人收藏/回帖索引）
-      db.prepare(`DELETE FROM bbs_mypost WHERE tid IN (${inList})`).bind(...tids) as unknown as Stmt,
-      db.prepare(`DELETE FROM bbs_mythread WHERE tid IN (${inList})`).bind(...tids) as unknown as Stmt,
-      db.prepare(`DELETE FROM bbs_thread_top WHERE tid IN (${inList})`).bind(...tids) as unknown as Stmt,
-      db.prepare(`DELETE FROM bbs_attach WHERE tid IN (${inList})`).bind(...tids) as unknown as Stmt,
-    );
-  }
-  stmts.push(
-    db.prepare('DELETE FROM bbs_post WHERE uid = ?').bind(uid) as unknown as Stmt,
-    db.prepare('DELETE FROM bbs_thread WHERE uid = ?').bind(uid) as unknown as Stmt,
-    db.prepare('DELETE FROM bbs_mythread WHERE uid = ?').bind(uid) as unknown as Stmt,
-    db.prepare('DELETE FROM bbs_mypost WHERE uid = ?').bind(uid) as unknown as Stmt,
-    db.prepare('DELETE FROM bbs_attach WHERE uid = ?').bind(uid) as unknown as Stmt,
-    db.prepare('DELETE FROM bbs_user WHERE uid = ?').bind(uid) as unknown as Stmt,
-  );
+  const { stmts, tids } = await userPurgeStmts(db, uid);
   // 附件 R2 对象 key 须在删除语句执行前读取（本人上传 + 本人主题内他人上传）
   const attachKeys = await attachKeysForUserPurge(db, uid, tids);
+  // 自定义头像对象一并清理（avatar>0；与 mod/check 删用户路径口径一致，否则 R2 孤儿头像永久残留）
+  const avatarRow = await db.prepare<{ avatar: number }>('SELECT avatar FROM bbs_user WHERE uid = ?').bind(uid).first<{ avatar: number }>();
+  if (avatarRow && Number(avatarRow.avatar) > 0) {
+    attachKeys.push(`avatar/${String(uid).padStart(9, '0').slice(0, 3)}/${uid}.png`);
+  }
   await db.batch(stmts);
   purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
   // runtime.users 无校准兜底（calibrate 不改 users）→ 删用户即时回退，避免永久虚高
   await patchRuntime(cache, { users: -1, threads: -tids.length });
   await cache.del(`user:${uid}`);
   await cache.del('forumlist');
-  await cache.del('thread_top_list');
 }

@@ -88,7 +88,6 @@ export async function purgeThread(
   }
   await patchRuntime(cache, { threads: -1 });
   await cache.del('forumlist');
-  await cache.del('thread_top_list');
   await scheduleSeo(db, cache, c, tid, 'del');
   purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
   const rt = await getExtensions(cache, db, undefined, { preloadConfigs: false });
@@ -124,7 +123,6 @@ export function checkRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_thread SET ok = ? WHERE tid = ?').bind(opt, id) as unknown as Stmt,
           db.prepare('UPDATE bbs_post SET ok = ? WHERE tid = ? AND isfirst = 1').bind(opt, id) as unknown as Stmt,
         ]);
-        await cache.del('thread_top_list');
       }
     } else if (act === 1) {
       // 回帖：check_set_post_check（仅 isfirst=0；opt=-2 → 真删）
@@ -149,10 +147,27 @@ export function checkRoutes(): Hono<ReadEnv> {
           await rt.bus.emit('post:deleted', { pid: id, tid: purge.tid, uid: purge.uid });
         }
       } else {
-        await db
-          .prepare('UPDATE bbs_post SET ok = ? WHERE pid = ? AND isfirst = 0')
-          .bind(opt, id)
-          .run();
+        const p = await db
+          .prepare<{ tid: number; uid: number; ok: number; create_date: number }>(
+            'SELECT tid,uid,ok,create_date FROM bbs_post WHERE pid = ? AND isfirst = 0',
+          )
+          .bind(id)
+          .first<{ tid: number; uid: number; ok: number; create_date: number }>();
+        if (!p) throw new AppError(Code.NOT_FOUND, t('common.postNotFound'));
+        const stmts: Stmt[] = [
+          db.prepare('UPDATE bbs_post SET ok = ? WHERE pid = ? AND isfirst = 0').bind(opt, id) as unknown as Stmt,
+        ];
+        // 待审/被拒回帖过审 → 补主题反规范化列（发帖待审时未计入 posts/尾列；ok≠1 守卫幂等，重复通过不重复计数）。
+        // 尾列用 lastpid < pid 条件：仅当该回帖比当前尾部新才覆盖（乱序过审不回退尾部）。
+        // lastusername 用标量子查询取回帖者当前用户名（SQLite 无 UPDATE JOIN；D1 支持，cronDaily 校准同款）。
+        if (opt === 1 && Number(p.ok) !== 1) {
+          stmts.push(
+            db.prepare('UPDATE bbs_thread SET posts = posts + 1 WHERE tid = ?').bind(p.tid) as unknown as Stmt,
+            db.prepare('UPDATE bbs_thread SET lastpid = ?, lastuid = ?, last_date = ?, lastusername = (SELECT username FROM bbs_user WHERE uid = ?) WHERE tid = ? AND lastpid < ?')
+              .bind(id, p.uid, p.create_date, p.uid, p.tid, id) as unknown as Stmt,
+          );
+        }
+        await db.batch(stmts);
       }
     } else {
       // 用户：check_set_user_check（opt=-2 → user_delete 级联）
@@ -172,7 +187,6 @@ export function checkRoutes(): Hono<ReadEnv> {
           await db.batch(stmts);
           await cache.del(`user:${id}`);
           await cache.del('forumlist');
-          await cache.del('thread_top_list');
           if (tids.length) await patchRuntime(cache, { threads: -tids.length });
           await patchRuntime(cache, { users: -1 });
           for (const tid of tids) await scheduleSeo(db, cache, c, tid, 'del');
@@ -220,7 +234,6 @@ export function checkRoutes(): Hono<ReadEnv> {
         db.prepare('UPDATE bbs_thread SET ok = ? WHERE tid = ?').bind(CheckStatus.NORMAL, tid) as unknown as Stmt,
         db.prepare('UPDATE bbs_post SET ok = ? WHERE tid = ? AND isfirst = 1').bind(CheckStatus.NORMAL, tid) as unknown as Stmt,
       ]);
-      await cache.del('thread_top_list');
       await scheduleSeo(db, cache, c, tid, 'gen');
     }
 

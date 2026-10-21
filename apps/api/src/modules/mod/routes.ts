@@ -6,7 +6,7 @@
  *  每条成功动作写 bbs_modlog（uid,tid,pid=firstpid,subject,comment,create_date,action，§D.5）。
  *  权限：forumAccessMod(fid, perm)——top/close/digest→allowtop，delete→allowdelete，move→allowmove+版块存在；
  *        全站置顶 top=3 额外要求 gid∈{1,2}。
- *  校准（§D.8#4）：close/digest 同步清 thread_top_list（列表快照）。
+
  *  deleteuser 归 T3-2（不走 forumAccessMod）；mod:executed 事件（契约②）逐条发射。
  */
 import { Hono, type Context } from 'hono';
@@ -150,7 +150,7 @@ export function modRoutes(): Hono<ReadEnv> {
     const digestSettlements: { uid: number; tid: number; before: number; after: number }[] = [];
     const revokeEntries: RevokeEntry[] = [];
     const groupChanges: { uid: number; oldGid: number; newGid: number }[] = [];
-    let touchedTopList = false;
+
     let touchedForumlist = false;
     const ts = now();
 
@@ -173,7 +173,7 @@ export function modRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_thread SET top = ? WHERE tid = ?').bind(top, tid) as unknown as Stmt,
           db.prepare('INSERT OR REPLACE INTO bbs_thread_top (tid,fid,top) VALUES (?,?,?)').bind(tid, fid, top) as unknown as Stmt,
         );
-        touchedTopList = true;
+
         modlogs.push(logRow(v.uid, thread, 'top', ts));
         executed.push({ tid, action: 'top' });
         notices.push({
@@ -186,14 +186,14 @@ export function modRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_thread SET top = 0 WHERE tid = ?').bind(tid) as unknown as Stmt,
           db.prepare('INSERT OR REPLACE INTO bbs_thread_top (tid,fid,top) VALUES (?,?,?)').bind(tid, fid, 0) as unknown as Stmt,
         );
-        touchedTopList = true;
+
         modlogs.push(logRow(v.uid, thread, 'top', ts));
         executed.push({ tid, action: 'untop' });
         notices.push({ recvuid: Number(thread.uid), message: noticeModHtml({ action: 'top0', tid, subject: String(thread.subject) }, t) });
       } else if (action === 'close') {
         const closed = value ? 1 : 0;
         stmts.push(db.prepare('UPDATE bbs_thread SET closed = ? WHERE tid = ?').bind(closed, tid) as unknown as Stmt);
-        touchedTopList = true; // §D.8#4：列表快照失效
+
         modlogs.push(logRow(v.uid, thread, 'close', ts));
         executed.push({ tid, action: 'close' });
         /* 值与现值不同才发通知 */
@@ -205,7 +205,7 @@ export function modRoutes(): Hono<ReadEnv> {
         stmts.push(db.prepare('UPDATE bbs_thread SET digest = ? WHERE tid = ?').bind(digest, tid) as unknown as Stmt);
         // 精华差额结算登记（新级别奖励 − 旧级别奖励，三币种各补差额），待主批次落库后统一结算
         digestSettlements.push({ uid: Number(thread.uid), tid, before: Number(thread.digest), after: digest });
-        touchedTopList = true; // §D.8#4：列表快照失效
+
         modlogs.push(logRow(v.uid, thread, 'digest', ts));
         executed.push({ tid, action: 'digest' });
       } else if (action === 'delete') {
@@ -219,7 +219,7 @@ export function modRoutes(): Hono<ReadEnv> {
             db.prepare('UPDATE bbs_thread SET ok = ? WHERE tid = ?').bind(CheckStatus.RECYCLE, tid) as unknown as Stmt,
             db.prepare('UPDATE bbs_post SET ok = ? WHERE tid = ? AND isfirst = 1').bind(CheckStatus.RECYCLE, tid) as unknown as Stmt,
           );
-          touchedTopList = true; // 列表快照含 ok 列，须失效
+
           // 软删除不发版务通知（通知挂在真删路径）
         } else {
           await threadPurgeStmts(db, thread, stmts);
@@ -227,7 +227,7 @@ export function modRoutes(): Hono<ReadEnv> {
           revokeEntries.push(...(await threadRevokeEntries(db, tid, Number(thread.uid))));
           purgeAttachKeys.push(...(await attachKeysByTid(db, tid)));
           purgedTids.push(tid);
-          touchedTopList = true;
+
           touchedForumlist = true;
           notices.push({ recvuid: Number(thread.uid), message: noticeModHtml({ action: 'delete', tid, subject: String(thread.subject) }, t) });
         }
@@ -240,7 +240,7 @@ export function modRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_thread_top SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt,
         );
         touchedForumlist = true;
-        touchedTopList = true;
+
         modlogs.push(logRow(v.uid, thread, 'move', ts));
         executed.push({ tid, action: 'move' });
         notices.push({
@@ -289,7 +289,7 @@ export function modRoutes(): Hono<ReadEnv> {
     );
 
     if (touchedForumlist) await cache.del('forumlist');
-    if (touchedTopList) await cache.del('thread_top_list');
+
 
     if (purgedTids.length) await patchRuntime(cache, { threads: -purgedTids.length });
     if (seoTids.length) await invalidateSeo({ db, cache }, c, seoTids);
@@ -347,7 +347,7 @@ export function modRoutes(): Hono<ReadEnv> {
 
     await cache.del(`user:${uid}`);
     await cache.del('forumlist');
-    await cache.del('thread_top_list');
+
     if (tids.length) await patchRuntime(cache, { threads: -tids.length });
     await patchRuntime(cache, { users: -1 });
     await invalidateSeo({ db, cache }, c, tids);

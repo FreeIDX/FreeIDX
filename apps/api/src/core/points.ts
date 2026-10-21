@@ -32,11 +32,12 @@ type PointReason =
   /* tt_credits 业务 */
   | 'thread_purchase'
   | 'thread_income'
-  | 'exchange'
   | 'transfer_out'
   | 'transfer_in'
   | 'digest'
-  | 'checkin';
+  | 'checkin'
+  /* v 认证申请扣费（v/routes.ts 直写 point_log，reason='v_apply'） */
+  | 'v_apply';
 
 /** UTC 日序号（每日首帖/每日加分上限幂等键用） */
 export function dayNo(ts: number): number {

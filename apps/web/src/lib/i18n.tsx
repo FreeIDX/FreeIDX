@@ -53,6 +53,15 @@ export const useLangPref = create<LangPrefState>((set) => ({
     } catch {
       /* 隐私模式等 localStorage 不可用时仅本次会话生效 */
     }
+    // 同步写 cookie（非 httpOnly，1 年）：同域 API 请求自动携带，后端据此协商
+    // API 消息语言（lib/api.ts 无需逐请求附加头）。清除偏好时同步过期 cookie，
+    // 使 API 消息回到站点语言，与界面行为一致。
+    try {
+      if (lang) document.cookie = `lang=${encodeURIComponent(lang)}; path=/; max-age=31536000; samesite=Lax`;
+      else document.cookie = 'lang=; path=/; max-age=0; samesite=Lax';
+    } catch {
+      /* 无 document 环境（SSR）忽略 */
+    }
     set({ pref: lang });
   },
 }));

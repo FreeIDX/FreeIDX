@@ -9,6 +9,7 @@ import { Avatar } from '../components/Avatar';
 import { FollowUserList } from '../components/FollowUserList';
 import { PmButton } from '../components/PmButton';
 import { ThreadList } from '../components/ThreadList';
+import { UserReplyList } from '../components/UserReplyList';
 import { VBadge } from '../components/VBadge';
 import { useCursorThreads } from '../hooks/useCursorThreads';
 import { useAuth } from '../store/auth';
@@ -54,7 +55,7 @@ export function UserPage() {
   const openAuth = useAuthModal((s) => s.openAuth);
   const [search] = useSearchParams();
   const uid = posInt(params.uid);
-  const section = search.get('s') === 'threads' ? 'threads' : search.get('s') === 'following' ? 'following' : search.get('s') === 'followers' ? 'followers' : 'profile';
+  const section = search.get('s') === 'threads' ? 'threads' : search.get('s') === 'replies' ? 'replies' : search.get('s') === 'following' ? 'following' : search.get('s') === 'followers' ? 'followers' : 'profile';
   const me = useAuth((s) => s.me);
   const t = useT();
   const gn = useGroupName();
@@ -105,6 +106,7 @@ export function UserPage() {
         <div className="zh-card px-4 py-4">
           <UserSideItem to={`/user/${uid}`} label={t('personal_profile')} active={section === 'profile'} icon="user" />
           <UserSideItem to={`/user/${uid}?s=threads`} label={t('his_posts')} active={section === 'threads'} icon="edit" />
+          <UserSideItem to={`/user/${uid}?s=replies`} label={t('his_replies')} active={section === 'replies'} icon="message" />
           {/* ：Ta关注的 / 关注Ta的 */}
           <UserSideItem to={`/user/${uid}?s=following`} label={t('his_following')} active={section === 'following'} icon="users" />
           <UserSideItem to={`/user/${uid}?s=followers`} label={t('his_followers')} active={section === 'followers'} icon="users" />
@@ -118,6 +120,9 @@ export function UserPage() {
           </LinkButton>
           <LinkButton to={`/user/${uid}?s=threads`} variant={section === 'threads' ? 'primary' : 'secondary'} className="min-w-0 flex-1">
             {t('his_posts')}
+          </LinkButton>
+          <LinkButton to={`/user/${uid}?s=replies`} variant={section === 'replies' ? 'primary' : 'secondary'} className="min-w-0 flex-1">
+            {t('his_replies')}
           </LinkButton>
           <LinkButton to={`/user/${uid}?s=following`} variant={section === 'following' ? 'primary' : 'secondary'} className="min-w-0 flex-1">
             {t('his_following')}
@@ -209,6 +214,11 @@ export function UserPage() {
               </div>
             </section>
           )
+        ) : section === 'replies' ? (
+          <section className="zh-card mb-4 overflow-hidden">
+            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('his_replies')}</div>
+            <UserReplyList uid={uid} active />
+          </section>
         ) : section === 'following' ? (
           <section className="zh-card mb-4 overflow-hidden">
             <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('his_following')}</div>

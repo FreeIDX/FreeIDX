@@ -22,13 +22,15 @@ function baseRules(): SqlRule[] {
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_user/, first: { c: 3 } },
     { test: /SELECT uid,gid,email,username FROM bbs_user WHERE uid = \?/, first: { uid: 5, gid: 101, email: 'a@b.co', username: 'old' } },
     { test: /SELECT uid,gid FROM bbs_user WHERE uid = \?/, first: { uid: 5, gid: 101 } },
+    /* deleteUserCascade 级联删前的自定义头像探测（avatar>0 才有 R2 对象） */
+    { test: /SELECT avatar FROM bbs_user WHERE uid = \?/, first: { avatar: 7 } },
     { test: /SELECT uid FROM bbs_user WHERE email = \? AND uid <> \?/, first: null },
     { test: /SELECT uid FROM bbs_user WHERE username = \? AND uid <> \?/, first: null },
     { test: /SELECT uid FROM bbs_user WHERE email = \?/, first: null },
     { test: /SELECT uid FROM bbs_user WHERE username = \?/, first: null },
     { test: /INSERT INTO bbs_user \(gid,email,username/, first: { uid: 9 } },
     { test: /SELECT uid,gid,username,avatar,threads,posts,credits,create_date,login_date,ok,v,avatar_auto,bgimg, email, create_ip FROM bbs_user/, rows: () => [{ uid: 9, email: 'x@y.z', create_ip: 16909060 }] },
-    { test: /SELECT tid FROM bbs_thread WHERE uid = \?/, rows: () => [{ tid: 101 }] },
+    { test: /SELECT tid,fid FROM bbs_thread WHERE uid = \?/, rows: () => [{ tid: 101, fid: 1 }] },
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN/, rows: () => [{ uid: 3, c: 2 }] },
     { test: /SELECT tid, COUNT\(\*\) AS c FROM bbs_post WHERE uid = \? AND isfirst = 0/, rows: () => [] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
@@ -94,6 +96,18 @@ describe('用户管理（T3-6）', () => {
     expect(upd?.sql).toBe('UPDATE bbs_user SET gid = ? WHERE uid = ?');
   });
 
+  it('PUT：改用户名 → 反规范化回写 thread.username/lastusername（§5.2/§20.2 承诺落地）', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request('/api/admin/users/5', { method: 'PUT', headers: wh(await token()), body: JSON.stringify({ username: 'newname' }) }, env);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    // 楼主名快照：WHERE uid 命中该用户全部主题，`<> 新值` 守卫省 rows_written
+    const un = calls.find((c) => /UPDATE bbs_thread SET username = \? WHERE uid = \? AND username <> \?/.test(c.sql));
+    expect(un?.params).toEqual(['newname', 5, 'newname']);
+    // 最后回复人快照：WHERE lastuid 命中该用户作为最后回复人的主题
+    const lu = calls.find((c) => /UPDATE bbs_thread SET lastusername = \? WHERE lastuid = \? AND lastusername <> \?/.test(c.sql));
+    expect(lu?.params).toEqual(['newname', 5, 'newname']);
+  });
+
   it('PUT：无变化字段 → VALIDATION_ERROR', async () => {
     const { env, calls } = makeEnv();
     const res = await app.request('/api/admin/users/5', { method: 'PUT', headers: wh(await token()), body: JSON.stringify({ gid: 101 }) }, env);
@@ -123,6 +137,8 @@ describe('用户管理（T3-6）', () => {
     expect(calls.some((c) => /DELETE FROM bbs_mythread WHERE tid IN/.test(c.sql))).toBe(true);
     // R2 对象侧：删除前先收集附件 key（本人上传 + 本人主题内他人上传），随后尽力删除
     expect(calls.some((c) => /SELECT filename FROM bbs_attach WHERE uid = \? OR tid IN/.test(c.sql))).toBe(true);
+    // 自定义头像对象一并清理（avatar>0 → avatar/{3位}/{uid}.png 加入 R2 删除清单）
+    expect(calls.some((c) => /SELECT avatar FROM bbs_user/.test(c.sql))).toBe(true);
     // runtime.users 无校准兜底 → 删用户即时回退（写 runtime 缓存）
     expect(calls.some((c) => /REPLACE INTO bbs_cache/.test(c.sql) && JSON.stringify(c.params).includes('runtime'))).toBe(true);
   });

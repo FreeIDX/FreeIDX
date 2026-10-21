@@ -53,6 +53,19 @@ describe('POST /api/me/avatar', () => {
     expect(((await res.json()) as { code: number }).code).toBe(Code.FORM_FILE_TOO_LARGE);
   });
 
+  it('multipart file 分支同样受 ≤40K 上限（不得绕过 base64 路径校验）', async () => {
+    const e = env();
+    const fd = new FormData();
+    fd.append('file', new Blob(['x'.repeat(50_000)], { type: 'image/png' }), 'big.png');
+    const res = await app.request(
+      '/api/me/avatar',
+      { method: 'POST', headers: { cookie: 'sid=sessA; csrf=tok123', 'x-csrf-token': 'tok123' }, body: fd },
+      e.env as never,
+    );
+    expect(((await res.json()) as { code: number }).code).toBe(Code.FORM_FILE_TOO_LARGE);
+    expect(e.r2.store.has('avatar/000/1.png')).toBe(false);
+  });
+
   it('成功 → 写 R2 + user.avatar 时间戳（并清 avatar_auto 互斥）+ 反规范化回写 + url 带 ?v=', async () => {
     const e = env();
     const res = await app.request('/api/me/avatar', { method: 'POST', headers: headers(), body: JSON.stringify({ data: b64(60) }) }, e.env as never);

@@ -9,7 +9,7 @@ import type { Cache } from './cache';
 import { remember } from './cache';
 import type { AccessCtx, AccessRow, ForumForAccess, GroupForAccess } from './access';
 import type { Env } from '../types/env';
-import { ACCESS_TOKEN_TTL, TOKEN_RECHECK_AFTER, verifyJwt } from './auth/jwt';
+import { ACCESS_TOKEN_TTL, verifyJwt } from './auth/jwt';
 import { createSession, ipToLong, touchSession } from './auth/session';
 
 export interface ForumRow extends ForumForAccess {
@@ -187,12 +187,16 @@ function setSidCookie(c: ViewerCtx, sid: string): void {
 
 /**
  * 双轨会话（§8.1）：
- *  session 命中 → 用 session；否则验 JWT（>30min 复核 token_version，改密吊销）→ 重建 session。
+ *  session 命中 → 用 session；否则验 JWT → 重建 session。
+ *  JWT 轨每请求复核 token_version（改密吊销）：tv 比对复用下方 user:{uid} 装载查询
+ *  （缓存命中零额外 D1；改密入口均同步 tv+1 与 cache.del，吊销即时生效，无复核豁口）。
  *  last_date 刷新节流 60s 走 waitUntil（在线口径 ±60s，D1 写额度护栏）。
  */
 export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<Viewer> {
   const sid = cookieOf(c, 'sid');
   let uid = 0;
+  /** JWT 轨有效载荷的 tv（session 轨为 null，不参与比对） */
+  let jwtTv: number | null = null;
   /** JWT 有效但无 session：需确认用户仍存在后才重建 session（避免为已删 uid 反复建行） */
   let rebuildSession = false;
   if (sid) {
@@ -215,15 +219,8 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
     if (at && secret) {
       const p = await verifyJwt(at, secret);
       if (p) {
-        const now = Math.floor(Date.now() / 1000);
-        if (now - p.iat > TOKEN_RECHECK_AFTER) {
-          const u = await db
-            .prepare<{ token_version: number }>('SELECT token_version FROM bbs_user WHERE uid = ?')
-            .bind(p.uid)
-            .first<{ token_version: number }>();
-          if (!u || Number(u.token_version) !== p.tv) return GUEST; // 改密吊销
-        }
         uid = p.uid;
+        jwtTv = p.tv;
         rebuildSession = !sid;
       }
     }
@@ -236,10 +233,15 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
       )
       .bind(uid)
       .first<Viewer & { token_version: number }>();
-    return u ? { uid: u.uid, gid: u.gid, username: u.username, ok: Number(u.ok ?? 1) } : GUEST;
+    return u
+      ? { uid: u.uid, gid: u.gid, username: u.username, ok: Number(u.ok ?? 1), tv: Number(u.token_version ?? 0) }
+      : { uid: 0, gid: 0, username: '', ok: 1, tv: 0 };
   });
   // 用户已被删除（查无此行）→ 游客：不再下发/写入 session（原实现在此处为空 uid 反复建 bbs_session 行）
   if (viewer.uid <= 0) return GUEST;
+  // JWT 轨 tv 复核：与库中 token_version 不符（改密/登出已 bump）→ 游客。
+  // session 轨不比对：session 行本身在改密时被 destroyUserSessions 删除，命中即有效。
+  if (jwtTv !== null && viewer.tv !== jwtTv) return GUEST;
   if (rebuildSession) {
     // session 缺失由 JWT 重建（已确认用户存在）
     const newSid = await createSession(db, uid, {

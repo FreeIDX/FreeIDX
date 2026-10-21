@@ -22,12 +22,28 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 会话失效通知（auth store 注册，避免 api ↔ store 循环依赖）：
+ * 界面自认登录态却收到 NOT_LOGIN（服务端已吊销：改密/登出/100 天过期/管理员强制下线）时
+ * 通知 store 刷新为游客态，让顶栏/操作与真实态一致，而不是每个请求各自报「请登录」。
+ */
+let sessionExpiredNotify: (() => void) | null = null;
+export function onSessionExpired(fn: () => void): void {
+  sessionExpiredNotify = fn;
+}
+
+/** 信封解包（§6.1）：code<0 抛出；data 平铺返回；NOT_LOGIN 顺带触发会话失效通知 */
+function unwrap<T>(body: ApiEnvelope & { data?: T }): T {
+  if (body.code === Code.NOT_LOGIN) sessionExpiredNotify?.();
+  if (body.code !== Code.OK) throw new ApiError(body.code, body.message);
+  return body.data as T;
+}
+
 /** 信封解包（§6.1）：code<0 抛出；data 平铺返回 */
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(path, { credentials: 'include' });
   const body = (await res.json()) as ApiEnvelope & { data?: T };
-  if (body.code !== Code.OK) throw new ApiError(body.code, body.message);
-  return body.data as T;
+  return unwrap<T>(body);
 }
 
 function csrfToken(): string {
@@ -45,8 +61,7 @@ export async function apiSend<T>(method: 'POST' | 'PUT' | 'DELETE', path: string
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
   const body = (await res.json()) as ApiEnvelope & { data?: T };
-  if (body.code !== Code.OK) throw new ApiError(body.code, body.message);
-  return body.data as T;
+  return unwrap<T>(body);
 }
 
 export function bootstrap(): Promise<BootstrapPayload> {
@@ -62,8 +77,7 @@ async function apiSendForm<T>(method: 'POST' | 'PUT', path: string, form: FormDa
     body: form,
   });
   const body = (await res.json()) as ApiEnvelope & { data?: T };
-  if (body.code !== Code.OK) throw new ApiError(body.code, body.message);
-  return body.data as T;
+  return unwrap<T>(body);
 }
 
 export interface LoginResult {
@@ -168,6 +182,34 @@ export function uploadAttachment(
 
 export function uploadAvatar(data: string): Promise<AvatarResult> {
   return apiSend<AvatarResult>('POST', '/api/me/avatar', { data });
+}
+
+/** 撤销误传附件（DELETE /api/attachments/:aid）：仅 status=0 的暂存附件可由上传者删除（R2 对象 + 行同步清）；失败由 attachGc 兜底 */
+export function deleteAttachment(aid: number): Promise<{ aid: number }> {
+  return apiSend<{ aid: number }>('DELETE', `/api/attachments/${aid}`);
+}
+
+/** 用户回帖条目（GET /api/users/:uid/posts / /api/me/posts；字段为后端 snake_case 原样投影） */
+export interface UserReplyItem {
+  pid: number;
+  tid: number;
+  fid: number;
+  top: number;
+  uid: number;
+  subject: string;
+  message_fmt: string;
+  create_date: number;
+}
+interface UserReplyPage {
+  list: UserReplyItem[];
+  size: number;
+  nextCursor?: number;
+}
+export function fetchUserReplies(uid: number, beforePid?: number): Promise<UserReplyPage> {
+  return apiGet<UserReplyPage>(`/api/users/${uid}/posts${beforePid ? `?before_pid=${beforePid}` : ''}`);
+}
+export function fetchMyReplies(beforePid?: number): Promise<UserReplyPage> {
+  return apiGet<UserReplyPage>(`/api/me/posts${beforePid ? `?before_pid=${beforePid}` : ''}`);
 }
 
 /** 改密（§8.4）：入参为前端预哈希 md5(明文)，与 login/register 口径一致 */
@@ -401,6 +443,7 @@ export async function downloadAttachment(aid: number): Promise<void> {
   const ct = res.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
     const body = (await res.json()) as ApiEnvelope;
+    if (body.code === Code.NOT_LOGIN) sessionExpiredNotify?.();
     throw new ApiError(body.code, body.message || uiT('download_failed'));
   }
   if (!res.ok) throw new ApiError(res.status, uiT('download_failed'));
@@ -502,6 +545,27 @@ interface CreditRecordData {
 }
 export function getMyCreditRecord(page = 1): Promise<CreditRecordData> {
   return apiGet<CreditRecordData>(`/api/me/credits/record?page=${page}`);
+}
+
+/** 经验积分流水（my-points）：bbs_point_log 权威账本（签到/发帖奖励/精华结算/管理员调整等 15 类 reason） */
+interface PointLogItem {
+  id: number;
+  change: number;
+  balance: number;
+  reason: string;
+  biz_key: string;
+  create_date: number;
+}
+interface MyPointsData {
+  credits: number;
+  total: number;
+  page: number;
+  size: number;
+  total_page: number;
+  list: PointLogItem[];
+}
+export function getMyPoints(page = 1): Promise<MyPointsData> {
+  return apiGet<MyPointsData>(`/api/me/points?page=${page}`);
 }
 
 /* ---------------- 加V认证 ---------------- */
@@ -607,6 +671,77 @@ export function saveBackground(imgsrc: string): Promise<{ bgimg: string }> {
 /** 楼层「查看所有回复」（show_all_reply）：某楼层 pid 的全部直接回复（quotepid=pid，每页 20） */
 export function fetchPostReplies(pid: number, page = 1): Promise<PostRepliesData> {
   return apiGet<PostRepliesData>(`/api/posts/${pid}/replies?page=${page}`);
+}
+
+/* ---------------- VIP 收银台（后端 6 端点接线） ---------------- */
+
+/** VIP 套餐（公开）：perks 已 JSON.parse，已知键 credits=履约发放积分 */
+export interface VipPlan {
+  id: number;
+  name: string;
+  duration_days: number;
+  price_cents: number;
+  currency: string;
+  perks: { credits?: number } & Record<string, unknown>;
+  gid: number;
+}
+export function fetchVipPlans(): Promise<{ list: VipPlan[] }> {
+  return apiGet<{ list: VipPlan[] }>('/api/vip/plans');
+}
+
+/** 可用支付通道（公开）：currencies 空 = 不限币种；通道显示名由前端按 id 映射词条 */
+export interface PaymentProviderView {
+  id: string;
+  capabilities: { currencies: string[]; modes: ('redirect' | 'qrcode' | 'redeem')[]; refund: boolean };
+}
+export function fetchPaymentProviders(currency?: string): Promise<{ list: PaymentProviderView[] }> {
+  const q = currency ? `?currency=${encodeURIComponent(currency)}` : '';
+  return apiGet<{ list: PaymentProviderView[] }>(`/api/payment-providers${q}`);
+}
+
+/** 下单（需登录）：金额为计划快照（分，INTEGER 最小货币单位） */
+export interface PlacedOrder {
+  order_no: string;
+  plan_id: number;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  provider: string;
+}
+export function placeOrder(planId: number, provider: string): Promise<PlacedOrder> {
+  return apiSend<PlacedOrder>('POST', '/api/orders', { planId, provider });
+}
+
+/** 订单查询（需登录 + 本人）：前端轮询兜底 webhook 延迟（服务端设计内行为） */
+export interface MyOrder {
+  order_no: string;
+  plan_id: number;
+  amount_cents: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'fulfilled' | 'refunded' | 'closed';
+  created_date: number;
+  paid_date: number;
+  fulfilled_date: number;
+}
+export function fetchOrder(orderNo: string): Promise<MyOrder> {
+  return apiGet<MyOrder>(`/api/orders/${encodeURIComponent(orderNo)}`);
+}
+
+/** 收银台装配（需登录 + 本人）：mode 四态——redirect 跳三方 / qrcode 展内容 / redeem 卡密输入 / pending 降级轮询 */
+export interface CheckoutData {
+  order_no: string;
+  status: string;
+  mode: 'redirect' | 'qrcode' | 'redeem' | 'pending';
+  url?: string;
+  content?: string;
+}
+export function checkoutOrder(orderNo: string): Promise<CheckoutData> {
+  return apiSend<CheckoutData>('POST', `/api/orders/${encodeURIComponent(orderNo)}/checkout`);
+}
+
+/** 卡密兑换（需登录 + 本人）：成功即 fulfilled（挂组/续期/积分在服务端同事务完成） */
+export function redeemOrder(orderNo: string, code: string): Promise<{ order_no: string; status: string }> {
+  return apiSend<{ order_no: string; status: string }>('POST', `/api/orders/${encodeURIComponent(orderNo)}/redeem`, { code });
 }
 
 /** 后台列表的日期列口径：YYYY-MM-DD（date('Y-m-d') 格式），空值给 0000-00-00 */

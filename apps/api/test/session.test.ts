@@ -1,6 +1,6 @@
 /**
  * T2-2 双轨会话测试：JWT(HS256) 签发/验签/过期、session 轨命中、JWT 重建 session、
- * token_version 改密吊销（>30min 复核窗口）。
+ * token_version 改密吊销（每请求复核，无 30 分钟豁口）。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../src/index';
@@ -100,11 +100,12 @@ describe('双轨合并', () => {
     expect(res.headers.get('set-cookie') ?? '').toMatch(/sid=[0-9a-f]{32}/);
   });
 
-  it('30 分钟内的 token 不回查 token_version（省 1 次 D1）', async () => {
-    const token = await issueAccessToken(SECRET, 1, 999); // tv 与库不符但签发 <30min
+  it('tv 不符 → 改密吊销立即生效（刚签发亦然，无 30 分钟豁口）', async () => {
+    const token = await issueAccessToken(SECRET, 1, 999); // tv 与库不符但刚签发
     const { env, calls } = envFor(rules());
     const me = await meOf(env, `at=${token}`);
-    expect(me?.uid).toBe(1);
+    expect(me).toBeNull();
+    // tv 比对复用 user:{uid} 装载查询，不再有独立的 token_version 复核查询
     expect(calls.some((c) => /SELECT token_version FROM bbs_user/.test(c.sql))).toBe(false);
   });
 

@@ -17,17 +17,19 @@ import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
 import { POINT_TABS } from '../tabs';
 import { PageTitle, TabBar, Card, Table, Badge, Button, Input, Select, Field, Alert, ErrorState } from '../ui';
+import { BalanceCard, PaylogCard, RankCard, RulesCard, SellGroupsCard, ToolsCard } from './points-extra';
 
 const PAGE_SIZE = 20;
 
 const fmtDate = (ts: number) => (ts > 0 ? new Date(ts * 1000).toLocaleString(uiLocale(), { hour12: false }) : '—');
 const fmtChange = (n: number) => (n > 0 ? `+${n}` : String(n));
 
-/** point_log.reason 是存库枚举，无 lang 键，直接给中文映射 */
+/** point_log.reason 是存库枚举，无 lang 键，直接给中文映射。
+ *  与实际写入点对齐（批次 3E）：补 v_apply/checkin；移除幽灵枚举 exchange（兑换只动 golds/rmbs 不写 point_log） */
 const REASON_KEYS = [
   'thread', 'reply', 'daily_first', 'attach_purchase', 'attach_income',
   'order', 'admin', 'register', 'thread_purchase', 'thread_income',
-  'exchange', 'transfer_out', 'transfer_in', 'digest',
+  'transfer_out', 'transfer_in', 'digest', 'checkin', 'v_apply',
 ] as const;
 const asInt = (v: string): number | null => (/^-?\d+$/.test(v.trim()) ? Number(v.trim()) : null);
 
@@ -125,6 +127,8 @@ function SettingTab() {
         )}
       </Card>
       <RegisterCreditsCard />
+      <RulesCard />
+      <SellGroupsCard />
     </div>
   );
 }
@@ -304,6 +308,8 @@ function UsersTab() {
           </div>
         )}
       </Card>
+      <BalanceCard />
+      <ToolsCard />
     </div>
   );
 }
@@ -352,10 +358,11 @@ function LogsTab() {
       case 'register': return t('point_reason_register', '注册赠送');
       case 'thread_purchase': return t('point_reason_thread_purchase', '购买主题');
       case 'thread_income': return t('point_reason_thread_income', '主题收益');
-      case 'exchange': return t('exchange_label', '兑换');
       case 'transfer_out': return t('point_reason_transfer_out', '转出');
       case 'transfer_in': return t('point_reason_transfer_in', '转入');
       case 'digest': return t('digest_label', '精华');
+      case 'checkin': return t('point_reason_checkin', '每日签到');
+      case 'v_apply': return t('point_reason_v_apply', '加V申请');
       default: return reason;
     }
   };
@@ -411,6 +418,8 @@ function LogsTab() {
           </div>
         )}
       </Card>
+      <PaylogCard />
+      <RankCard />
     </div>
   );
 }

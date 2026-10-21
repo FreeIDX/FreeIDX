@@ -81,7 +81,9 @@ export function adminVRoutes(): Hono<ReadEnv> {
       .bind(uid)
       .first<{ v: string; status: number }>();
     if (!apply) throw new AppError(Code.NOT_FOUND, t('common.applyNotFound'));
-    await db.prepare('UPDATE bbs_user SET v = ? WHERE uid = ?').bind(String(apply.v ?? ''), uid).run();
+    // 仅待审（status=0）可「通过」：已拒绝（-1）的申请不在任何列表可见，误操作会无感翻转拒绝决定且不可追溯
+    if (Number(apply.status) !== 0) throw new AppError(Code.VALIDATION_ERROR, t('v.alreadyHandled'));
+    await db.prepare('UPDATE bbs_user SET v = ? WHERE uid = ?').bind(String(apply.v ?? '').slice(0, 200), uid).run();
     await db.prepare('UPDATE bbs_v_apply SET status = 1 WHERE uid = ?').bind(uid).run();
     await noticeSend(db, { fromuid: 1, recvuid: uid, message: t('v.passedNotice'), type: NoticeType.SYSTEM });
     return ok(c, t('v.passed'), { data: { uid } });
@@ -94,6 +96,10 @@ export function adminVRoutes(): Hono<ReadEnv> {
     const b = await readJson(c);
     const uid = Number(b.uid);
     if (!Number.isInteger(uid) || uid <= 0) throw new AppError(Code.VALIDATION_ERROR, t('common.paramError'));
+    const apply = await db.prepare<{ status: number }>('SELECT status FROM bbs_v_apply WHERE uid = ?').bind(uid).first<{ status: number }>();
+    // 先校验申请存在且待审：UPDATE 影响 0 行不报错的话，输错 uid 也会让无辜用户收到「认证未通过」通知
+    if (!apply) throw new AppError(Code.NOT_FOUND, t('common.applyNotFound'));
+    if (Number(apply.status) !== 0) throw new AppError(Code.VALIDATION_ERROR, t('v.alreadyHandled'));
     const remark = String(b.remark ?? '').trim().slice(0, 255);
     await db.prepare('UPDATE bbs_v_apply SET status = -1, remark = ? WHERE uid = ?').bind(remark, uid).run();
     await noticeSend(db, { fromuid: 1, recvuid: uid, message: t('v.rejectedNotice'), type: NoticeType.SYSTEM });

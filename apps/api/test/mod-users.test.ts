@@ -31,7 +31,8 @@ function deleteRules(): SqlRule[] {
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN.*AND uid <> \?.*GROUP BY uid/, rows: [{ uid: 3, c: 2 }] },
     // 删除回扣楼层列表（user_delete → thread_delete → post_delete_by_tid）
     { test: /SELECT pid,uid FROM bbs_post WHERE tid IN.*AND isfirst = 0 AND uid <> \?/, rows: [{ pid: 101, uid: 3 }] },
-    { test: /SELECT tid, COUNT\(\*\) AS c FROM bbs_post WHERE uid = \? AND isfirst = 0 GROUP BY tid/, rows: [{ tid: 20, c: 1 }] },
+    // userPurgeStmts：他主题内回帖的 thread.posts 回退（B1 后仅统计已过审回帖）
+    { test: /SELECT tid, COUNT\(\*\) AS c FROM bbs_post WHERE uid = \? AND isfirst = 0 AND ok = 1 GROUP BY tid/, rows: [{ tid: 20, c: 1 }] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
     { test: /SELECT filename FROM bbs_attach/, rows: [] },
     { test: /UPDATE bbs_|DELETE FROM bbs_|INSERT/, rows: [] },

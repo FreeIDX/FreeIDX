@@ -19,9 +19,9 @@ function makeEnv() {
 }
 
 describe('三层缓存策略（§7 键表）', () => {
-  it('高变更键禁入 KV：user:*/thread_top_list/runtime/forumlist 均不含 L1', () => {
+  it('高变更键禁入 KV：user:*/runtime/forumlist 均不含 L1', () => {
     // forumlist 随每次发主题/回帖失效 → 放 KV 时「1,000 帖/天」即打满写额度（且同 key 1 次/秒）
-    for (const k of ['user:42', 'thread_top_list', 'runtime', 'forumlist']) {
+    for (const k of ['user:42', 'runtime', 'forumlist']) {
       expect(policyFor(k).layers).not.toContain('L1');
     }
     // 只有后台低频改的键才允许 L1
@@ -34,7 +34,7 @@ describe('三层缓存策略（§7 键表）', () => {
     const { env } = makeEnv();
     const cache = new Cache(env as never, new D1b(env.DB as never));
     await cache.set('user:1', { uid: 1 });
-    await cache.set('thread_top_list', [1, 2, 3]);
+    await cache.set('rank:1d', { list: [] });
     await cache.set('runtime', { threads: 10 });
     expect(cache.kvWrites).toBe(0);
   });

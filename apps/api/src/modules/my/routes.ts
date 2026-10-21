@@ -77,9 +77,7 @@ async function updateAvatar(c: Ctx): Promise<Response> {
   }
   if (!data) throw new AppError(Code.VALIDATION_ERROR, t('common.fileContentEmpty'));
   const bytes = decodeBase64(data, t);
-  if (bytes.length > AVATAR_MAX_BYTES) {
-    throw new AppError(Code.FORM_FILE_TOO_LARGE, t('my.avatarTooLarge'), { size: bytes.length });
-  }
+
   return persist(c, v.uid, bytes);
 }
 
@@ -101,6 +99,9 @@ async function persist(c: Ctx, uid: number, bytes: Uint8Array): Promise<Response
   const t = c.get('t');
   const db = c.get('db');
   const cache = c.get('cache');
+  if (bytes.length > AVATAR_MAX_BYTES) {
+    throw new AppError(Code.FORM_FILE_TOO_LARGE, t('my.avatarTooLarge'), { size: bytes.length });
+  }
   const key = avatarKey(uid);
   const ts = now();
   await (c.env as Env).FILES.put(key, bytes as unknown as ArrayBufferView, {
@@ -341,14 +342,21 @@ async function toggleFavorite(c: Ctx): Promise<Response> {
   // 否则可借收藏成功与否 + /api/my/favorites 反查探测不可见主题是否存在。
   const th = await db.prepare<{ tid: number }>('SELECT tid FROM bbs_thread WHERE tid = ? AND ok = 1').bind(tid).first<{ tid: number }>();
   if (!th) throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
-  const existing = await db
+  let existing = await db
     .prepare<{ uid: number }>('SELECT uid FROM bbs_favorite WHERE uid = ? AND tid = ?')
     .bind(v.uid, tid)
     .first<{ uid: number }>();
   if (existing) {
     await db.batch([db.prepare('DELETE FROM bbs_favorite WHERE uid = ? AND tid = ?').bind(v.uid, tid) as unknown as Stmt]);
   } else {
-    await db.prepare('INSERT INTO bbs_favorite (uid, tid, create_date) VALUES (?, ?, ?)').bind(v.uid, tid, now()).run();
+    try {
+      await db.prepare('INSERT INTO bbs_favorite (uid, tid, create_date) VALUES (?, ?, ?)').bind(v.uid, tid, now()).run();
+    } catch (e) {
+      // 并发双击：两请求都查到「未收藏」，第二个撞唯一约束 → 按已收藏幂等成功（不 500、不误取消）
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/UNIQUE constraint failed/i.test(msg)) throw e;
+      existing = { uid: v.uid };
+    }
   }
   const cnt = await db
     .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_favorite WHERE tid = ?')

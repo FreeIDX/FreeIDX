@@ -19,6 +19,7 @@
  * 不可缓存性由 envelope.ts 统一打 `Cache-Control: no-store` 来保证，而不是靠异常传播。
  */
 import { createMiddleware } from 'hono/factory';
+import { AVAILABLE_LOCALES } from '@freeidx/shared';
 import type { Env } from '../../types/env';
 import type { D1b } from '../db';
 import type { Cache } from './index';
@@ -53,6 +54,18 @@ const FILES_PUBLIC: ReadonlyArray<RegExp> = [/^\/files\/avatar\//, /^\/files\/fo
 /** 登录轨 Cookie：出现任一即说明响应可能按用户定制，必须绕开边缘缓存 */
 const PERSONAL_COOKIE = /(?:^|;\s*)(?:sid|at|admin_at)=/;
 
+/** 语言协商 cookie：合法 locale 才参与缓存键（与 i18n 中间件 cookieLangOf 同口径） */
+function langCookieOf(cookie: string | null): string | undefined {
+  const m = /(?:^|;\s*)lang=([^;]+)/.exec(cookie ?? '');
+  if (!m?.[1]) return undefined;
+  try {
+    const v = decodeURIComponent(m[1]).toLowerCase();
+    return AVAILABLE_LOCALES.includes(v) ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function bucket(): Bucket | null {
   return typeof caches === 'undefined' ? null : caches.default;
 }
@@ -60,15 +73,18 @@ function bucket(): Bucket | null {
 /**
  * 键 URL：把 UA 分类塞进查询串参数 `fi-ua`（原查询保留）。
  * Cloudflare 缓存键只认 URL，不认 Vary，这是浏览器/爬虫共用一个 URL 时唯一的隔离手段。
+ * `fi-lang`：API 响应内容可能随语言 cookie 协商而不同（i18n 中间件），带 `lang` cookie 的
+ * 请求把语言值也编进键，避免不同语言用户互串缓存副本；无 cookie（或非法值）共用缺省键。
  */
-function keyUrl(url: string, ua: UaClass): string {
+function keyUrl(url: string, ua: UaClass, lang?: string): string {
   const u = new URL(url);
   u.searchParams.set('fi-ua', ua);
+  if (lang) u.searchParams.set('fi-lang', lang);
   return u.toString();
 }
 
-function keyRequest(url: string, ua: UaClass): Request {
-  return new Request(keyUrl(url, ua), { method: 'GET' });
+function keyRequest(url: string, ua: UaClass, lang?: string): Request {
+  return new Request(keyUrl(url, ua, lang), { method: 'GET' });
 }
 
 function withState(res: Response, state: 'HIT' | 'MISS'): Response {
@@ -153,9 +169,12 @@ export function edgeCache() {
       const b = bucket();
       if (!b) return next();
 
-      // /files/* 与 UA 无关 → 人类/爬虫共用一个键（SHARED_UA），命中率最高；API 仍按 fi-ua 分键隔离
+      // /files/* 与 UA 无关 → 人类/爬虫共用一个键（SHARED_UA），命中率最高；API 仍按 fi-ua 分键隔离。
+      // /files/* 与语言无关（二进制对象）不编 fi-lang；API 键编入 lang cookie（合法 locale 才编），
+      // 防止语言协商后不同语言用户命中同一份缓存副本。
       const ua = filePrefix ? SHARED_UA : (classifyUserAgent(c.req.header('user-agent') ?? '') as UaClass);
-      const key = keyRequest(raw.url, ua);
+      const lang = filePrefix ? undefined : langCookieOf(raw.headers.get('cookie'));
+      const key = keyRequest(raw.url, ua, lang);
       const hit = await b.match(key);
       if (hit) {
         c.res = withState(hit, 'HIT');

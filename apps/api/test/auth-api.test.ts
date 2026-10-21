@@ -314,6 +314,23 @@ describe('DELETE /api/auth/logout', () => {
     expect(cookies).toMatch(/sid=;.*Max-Age=0/);
     expect(cookies).toContain('at=;');
   });
+
+  it('登录态登出 = 全端吊销：tv+1 废 JWT + 删该用户全部 session + user 缓存失效', async () => {
+    const user = { uid: 5, gid: 101, password: 'x', salt: '', token_version: 3, avatar: 0, username: 'u5', email: 'u@b.c' };
+    const { env, calls } = envFor([
+      { test: /SELECT uid,last_date FROM bbs_session/, first: { uid: 5, last_date: Math.floor(Date.now() / 1000) } },
+      { test: /FROM bbs_user WHERE uid = \?/, first: user },
+      { test: /UPDATE bbs_user/, first: null },
+    ]);
+    const res = await app.request('/api/auth/logout', { method: 'DELETE', headers: { cookie: 'sid=abcdef0123456789abcdef0123456789' } }, env as never);
+    expect(((await res.json()) as { code: number }).code).toBe(Code.OK);
+    expect(calls.some((c) => /token_version = token_version \+ 1/.test(c.sql))).toBe(true);
+    expect(calls.some((c) => /DELETE FROM bbs_session WHERE uid = \?/.test(c.sql))).toBe(true);
+    expect(calls.some((c) => /DELETE FROM bbs_cache/.test(c.sql))).toBe(true);
+    const cookies = allCookies(res);
+    expect(cookies).toMatch(/sid=;.*Max-Age=0/);
+    expect(cookies).toContain('at=;');
+  });
 });
 
 describe('POST /api/auth/admin-token（后台二次验证重签 admin_at）', () => {

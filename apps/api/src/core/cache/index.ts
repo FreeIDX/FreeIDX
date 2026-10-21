@@ -2,7 +2,7 @@
  * 三层数据缓存（T1-3，§7）——可插拔分层：
  *  L0 Isolate 内存 Map+TTL（10~60s，零额度）
  *  L1 KV（TTL 1h）——仅 setting/forumlist/grouplist（KV 免费写 1k/天，高变更键严禁入内）
- *  L2 D1 cache 表（带 expiry）——高变更/共享缓存（user:{uid}、thread_top_list）
+ *  L2 D1 cache 表（带 expiry）——高变更/共享缓存（user:{uid}）
  * 失效：主动 delete（写路径调用），L0 逐 isolate（每实例独立，短 TTL 兜底）。
  * 响应级缓存（L-1 Cache API，游客只读接口 + 爬虫 HTML）在 ./edge.ts，不在本类内。
  */
@@ -42,7 +42,7 @@ const KEY_POLICIES: Record<string, KeyPolicy> = {
   setting: { ttl: 3600, layers: ['L0', 'L1'] },
   // 积分交易规则（tt_credits）：后台低频改，读多写少 → 与 setting 同层
   tt_credits: { ttl: 3600, layers: ['L0', 'L1'] },
-  thread_top_list: { ttl: 60, layers: ['L0', 'L2'] },
+
   runtime: { ttl: 10, layers: ['L0', 'L2'] },
 };
 /** 前缀策略：user:{uid} = L0+L2/30s（禁 KV） */

@@ -471,9 +471,24 @@ export function authRoutes(): Hono<ReadEnv> {
 
   app.delete('/api/auth/logout', async (c) => {
     const t = c.get('t');
-    const db = c.get('db');
+    const { db, cache } = core(c);
     const sid = c.req.header('cookie')?.match(/(?:^|;\s*)sid=([^;]+)/)?.[1];
-    if (sid) await destroySession(db, sid);
+    const viewer = await loadViewer(cache, db, c);
+    if (viewer.uid > 0) {
+      // 登出 = 全端吊销：JWT 是无状态 100 天令牌，服务端唯一撤销手段是 token_version；
+      // 若只删当前 sid，被盗的 at cookie 在登出后依然完全有效（且可经 loadViewer 重建
+      // session）——「登出止损」形同虚设。故与改密吊销共用同一套三件套：
+      // tv+1（废 JWT/admin_at）+ 删该用户全部 session 行 + user:{uid} 缓存失效。
+      await db
+        .prepare('UPDATE bbs_user SET token_version = token_version + 1 WHERE uid = ?')
+        .bind(viewer.uid)
+        .run();
+      await destroyUserSessions(db, viewer.uid);
+      await cache.del(`user:${viewer.uid}`);
+    } else if (sid) {
+      // 登录态不可辨（如库瞬时故障读不到用户）时至少撤销当前 session 行
+      await destroySession(db, sid);
+    }
     const secure = (c.env.SITE_URL ?? '').startsWith('https://');
     setCookie(c, 'sid', '', { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: 0 });
     setCookie(c, 'at', '', { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: 0 });

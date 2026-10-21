@@ -126,14 +126,21 @@ export function userRoutes(): Hono<ReadEnv> {
     if (uid === viewer.uid) throw new AppError(Code.VALIDATION_ERROR, t('user.cannotFollowSelf'));
     const u = await db.prepare<{ uid: number }>('SELECT uid FROM bbs_user WHERE uid = ?').bind(uid).first<{ uid: number }>();
     if (!u) throw new AppError(Code.NOT_FOUND, t('common.userNotFound'));
-    const existing = await db
+    let existing = await db
       .prepare<{ follower_uid: number }>('SELECT follower_uid FROM bbs_follow WHERE follower_uid = ? AND followee_uid = ?')
       .bind(viewer.uid, uid)
       .first<{ follower_uid: number }>();
     if (existing) {
       await db.prepare('DELETE FROM bbs_follow WHERE follower_uid = ? AND followee_uid = ?').bind(viewer.uid, uid).run();
     } else {
-      await db.prepare('INSERT INTO bbs_follow (follower_uid, followee_uid, create_date) VALUES (?, ?, ?)').bind(viewer.uid, uid, now()).run();
+      try {
+        await db.prepare('INSERT INTO bbs_follow (follower_uid, followee_uid, create_date) VALUES (?, ?, ?)').bind(viewer.uid, uid, now()).run();
+      } catch (e) {
+        // 并发双击：两请求都查到「未关注」，第二个撞唯一约束 → 按已关注幂等成功（不 500、不误取关）
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/UNIQUE constraint failed/i.test(msg)) throw e;
+        existing = { follower_uid: viewer.uid };
+      }
     }
     const cnt = await db
       .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_follow WHERE followee_uid = ?')

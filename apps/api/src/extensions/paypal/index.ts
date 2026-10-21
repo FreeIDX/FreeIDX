@@ -310,18 +310,21 @@ async function verifyWebhook(req: Request, cfg: PaypalCfg): Promise<ProviderEven
   const base = safeBase(cfg);
   const access = await token(base, cfg);
   if (!access) return null;
+  // webhook_event 必须与 PayPal 侧签名所覆盖的报文逐字节一致：外层辅助字段用 JSON.stringify 转义，
+  // webhook_event 直接内嵌原始 body（上面已 JSON.parse 成功，必为合法 JSON，无注入风险），
+  // 避免把解析对象重新序列化后字段顺序/数字表示漂移导致验签误拒。
+  const vpayload =
+    `{"auth_algo":${JSON.stringify(req.headers.get('paypal-auth-algo') ?? '')}` +
+    `,"cert_url":${JSON.stringify(req.headers.get('paypal-cert-url') ?? '')}` +
+    `,"transmission_id":${JSON.stringify(req.headers.get('paypal-transmission-id') ?? '')}` +
+    `,"transmission_sig":${JSON.stringify(req.headers.get('paypal-transmission-sig') ?? '')}` +
+    `,"transmission_time":${JSON.stringify(req.headers.get('paypal-transmission-time') ?? '')}` +
+    `,"webhook_id":${JSON.stringify(cfg.webhookId)}` +
+    `,"webhook_event":${body}}`;
   const vres = await fetch(`${base}/v1/notifications/verify-webhook-signature`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${access}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      auth_algo: req.headers.get('paypal-auth-algo') ?? '',
-      cert_url: req.headers.get('paypal-cert-url') ?? '',
-      transmission_id: req.headers.get('paypal-transmission-id') ?? '',
-      transmission_sig: req.headers.get('paypal-transmission-sig') ?? '',
-      transmission_time: req.headers.get('paypal-transmission-time') ?? '',
-      webhook_id: cfg.webhookId,
-      webhook_event: evt,
-    }),
+    body: vpayload,
   });
   if (!vres.ok) return null;
   const vj = (await vres.json()) as { verification_status?: string };

@@ -97,6 +97,38 @@ export const getPointLogs = (q: { uid?: number; reason?: string; page?: number; 
 export const getRegisterCredits = () => apiGet<{ credits: number; golds: number; rmbs: number }>('/api/admin/points/register-credits');
 export const putRegisterCredits = (input: { credits: number; golds: number; rmbs: number }) =>
   apiSend<{ credits: number; golds: number; rmbs: number }>('PUT', '/api/admin/points/register-credits', input);
+
+/** ---------------- 积分管理扩展（批次 3B：接入后端既有 10 个端点） ---------------- */
+/** 积分规则矩阵（3×6 动作×三币）+ 兑换参数；defaults = 服务端出厂默认档 */
+export type PointRulesData = Record<string, number> & { defaults?: Record<string, number> };
+export const getPointRules = () => apiGet<PointRulesData>('/api/admin/points/rules');
+export const putPointRules = (input: Record<string, number>) => apiSend<never>('PUT', '/api/admin/points/rules', input);
+/** 按用户名查三币余额（绝对口径） */
+export const getPointBalance = (username: string) =>
+  apiGet<{ uid: number; username: string; exp: number; golds: number; rmbs: number }>(
+    `/api/admin/points/balance?username=${encodeURIComponent(username)}`,
+  );
+/** 绝对覆盖三币余额（credits 走差额补 point_log） */
+export const putPointBalance = (input: { username: string; exp: number; golds: number; rmbs: number }) =>
+  apiSend<{ exp: number; golds: number; rmbs: number }>('PUT', '/api/admin/points/balance', input);
+/** 购买主题消费记录（bbs_paylist type=1） */
+export const getPointPaylog = (page = 1) =>
+  apiGet<PageData<{ plid: number; tid: number; subject: string; uid: number; username: string; num: number; credit_type: number; paytime: number }>>(
+    `/api/admin/points/paylog?page=${page}`,
+  );
+/** 可发收费帖组 */
+export const getPointSellGroups = () => apiGet<{ list: { gid: number; name: string; allowsell: number }[] }>('/api/admin/points/groups');
+export const putPointSellGroups = (gids: number[]) => apiSend<never>('PUT', '/api/admin/points/groups', { gids });
+/** 模拟用户购买（写 num=0 购买行，已购幂等跳过） */
+export const simulatePurchase = (uid: number, tid: number) => apiSend<never>('POST', '/api/admin/points/simulate', { uid, tid });
+/** 强制按经验重算用户组 */
+export const forceUpgradeGroup = (username: string) =>
+  apiSend<{ oldGid: number; newGid: number } | null>('POST', '/api/admin/points/upgrade', { username });
+/** 三币排行（type=credits|golds|rmbs） */
+export const getPointRank = (type: 'credits' | 'golds' | 'rmbs', page = 1) =>
+  apiGet<PageData<{ uid: number; username: string; credits: number; golds: number; rmbs: number }>>(
+    `/api/admin/points/rank?type=${type}&page=${page}`,
+  );
 /** password 必须是前端预哈希后的 32 位串（与前台登录同口径，见 lib/md5）；gid 缺省 101 */
 export const createUser = (input: { email: string; username: string; password: string; gid?: number }) =>
   apiSend<{ uid: number; gid: number }>('POST', '/api/admin/users', input);
@@ -157,7 +189,7 @@ export const getModlogs = (q: { uid?: number; page?: number; size?: number }) =>
   apiGet<PageData<ModlogRow>>(`/api/admin/modlogs${qs(q)}`);
 
 export const getRuntime = () => apiGet<RuntimeData>('/api/admin/runtime');
-/** 只清 forumlist/grouplist/setting/thread_top_list/runtime 五个键（user:{uid} 与 ext:*:config 不动） */
+/** 只清 forumlist/grouplist/setting/runtime 四个键（user:{uid} 与 ext:*:config 不动；thread_top_list 缓存键已随直查 bbs_thread_top 方案移除） */
 export const clearCache = () => apiSend<{ cleared: number }>('POST', '/api/admin/cache/clear');
 
 /**

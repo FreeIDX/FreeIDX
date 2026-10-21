@@ -41,6 +41,7 @@
     "indexnow",
     "stripe",
     "paypal",
+    "alipay",
     "recaptcha",
     "fallback"
   ],

@@ -53,10 +53,11 @@ describe('cron 每 5 分钟档（§11.1：sess_gc + 在线数刷新）', () => {
 });
 
 describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC）', () => {
-  /** 计数校准四条重算语句 + 全站总数查询，cronDaily 每日执行 */
+  /** 计数校准五条重算语句（含 lastusername 自愈）+ 全站总数查询，cronDaily 每日执行 */
   const calibrateRules: SqlRule[] = [
     { test: /UPDATE bbs_forum SET threads = \(SELECT/, rows: [] },
     { test: /UPDATE bbs_thread SET posts = \(SELECT/, rows: [] },
+    { test: /UPDATE bbs_thread SET lastusername = \(SELECT/, rows: [] },
     { test: /UPDATE bbs_user SET/, rows: [] },
     { test: /SELECT \(SELECT COUNT\(\*\) FROM bbs_thread\) AS threads/, first: { threads: 10, posts: 25 } },
   ];
@@ -82,6 +83,8 @@ describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC
       /UPDATE bbs_thread SET posts = \(SELECT COUNT\(\*\) FROM bbs_post WHERE bbs_post\.tid = bbs_thread\.tid AND bbs_post\.isfirst = 0\) WHERE posts <> \(SELECT COUNT\(\*\) FROM bbs_post WHERE bbs_post\.tid = bbs_thread\.tid AND bbs_post\.isfirst = 0\)/,
       /UPDATE bbs_user SET threads = \(SELECT COUNT\(\*\) FROM bbs_thread WHERE bbs_thread\.uid = bbs_user\.uid\) WHERE threads <> \(SELECT COUNT\(\*\) FROM bbs_thread WHERE bbs_thread\.uid = bbs_user\.uid\)/,
       /UPDATE bbs_user SET posts = \(SELECT COUNT\(\*\) FROM bbs_post WHERE bbs_post\.uid = bbs_user\.uid AND bbs_post\.isfirst = 0\) WHERE posts <> \(SELECT COUNT\(\*\) FROM bbs_post WHERE bbs_post\.uid = bbs_user\.uid AND bbs_post\.isfirst = 0\)/,
+      // §20.2 lastusername 自愈：与计数校准同口径（正常 0 行写）；lastuid 用户不存在时三值逻辑不命中
+      /UPDATE bbs_thread SET lastusername = \(SELECT username FROM bbs_user WHERE uid = bbs_thread\.lastuid\) WHERE lastusername <> \(SELECT username FROM bbs_user WHERE uid = bbs_thread\.lastuid\)/,
     ]) {
       expect(d.calls.some((c) => re.test(c.sql))).toBe(true);
     }
@@ -100,6 +103,7 @@ describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC
       { test: /SELECT v FROM bbs_kv WHERE k = \?/, first: { v: '{}' } },
       { test: /UPDATE bbs_forum SET threads = \(SELECT/, rows: [], changes: 1 },
       { test: /UPDATE bbs_thread SET posts = \(SELECT/, rows: [], changes: 3 },
+      { test: /UPDATE bbs_thread SET lastusername = \(SELECT/, rows: [], changes: 0 },
       { test: /UPDATE bbs_user SET/, rows: [], changes: 0 },
       { test: /SELECT \(SELECT COUNT\(\*\) FROM bbs_thread\) AS threads/, first: { threads: 10, posts: 25 } },
       { test: /UPDATE bbs_forum SET todayposts = 0, todaythreads = 0/, rows: [] },
@@ -109,6 +113,30 @@ describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC
     const d = deps(rs);
     const r = await cronDaily(d.cron);
     expect(r.driftRows).toBe(4);
+  });
+
+  it('子任务错误隔离：校准抛错不阻断 today* 清零 / queue GC / cache GC（本档一天仅触发一次）', async () => {
+    const rs: SqlRule[] = [
+      { test: /UPDATE bbs_forum SET threads = \(SELECT/, rows: [], throws: 'D1 down' },
+      { test: /UPDATE bbs_thread SET posts = \(SELECT/, rows: [] },
+      { test: /UPDATE bbs_thread SET lastusername = \(SELECT/, rows: [] },
+      { test: /UPDATE bbs_user SET/, rows: [] },
+      { test: /SELECT \(SELECT COUNT\(\*\) FROM bbs_thread\) AS threads/, first: { threads: 10, posts: 25 } },
+      { test: /UPDATE bbs_forum SET todayposts = 0, todaythreads = 0/, rows: [] },
+      { test: /DELETE FROM bbs_queue WHERE expiry > 0/, rows: [] },
+      ...common,
+    ];
+    const d = deps(rs);
+    const r = await cronDaily(d.cron);
+    expect(r.forumReset).toBe(true);
+    expect(r.calibrated).toEqual({ threads: 0, posts: 0 });
+    expect(r.driftRows).toBe(0);
+    expect(d.calls.some((c) => /UPDATE bbs_forum SET todayposts = 0/.test(c.sql))).toBe(true);
+    expect(d.calls.some((c) => /DELETE FROM bbs_queue/.test(c.sql))).toBe(true);
+    expect(d.calls.some((c) => /DELETE FROM bbs_cache WHERE expiry > 0 AND expiry <= \?/.test(c.sql))).toBe(true);
+    // 校准失败 → runtime 保留现值（不把 0 写回全站数），仅清零 today*
+    const runtimeWrite = d.calls.find((c) => /REPLACE INTO bbs_cache/.test(c.sql));
+    expect(String(runtimeWrite?.params[1] ?? runtimeWrite?.params.at(-1))).not.toContain('"threads":10');
   });
 });
 

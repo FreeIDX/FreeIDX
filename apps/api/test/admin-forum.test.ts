@@ -29,6 +29,10 @@ function rules(): SqlRule[] {
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_thread/, first: { c: 42 } },
     { test: /SELECT tid,fid,uid,username,avatar,subject,posts[\s\S]*FROM bbs_thread[\s\S]*ORDER BY tid DESC/, rows: () => [{ tid: 101, fid: 8, subject: '示例主题' }] },
     { test: /SELECT tid,uid FROM bbs_thread WHERE fid = \?/, rows: () => [{ tid: 101, uid: 7 }] },
+    { test: /SELECT tid,fid,subject FROM bbs_thread WHERE tid = \?/, first: { tid: 101, fid: 8, subject: '示例主题' } },
+    { test: /SELECT pid,doctype FROM bbs_post WHERE tid = \? AND isfirst = 1/, first: { pid: 900, doctype: 0 } },
+    { test: /INSERT INTO bbs_modlog/, rows: [] },
+    { test: /UPDATE bbs_thread SET/, rows: [] },
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN/, rows: () => [{ uid: 7, c: 3 }] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
     { test: /SELECT filename FROM bbs_attach/, rows: [] },
@@ -264,5 +268,26 @@ describe('主题管理列表（T3-5）', () => {
     const cnt = calls.find((c) => /SELECT COUNT\(\*\) AS c FROM bbs_thread/.test(c.sql));
     expect(cnt?.sql).not.toContain('userip');
     expect(cnt?.params).toEqual([]);
+  });
+
+  it('PUT 编辑：129 字标题 → VALIDATION_ERROR（与前台 128 口径一致）', async () => {
+    const { env } = makeEnv();
+    const res = await app.request(
+      '/api/admin/threads/101',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ subject: 'x'.repeat(129) }) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
+  });
+
+  it('PUT 编辑：81~128 字存量标题可保存（历史 80 上限已统一为 128）', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request(
+      '/api/admin/threads/101',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ subject: 'x'.repeat(128) }) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    expect(calls.some((c) => /UPDATE bbs_thread SET subject/.test(c.sql))).toBe(true);
   });
 });

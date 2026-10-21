@@ -1,7 +1,7 @@
 /** useAuth：bootstrap 一次拉取（setting/forumlist/grouplist/me），Zustand 全局态（§10.3） */
 import { create } from 'zustand';
 import type { ForumNode, GroupRow, SiteSetting, UserBrief } from '@freeidx/shared';
-import { bootstrap, login, logout, register, type LoginResult, type RegisterResult } from '../lib/api';
+import { bootstrap, login, logout, onSessionExpired, register, type LoginResult, type RegisterResult } from '../lib/api';
 import { queryClient } from '../lib/query-client';
 import { md5 } from '../lib/md5';
 
@@ -104,3 +104,19 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
   },
 }));
+/*
+ * 会话失效全局兜底：任何 API 信封返回 NOT_LOGIN 且本地仍是登录态（me 非空）时——
+ * 服务端已吊销会话（改密/登出 = 全端 tv+1、100 天过期、管理员强制下线）——
+ * 重拉 bootstrap 同步为游客态并失效全量查询缓存，让顶栏/操作按钮与真实态一致，
+ * 而不是每个请求各自散点报「请登录」（P4：前台缺 401 → 感知 → 重登闭环）。
+ * 5s 节流：并发请求同时 401 只触发一次刷新；游客本就 me=null，通知直接忽略。
+ */
+let lastSessionExpiredAt = 0;
+onSessionExpired(() => {
+  const { me, load } = useAuth.getState();
+  if (!me) return;
+  const nowTs = Date.now();
+  if (nowTs - lastSessionExpiredAt < 5000) return;
+  lastSessionExpiredAt = nowTs;
+  void load(true).then(() => queryClient.invalidateQueries());
+});

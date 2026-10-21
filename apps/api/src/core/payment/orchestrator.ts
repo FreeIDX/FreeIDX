@@ -13,6 +13,7 @@ import {
   getOrderByProviderRef,
   getOrder,
   listPendingForReconcile,
+  listStalePending,
   markPaid,
   refundOrder,
   type OrderRow,
@@ -131,6 +132,16 @@ interface ReconcileReport {
   failed: number;
 }
 
+interface StaleSweepReport {
+  scanned: number;
+  closed: number;
+  recovered: number;
+  failed: number;
+}
+
+/** 超期未付关单阈值：72h（覆盖 PayPal 订单最长有效期；Stripe Checkout 会话 24h） */
+const STALE_ORDER_TTL = 72 * 3600;
+
 /**
  * 掉单对账（cron 每小时；§15.3）：拉取近 24h pending 外部单，逐单向 provider queryOrder 复核，
  * 命中已付则补 markPaid+fulfillOrder。卡密无 provider 侧、queryOrder 缺省的通道跳过。
@@ -169,6 +180,61 @@ export async function reconcilePending(
       }
     } else if (state === 'failed') {
       await closeOrder(core.db, o.orderNo);
+      report.failed++;
+    }
+  }
+  return report;
+}
+
+/**
+ * 超期关单（C5，cron 每小时，listStalePending 供单）：
+ * 创建超 72h（覆盖 PayPal 订单最长有效期）且仍 pending 的外部单逐单 queryOrder 复核——
+ * 已付则补 markPaid+fulfillOrder（与掉单对账同路径）；确认未付则 closeOrder 终结，
+ * 杜绝「中途放弃支付」的订单永久悬挂 pending（对账窗口仅 24h，此前超窗单无人接管）。
+ * queryOrder 抛错（通道故障）不关单，保留 pending 下轮重试；卡密单由 SQL 排除。
+ * 无 queryOrder 能力的通道：超 72h 仍未落账即关单（迟到 paid 事件落在 closed 终态被
+ * 幂等 ignored，不会重试风暴）；当前 stripe/paypal 均实现 queryOrder，此为防御分支。
+ */
+export async function sweepStaleOrders(
+  core: { db: D1b; cache: Cache },
+  env: Env | undefined,
+  now: number,
+): Promise<StaleSweepReport> {
+  const orders = await listStalePending(core.db, now - STALE_ORDER_TTL);
+  const report: StaleSweepReport = { scanned: orders.length, closed: 0, recovered: 0, failed: 0 };
+  for (const o of orders) {
+    const provider = getProvider(o.provider);
+    let state: 'pending' | 'paid' | 'failed' | null = null;
+    if (provider?.queryOrder) {
+      const cfg = await resolveProviderConfig(core.cache, core.db, env, o.provider);
+      try {
+        state = await provider.queryOrder(o.providerRef || o.orderNo, cfg);
+      } catch {
+        report.failed++; // 通道故障：本轮不动，保留 pending 待下轮复核
+        continue;
+      }
+    }
+    if (state === 'paid') {
+      const ref = o.providerRef || `recon:${o.orderNo}`;
+      await linkProviderRef(core.db, o.orderNo, ref);
+      const after = await markPaid(core.db, o.orderNo, ref, now);
+      if (after.status !== OrderStatus.PAID && after.status !== OrderStatus.FULFILLED) continue;
+      try {
+        await fulfillOrder(core, o.orderNo, now);
+        report.recovered++;
+      } catch (e) {
+        // 履约失败（如计划被硬删）保留 paid 待人工补单，与掉单对账口径一致
+        console.error(`[payment] ${t0('pay.logReconFulfillFailed', { orderNo: o.orderNo, err: e instanceof Error ? e.message : String(e) })}`);
+        report.failed++;
+      }
+      continue;
+    }
+    // pending / failed / 无 queryOrder 通道：超期未付 → 关单终结
+    try {
+      await closeOrder(core.db, o.orderNo);
+      report.closed++;
+    } catch (e) {
+      console.error(`[payment] ${t0('pay.logStaleCloseFailed', { orderNo: o.orderNo, err: e instanceof Error ? e.message : String(e) })}`);
       report.failed++;
     }
   }

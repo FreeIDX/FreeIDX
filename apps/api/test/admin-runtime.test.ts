@@ -119,7 +119,7 @@ describe('缓存一键清空（T3-7）', () => {
       env,
     );
     expect((await jsonOf(res)).code).toBe(Code.OK);
-    // thread_top_list / runtime 属 L2 → 触发 bbs_cache 删除
+    // forumlist / runtime 属 L2 → 触发 bbs_cache 删除
     expect(calls.filter((c) => /DELETE FROM bbs_cache/.test(c.sql)).length).toBeGreaterThanOrEqual(2);
   });
 });

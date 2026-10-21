@@ -2,7 +2,7 @@
  * 版务日志面板 + 运行时统计面板（T3-7，§14.4 / §14.8）：
  *   GET  /api/admin/runtime      统计面板：全站/今日计数 + 在线数 + 管理组 + 用户分布 + 服务器信息 + 三预算实测（子请求/D1 查询/rows_read/CPU）上墙
  *   GET  /api/admin/modlogs      modlog 分页（?uid 过滤，logid 倒序），供版务审计回溯
- *   POST /api/admin/cache/clear  一键失效三层缓存核心键（forumlist/grouplist/setting/thread_top_list/runtime）
+ *   POST /api/admin/cache/clear  一键失效三层缓存核心键（forumlist/grouplist/setting/runtime）
  * runtime 面板是 §14.8 度量落点：budget 段直读 D1b 请求内计数器（本请求真实累计），DoD = 面板数值与 D1 实测一致。
  * 后台首页的 4 个小盒 + 2 个 info-box +
  * 管理组表 + 用户分布环形图 + 服务器信息卡一次给齐：不做「每组一条 COUNT + 一条 find」（≈20 条查询），
@@ -165,7 +165,7 @@ export function adminRuntimeRoutes(): Hono<ReadEnv> {
   app.post('/api/admin/cache/clear', async (c) => {
     const { cache } = core(c);
     const t = c.get('t');
-    for (const key of ['forumlist', 'grouplist', 'setting', 'thread_top_list', 'runtime']) {
+    for (const key of ['forumlist', 'grouplist', 'setting', 'runtime']) {
       await cache.del(key);
     }
     return ok(c, t('admin.cacheCleared'), { data: { cleared: Code.OK } });

@@ -11,7 +11,7 @@ import type { Stmt } from './db';
 import { Cache } from './cache';
 import { queueGc } from './queue';
 import { getExtensions } from './extensions';
-import { reconcilePending } from './payment/orchestrator';
+import { reconcilePending, sweepStaleOrders } from './payment/orchestrator';
 import { demoteExpiredVip } from './order';
 
 export const ONLINE_HOLD_TIME_DEFAULT = 300;
@@ -43,6 +43,8 @@ interface CronDailyResult {
   calibrated: { threads: number; posts: number };
   /** 本次校准实际改写的行数（= 检出漂移量；正常为 0，非 0 说明增量维护出过偏差） */
   driftRows: number;
+  /** bbs_cache 过期行物理 GC 删除的行数 */
+  cacheGc: number;
 }
 
 async function onlineHoldTime(db: D1b): Promise<number> {
@@ -80,38 +82,79 @@ export async function cronDaily(deps: CronDeps): Promise<CronDailyResult> {
   // 「10 万行写/天」，当天发帖/积分/会话落库全部失败。加 WHERE 后写行数 = 检出漂移量（正常为 0），
   // 读仍是索引扫描（bbs_thread_fid_tid / bbs_post_tid_pid / bbs_thread_uid / bbs_post_uid），
   // 与哨兵探测同量级，故不再额外跑探测查询。
-  const calibratedRes = await db.batch([
-    db.prepare(
-      'UPDATE bbs_forum SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid)',
-    ) as unknown as Stmt,
-    db.prepare(
-      'UPDATE bbs_thread SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0)',
-    ) as unknown as Stmt,
-    db.prepare(
-      'UPDATE bbs_user SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid)',
-    ) as unknown as Stmt,
-    db.prepare(
-      'UPDATE bbs_user SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0)',
-    ) as unknown as Stmt,
-  ]);
-  const driftRows = calibratedRes.reduce((n, r) => n + Number((r as D1Result | undefined)?.meta?.changes ?? 0), 0);
-  const totals = await db
-    .prepare<{ threads: number; posts: number }>(
-      'SELECT (SELECT COUNT(*) FROM bbs_thread) AS threads, (SELECT COUNT(*) FROM bbs_post WHERE isfirst = 0) AS posts',
-    )
-    .first<{ threads: number; posts: number }>();
-  const calibrated = { threads: Number(totals?.threads ?? 0), posts: Number(totals?.posts ?? 0) };
+  //
+  // 子任务块级错误隔离（与每小时档同口径）：本档一天仅触发一次，任一子任务失败若冒泡会
+  // 连带跳过其后全部子任务（today* 清零 / queue GC / cache GC 要等 24h 才有下一次机会）。
+  const res: CronDailyResult = { forumReset: false, calibrated: { threads: 0, posts: 0 }, driftRows: 0, cacheGc: 0 };
+  let calibrated: { threads: number; posts: number } | undefined;
+  try {
+    const calibratedRes = await db.batch([
+      db.prepare(
+        'UPDATE bbs_forum SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid)',
+      ) as unknown as Stmt,
+      db.prepare(
+        'UPDATE bbs_thread SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0)',
+      ) as unknown as Stmt,
+      db.prepare(
+        'UPDATE bbs_user SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid)',
+      ) as unknown as Stmt,
+      db.prepare(
+        'UPDATE bbs_user SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0)',
+      ) as unknown as Stmt,
+      // lastusername 自愈（§20.2 结构性修复的兜底）：历史脏数据（=发帖时楼主名）与改名回写遗漏由此
+      // 每日纠正——正常 0 行写不耗额度，与计数校准同口径。lastuid 指向不存在用户时子查询为 NULL，
+      // 三值逻辑下 WHERE 不命中该行（不写、不清空），安全。
+      db.prepare(
+        'UPDATE bbs_thread SET lastusername = (SELECT username FROM bbs_user WHERE uid = bbs_thread.lastuid) WHERE lastusername <> (SELECT username FROM bbs_user WHERE uid = bbs_thread.lastuid)',
+      ) as unknown as Stmt,
+    ]);
+    res.driftRows = calibratedRes.reduce((n, r) => n + Number((r as D1Result | undefined)?.meta?.changes ?? 0), 0);
+    const totals = await db
+      .prepare<{ threads: number; posts: number }>(
+        'SELECT (SELECT COUNT(*) FROM bbs_thread) AS threads, (SELECT COUNT(*) FROM bbs_post WHERE isfirst = 0) AS posts',
+      )
+      .first<{ threads: number; posts: number }>();
+    calibrated = { threads: Number(totals?.threads ?? 0), posts: Number(totals?.posts ?? 0) };
+    res.calibrated = calibrated;
+  } catch (err) {
+    console.warn('[cron:daily] calibrate failed:', err instanceof Error ? err.message : err);
+  }
 
   // today* 清零（缓存 + forum 表，单语句批刷）；runtime 一并写回校准后的全站数
-  const runtime = (await cache.get<Record<string, number>>('runtime')) ?? {};
-  await cache.set('runtime', { ...runtime, todayposts: 0, todaythreads: 0, todayusers: 0, threads: calibrated.threads, posts: calibrated.posts });
-  await db.prepare('UPDATE bbs_forum SET todayposts = 0, todaythreads = 0').run();
-  await cache.del('forumlist');
+  // （校准失败时保留 runtime 现值，仅清零 today*）
+  try {
+    const runtime = (await cache.get<Record<string, number>>('runtime')) ?? {};
+    const next: Record<string, number> = { ...runtime, todayposts: 0, todaythreads: 0, todayusers: 0 };
+    if (calibrated) {
+      next.threads = calibrated.threads;
+      next.posts = calibrated.posts;
+    }
+    await cache.set('runtime', next);
+    await db.prepare('UPDATE bbs_forum SET todayposts = 0, todaythreads = 0').run();
+    await cache.del('forumlist');
+    res.forumReset = true;
+  } catch (err) {
+    console.warn('[cron:daily] forum-reset failed:', err instanceof Error ? err.message : err);
+  }
 
   // queue GC
-  await queueGc(db, now);
+  try {
+    await queueGc(db, now);
+  } catch (err) {
+    console.warn('[cron:daily] queue-gc failed:', err instanceof Error ? err.message : err);
+  }
 
-  return { forumReset: true, calibrated, driftRows };
+  // bbs_cache 过期行物理 GC：读路径只做逻辑过滤（expiry > now），删除仅按 k、REPLACE 仅覆盖同键，
+  // 一次性键（login_fail:{ip}:{acct} TTL 15min、被 TTL 自然过期的 user:*/rank:* 旧值）过期后
+  // 物理残留，长跑下表无限增长（rows_read 成本随表膨胀）。expiry=0 表示永不过期，不动。
+  try {
+    const cacheGcRes = await db.prepare('DELETE FROM bbs_cache WHERE expiry > 0 AND expiry <= ?').bind(now).run();
+    res.cacheGc = Number(cacheGcRes.meta?.changes ?? 0);
+  } catch (err) {
+    console.warn('[cron:daily] cache-gc failed:', err instanceof Error ? err.message : err);
+  }
+
+  return res;
 }
 
 /**
@@ -201,7 +244,7 @@ export async function handleScheduled(
     case '0 3 * * *': {
       const r = await cronDaily(deps);
       console.log(
-        `[cron:daily] forum_reset=${r.forumReset} calibrated_threads=${r.calibrated.threads} calibrated_posts=${r.calibrated.posts} drift_rows=${r.driftRows}`,
+        `[cron:daily] forum_reset=${r.forumReset} calibrated_threads=${r.calibrated.threads} calibrated_posts=${r.calibrated.posts} drift_rows=${r.driftRows} cache_gc=${r.cacheGc}`,
       );
       await dispatchPluginCrons('0 3 * * *', deps, waitUntil);
       break;
@@ -214,6 +257,14 @@ export async function handleScheduled(
         console.log(`[cron:reconcile] scanned=${r.scanned} recovered=${r.recovered} failed=${r.failed}`);
       } catch (err) {
         console.warn('[cron:reconcile] failed:', err instanceof Error ? err.message : err);
+      }
+      // 超期关单（C5）：>72h 仍 pending 的外部单逐单复核，已付补单、未付关单，
+      // 兜住对账 24h 窗口之外的悬挂单（PayPal 会话有效期长于对账窗口）。
+      try {
+        const r = await sweepStaleOrders({ db, cache }, env, deps.now);
+        if (r.scanned) console.log(`[cron:stale-close] scanned=${r.scanned} closed=${r.closed} recovered=${r.recovered} failed=${r.failed}`);
+      } catch (err) {
+        console.warn('[cron:stale-close] failed:', err instanceof Error ? err.message : err);
       }
       // 会员到期回落（0005）：过期且仍挂组的会员降回 vip_from_gid 原组并清标记（闭环「到期=出组」）。
       try {

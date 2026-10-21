@@ -25,7 +25,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 门禁（单一事实源：复用 ci.yml 的 gates = typecheck/i18n/test/迁移 dry-run/lint）。
+  # 此前 deploy 与 CI 平行执行，CI 红灯时生产照常发布；现在生产发布必须先全绿。
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   deploy:
+    needs: ci
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

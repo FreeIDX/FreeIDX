@@ -43,6 +43,11 @@ export const runlevel = createMiddleware<{
 
   // 登录白名单：任何档位放行
   if (c.req.path.startsWith('/api/auth/')) return next();
+  // 支付通道公网回调（provider 机器 POST，无用户身份）：安全性由各通道验签保证
+  // （Stripe HMAC/PayPal 官方验签，未配密钥一律拒绝），CSRF 中间件同理豁免（csrf.ts）。
+  // 只读/关闭档位若拦截回调：provider 重试全部非 2xx → 掉单，且对账 queryOrder 无法恢复
+  // 已被通道放弃的会话——webhook 是唯一可靠的落账路径，必须任何档位放行。
+  if (c.req.path.startsWith('/api/payments/webhook/')) return next();
 
   const viewer = await loadViewer(c.get('cache'), db, c);
   if (viewer.gid === 1) return next(); // 管理员直通

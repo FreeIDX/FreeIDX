@@ -23,8 +23,8 @@ import {
   type AccessCtx,
 } from '../../core/access';
 import { loadForumlist, loadGrouplist, loadSetting, loadViewer, reqIp, makeAccessCtx } from '../../core/loaders';
-import { CheckStatus, checkOrNot, hasSeeCheck, shouldBlockUnapproved } from '../../core/check';
-import { attachKeysByPid, attachKeysByTid, postPurgeStmts, purgeR2Objects } from '../../core/purge';
+import { CheckStatus, canSeeUnapproved, checkOrNot, hasSeeCheck, shouldBlockUnapproved } from '../../core/check';
+import { attachKeysByPid, attachKeysByTid, postPurgeStmts, purgeR2Objects, threadPurgeStmts } from '../../core/purge';
 import { ipToLong } from '../../core/auth/session';
 import { getExtensions } from '../../core/extensions';
 import { isEnabled, loadExtensionsState } from '../../core/extensions/registry';
@@ -266,7 +266,19 @@ async function createThread(c: Ctx): Promise<Response> {
       core.db.prepare('UPDATE bbs_post SET ok = ? WHERE tid = ? AND isfirst = 1').bind(CheckStatus.PENDING, tid) as unknown as Stmt,
     );
   }
-  await core.db.batch(batchStmts);
+  try {
+    await core.db.batch(batchStmts);
+  } catch (e) {
+    // 第三步 batch 失败：D1 batch 具事务性、其内语句已整体回滚，但前两步独立 INSERT（首帖/主题）已提交 →
+    // 手动回滚删两行，否则留下无倒排/无计数的脏主题（首页出现幽灵主题）。
+    await core.db
+      .batch([
+        core.db.prepare('DELETE FROM bbs_thread WHERE tid = ?').bind(tid) as unknown as Stmt,
+        core.db.prepare('DELETE FROM bbs_post WHERE pid = ?').bind(pid) as unknown as Stmt,
+      ])
+      .catch(() => undefined);
+    throw e;
+  }
 
   await patchRuntime(core.cache, { threads: 1, todaythreads: 1 });
   await core.cache.del('forumlist'); // forum_list_cache_delete
@@ -290,15 +302,24 @@ async function createReply(c: Ctx): Promise<Response> {
   if (!(await verifyTurnstile(c.env, b.turnstileToken, reqIp(c)))) throw new AppError(Code.CAPTCHA_FAILED, t('auth.captchaFailed'));
 
   const thread = await core.db
-    .prepare<{ fid: number; closed: number; top: number; uid: number; posts: number; subject: string }>(
-      'SELECT fid,closed,top,uid,posts,subject FROM bbs_thread WHERE tid = ?',
+    .prepare<{ fid: number; closed: number; top: number; uid: number; posts: number; subject: string; ok: number }>(
+      'SELECT fid,closed,top,uid,posts,subject,ok FROM bbs_thread WHERE tid = ?',
     )
     .bind(tid)
-    .first<{ fid: number; closed: number; top: number; uid: number; posts: number; subject: string }>();
+    .first<{ fid: number; closed: number; top: number; uid: number; posts: number; subject: string; ok: number }>();
   if (!thread) throw new AppError(Code.NOT_FOUND, t('common.threadNotFound'));
   const fid = Number(thread.fid);
   if (!ctx.forumlist[fid]) throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
   if (!forumAccessUser(ctx, fid, 'allowpost')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
+  // 可见性口径同读路径（防借回帖成功与否探测待审/回收主题的存在；版务与主题作者可回）
+  if (
+    !canSeeUnapproved(Number(thread.ok), {
+      seeCheck: hasSeeCheck(ctx.grouplist[viewer.gid]),
+      isAuthor: Number(thread.uid) === viewer.uid,
+    })
+  ) {
+    throw new AppError(Code.NOT_FOUND, t('common.threadNotFound'));
+  }
   // 账号未过审闸门（user_check 开启时未过审账号禁回帖）
   if (shouldBlockUnapproved(await loadSetting(core.cache, core.db), Number(viewer.ok))) {
     throw new AppError(Code.NO_PERMISSION, t('write.approvalWaitReply'));
@@ -362,7 +383,6 @@ async function createReply(c: Ctx): Promise<Response> {
   const ts = now();
   const ip = ipLongOf(c);
 
-  if (Number(thread.top) > 0) await core.cache.del('thread_top_list');
 
   const postR = await core.db
     .prepare<{ pid: number }>(
@@ -374,7 +394,6 @@ async function createReply(c: Ctx): Promise<Response> {
   if (!pid) throw new AppError(Code.SYSTEM_ERROR, t('write.replyFailed'));
 
   const replyStmts: Stmt[] = [
-    core.db.prepare('UPDATE bbs_thread SET posts = posts + 1, lastpid = ?, lastuid = ?, last_date = ? WHERE tid = ?').bind(pid, viewer.uid, ts, tid) as unknown as Stmt,
     core.db.prepare('UPDATE bbs_user SET posts = posts + 1 WHERE uid = ?').bind(viewer.uid) as unknown as Stmt,
     core.db.prepare('UPDATE bbs_forum SET todayposts = todayposts + 1 WHERE fid = ?').bind(fid) as unknown as Stmt,
     core.db.prepare('INSERT INTO bbs_mypost (uid,tid,pid) VALUES (?,?,?)').bind(viewer.uid, tid, pid) as unknown as Stmt,
@@ -382,8 +401,14 @@ async function createReply(c: Ctx): Promise<Response> {
   // 审核置位（check_or_not(组, 板块, 'post') → 回帖 ok=0）
   const replyPending = checkOrNot(ctx.grouplist[viewer.gid], ctx.forumlist[fid], 'post');
   if (replyPending) {
+    // 待审回帖不更新主题反规范化列（posts/lastpid/lastuid/last_date）：否则列表页泄露「幽灵回复」、
+    // 分页出现空尾页；过审时由 /api/check（act=1,opt=1）补列。user.posts/todayposts 为发帖行为计数，不受审核影响。
     replyStmts.push(
       core.db.prepare('UPDATE bbs_post SET ok = ? WHERE pid = ? AND isfirst = 0').bind(CheckStatus.PENDING, pid) as unknown as Stmt,
+    );
+  } else {
+    replyStmts.push(
+      core.db.prepare('UPDATE bbs_thread SET posts = posts + 1, lastpid = ?, lastuid = ?, last_date = ?, lastusername = ? WHERE tid = ?').bind(pid, viewer.uid, ts, viewer.username, tid) as unknown as Stmt,
     );
   }
   await core.db.batch(replyStmts);
@@ -506,6 +531,7 @@ async function updatePost(c: Ctx): Promise<Response> {
     core.db.prepare('UPDATE bbs_post SET doctype = ?, message = ?, message_fmt = ? WHERE pid = ?').bind(doctype, fmt.message, fmt.message_fmt, pid) as unknown as Stmt,
   ];
 
+  let movedForum = false;
   if (isfirst) {
     const newFid = Number(b.fid ?? fid);
     const subject = b.subject !== undefined ? b.subject.toString() : thread.subject;
@@ -520,12 +546,13 @@ async function updatePost(c: Ctx): Promise<Response> {
       if (!forumAccessUser(ctx, fid, 'allowthread')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
       if (Number(post.uid) !== viewer.uid && !forumAccessMod(ctx, fid, 'allowupdate')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
       arr.fid = newFid;
+      movedForum = true;
       batchStmts.push(core.db.prepare('UPDATE bbs_forum SET threads = threads + 1 WHERE fid = ?').bind(newFid) as unknown as Stmt);
       batchStmts.push(core.db.prepare('UPDATE bbs_forum SET threads = threads - 1 WHERE fid = ?').bind(fid) as unknown as Stmt);
       batchStmts.push(core.db.prepare('UPDATE bbs_thread_top SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt);
     }
     if (subject !== thread.subject) arr.subject = subject;
-    if (arr.subject !== undefined && Number(thread.top) > 0) await core.cache.del('thread_top_list');
+
     if (arr.subject !== undefined) {
       batchStmts.push(core.db.prepare('UPDATE bbs_thread SET subject = ? WHERE tid = ?').bind(subject, tid) as unknown as Stmt);
     }
@@ -572,6 +599,7 @@ async function updatePost(c: Ctx): Promise<Response> {
   }
 
   await core.db.batch(batchStmts);
+  if (movedForum) await core.cache.del('forumlist');
   await associateAttachments({ db: core.db, env: c.env, uid: viewer.uid, tid, pid, isfirst, aids: b.attachAids ?? [] });
   await emit(core, 'post:updated', { pid, tid, uid: Number(post.uid) });
   await scheduleSeo(core, c, tid, 'gen');
@@ -616,34 +644,16 @@ async function deletePost(c: Ctx): Promise<Response> {
         core.db.prepare('UPDATE bbs_thread SET ok = ? WHERE tid = ?').bind(CheckStatus.RECYCLE, tid) as unknown as Stmt,
         core.db.prepare('UPDATE bbs_post SET ok = ? WHERE tid = ? AND isfirst = 1').bind(CheckStatus.RECYCLE, tid) as unknown as Stmt,
       ]);
-      await core.cache.del('thread_top_list');
       await scheduleSeo(core, c, tid, 'del');
       return ok(c, t('common.deleted'), { data: { tid, recycle: true } });
     }
-    // 主题级联删：按作者聚合回帖数以回退 user.posts（免逐帖回退）。
+    // 主题级联删（复用 core/purge.threadPurgeStmts：按作者聚合回退 user.posts + 社交/购买孤儿清理 + 当日计数回退）。
     // `isfirst = 0`：首帖不计入 user.posts（发帖只 threads+1），否则作者计数会每删一贴多减 1 并漂成负数。
-    const authorCounts = await core.db
-      .prepare<{ uid: number; c: number }>('SELECT uid, COUNT(*) AS c FROM bbs_post WHERE tid = ? AND isfirst = 0 GROUP BY uid')
-      .bind(tid)
-      .all();
+    const stmts: Stmt[] = [];
+    await threadPurgeStmts(core.db, { tid, fid, uid: Number(thread.uid) }, stmts);
     // 积分回扣条目与附件 key 须在删除前读取楼层/附件
     const revokeEntries = await threadRevokeEntries(core.db, tid, Number(thread.uid));
     const attachKeys = await attachKeysByTid(core.db, tid);
-    const stmts: Stmt[] = [
-      core.db.prepare('DELETE FROM bbs_post WHERE tid = ?').bind(tid) as unknown as Stmt,
-      core.db.prepare('DELETE FROM bbs_mypost WHERE tid = ?').bind(tid) as unknown as Stmt,
-      core.db.prepare('DELETE FROM bbs_mythread WHERE tid = ?').bind(tid) as unknown as Stmt,
-      core.db.prepare('DELETE FROM bbs_thread_top WHERE tid = ?').bind(tid) as unknown as Stmt,
-      // 附件随主题真删（否则附件行与 R2 对象无回收路径；付费附件仍可按 aid 下载）
-      core.db.prepare('DELETE FROM bbs_attach WHERE tid = ?').bind(tid) as unknown as Stmt,
-      core.db.prepare('DELETE FROM bbs_thread WHERE tid = ?').bind(tid) as unknown as Stmt,
-      core.db.prepare('UPDATE bbs_forum SET threads = threads - 1 WHERE fid = ?').bind(fid) as unknown as Stmt,
-      core.db.prepare('UPDATE bbs_user SET threads = threads - 1 WHERE uid = ?').bind(Number(thread.uid)) as unknown as Stmt,
-    ];
-    for (const row of authorCounts.results) {
-      const u = Number(row.uid);
-      if (u > 0) stmts.push(core.db.prepare('UPDATE bbs_user SET posts = posts - ? WHERE uid = ?').bind(Number(row.c), u) as unknown as Stmt);
-    }
     await core.db.batch(stmts);
     purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
     // 积分回扣 + 批量按新经验重算等级组（1 次 SELECT + 1 次 batch，取代逐 uid 往返）
@@ -653,7 +663,6 @@ async function deletePost(c: Ctx): Promise<Response> {
     }
     await patchRuntime(core.cache, { threads: -1 });
     await core.cache.del('forumlist');
-    await core.cache.del('thread_top_list');
     await emit(core, 'post:deleted', { pid, tid, uid: postUid });
     await emit(core, 'thread:deleted', { tid, fid });
     await scheduleSeo(core, c, tid, 'del');

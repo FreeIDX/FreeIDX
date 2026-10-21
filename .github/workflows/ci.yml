@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # 供 deploy.yml 复用（单一门禁事实源）：生产发布必须先过本门禁
+  workflow_call:
 
 jobs:
   gates:

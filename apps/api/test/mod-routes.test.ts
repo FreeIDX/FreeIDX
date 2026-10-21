@@ -44,6 +44,8 @@ function baseRules(threads: Record<string, unknown>[] = [th()]): SqlRule[] {
     { test: /SELECT uid,gid,credits FROM bbs_user WHERE uid IN/, rows: (p: readonly unknown[]) => p.map((u) => ({ uid: Number(u), gid: 1, credits: 0 })) },
     // 批量读主题
     { test: /FROM bbs_thread WHERE tid IN/, rows: threads },
+    // 主题真删的当日判定（threadPurgeStmts B5：create_date → todaythreads 回退与否）
+    { test: /SELECT create_date FROM bbs_thread WHERE tid = \?/, first: { create_date: 1700000000 } },
     // 级联删作者聚合（仅回帖 isfirst=0）
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid = \? AND isfirst = 0 GROUP BY uid/, rows: [{ uid: 2, c: 2 }, { uid: 3, c: 1 }] },
     // 真删回扣楼层列表（tt_credits threadRevokeEntries）
@@ -55,7 +57,7 @@ function baseRules(threads: Record<string, unknown>[] = [th()]): SqlRule[] {
     { test: /INSERT INTO bbs_notice/, first: { nid: 1 } },
     { test: /INSERT OR REPLACE INTO bbs_thread_top/, rows: [] },
     { test: /UPDATE bbs_thread|UPDATE bbs_forum|UPDATE bbs_user|UPDATE bbs_thread_top/, rows: [] },
-    { test: /DELETE FROM bbs_post|DELETE FROM bbs_thread|DELETE FROM bbs_mythread|DELETE FROM bbs_mypost|DELETE FROM bbs_thread_top|DELETE FROM bbs_attach/, rows: [] },
+    { test: /DELETE FROM bbs_post|DELETE FROM bbs_thread|DELETE FROM bbs_mythread|DELETE FROM bbs_mypost|DELETE FROM bbs_thread_top|DELETE FROM bbs_attach|DELETE FROM bbs_like|DELETE FROM bbs_favorite|DELETE FROM bbs_post_like|DELETE FROM bbs_paylist/, rows: [] },
   ];
 }
 
@@ -101,7 +103,7 @@ describe('版务批量接口（T3-1 DoD）', () => {
     expect((await jsonOf(await post(r, { tids: [], action: 'top', value: 1 }))).code).toBe(Code.VALIDATION_ERROR);
   });
 
-  it('top：批量置顶 → thread.top + thread_top replace + modlog(top)，清 thread_top_list', async () => {
+  it('top：批量置顶 → thread.top + thread_top replace + modlog(top)', async () => {
     const r = makeEnv(baseRules([th({ tid: 9 }), th({ tid: 10, firstpid: 90 })]));
     const body = await jsonOf(await post(r, { tids: [9, 10], action: 'top', value: 1 }));
     expect(body.code).toBe(Code.OK);
@@ -130,7 +132,7 @@ describe('版务批量接口（T3-1 DoD）', () => {
     expect((await jsonOf(await post(r, { tids: [9], action: 'top', value: 1 }))).code).toBe(Code.NO_PERMISSION);
   });
 
-  it('close：复用 allowtop + §D.8#4 补齐失效（清 thread_top_list）+ modlog(close)', async () => {
+  it('close：复用 allowtop + §D.8#4 补齐失效 + modlog(close)', async () => {
     const r = makeEnv(baseRules());
     const body = await jsonOf(await post(r, { tids: [9], action: 'close', value: 1 }));
     expect(body.code).toBe(Code.OK);

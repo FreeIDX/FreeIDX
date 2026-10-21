@@ -101,9 +101,11 @@ async function applyV(c: Ctx): Promise<Response> {
   if (viewer.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('common.pleaseLogin'));
   const body = await readJson<{ v?: string; vInfo?: string; vFile?: string }>(c);
 
-  const vTitle = String(body.v ?? '').trim();
-  const vInfo = String(body.vInfo ?? '').trim();
-  const vFile = String(body.vFile ?? '').trim();
+  // 长度上限：vTitle 与管理端手动设置 slice(0,200) 同口径（pass 时原样写入 bbs_user.v 随全站接口下发）；
+  // vInfo/vFile 为证明文本与附件 key，超长截断，防超大 payload 直入审核链路与列表下发。
+  const vTitle = String(body.v ?? '').trim().slice(0, 200);
+  const vInfo = String(body.vInfo ?? '').trim().slice(0, 1000);
+  const vFile = String(body.vFile ?? '').trim().slice(0, 500);
   if (!vTitle) throw new AppError(Code.VALIDATION_ERROR, t('v.titleRequired'));
   if (!vInfo) throw new AppError(Code.VALIDATION_ERROR, t('v.infoRequired'));
   if (!vFile) throw new AppError(Code.VALIDATION_ERROR, t('v.fileRequired'));

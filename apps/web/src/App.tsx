@@ -33,6 +33,9 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ de
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage').then((m) => ({ default: m.DiscoveryPage })));
 const RankListPage = lazy(() => import('./pages/RankListPage').then((m) => ({ default: m.RankListPage })));
 const ModPage = lazy(() => import('./pages/ModPage').then((m) => ({ default: m.ModPage })));
+/* VIP 收银台两页（§15 前台接线）：套餐浏览/下单 + 订单收银台（轮询/卡密/跳转三方） */
+const VipPage = lazy(() => import('./pages/VipPage').then((m) => ({ default: m.VipPage })));
+const OrderPage = lazy(() => import('./pages/OrderPage').then((m) => ({ default: m.OrderPage })));
 
 /* 后台是独立外壳（自带 Layout 与闸门），整块懒加载：普通访客完全不下发后台代码 */
 const AdminLayout = lazy(() => import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
@@ -190,6 +193,9 @@ export function App() {
             <Route path="/discovery" element={<DiscoveryPage />} />
             <Route path="/rank" element={<RankListPage />} />
             <Route path="/mod/:fid" element={<ModPage />} />
+            {/* VIP 收银台（§15）：套餐页公开可浏览；订单页需登录（收银台/卡密/轮询） */}
+            <Route path="/vip" element={<VipPage />} />
+            <Route path="/order/:no" element={<OrderPage />} />
             {/* 404 页：未匹配路由 → 专门 404 页 */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

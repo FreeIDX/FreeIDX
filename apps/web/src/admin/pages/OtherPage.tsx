@@ -1,6 +1,6 @@
 /**
  * 其他 / 清理缓存（模式 C 的对半栅格变体）。
- * 服务端只清五个热键：forumlist / grouplist / setting / thread_top_list / runtime
+ * 服务端只清四个热键：forumlist / grouplist / setting / runtime
  * （user:{uid} 与 ext:*:config 由各自的写路径精确失效，不在一键范围内）；
  * L2 KV 与 L-1 Cache API 边缘副本不受这里控制——前者靠 TTL/主动 del，后者只能等 TTL 过期。
  */
@@ -15,7 +15,7 @@ const KEYS = [
   { k: 'forumlist', descKey: 'admin_other_cache_key_forumlist', descFallback: 'Forum tree + per-group permission matrix (any forum write also auto-invalidates)' },
   { k: 'grouplist', descKey: 'admin_other_cache_key_grouplist', descFallback: 'User group 12 permission items (editing a group invalidates)' },
   { k: 'setting', descKey: 'admin_other_cache_key_setting', descFallback: 'Site settings (saving in admin invalidates; this is a fallback)' },
-  { k: 'thread_top_list', descKey: 'admin_other_cache_key_thread_top_list', descFallback: 'Homepage sticky/featured thread list' },
+
   { k: 'runtime', descKey: 'admin_other_cache_key_runtime', descFallback: 'Site-wide thread/post/user count snapshot' },
 ] as const;
 

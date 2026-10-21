@@ -4,6 +4,7 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { AVAILABLE_LOCALES } from '@freeidx/shared';
 import type { Env } from './types/env';
 import { D1b } from './core/db';
 import { Cache } from './core/cache';
@@ -82,13 +83,32 @@ app.use(
 // 边缘响应缓存（§7 读取屏障）：游客匿名只读接口命中即返回，不走 runlevel 的 setting 查询。
 // 必须挂在 cors 之后（命中响应同样要带跨域头）、runlevel 之前（否则省不掉 D1 读）。
 app.use('*', edgeCache());
-// 词条翻译器（i18n 基建）：按 setting.lang 构造同步翻译器挂 c.set('t')（读穿缓存，命中零 D1）；
+// 词条翻译器（i18n 基建）：语言协商挂 c.set('t')（读穿缓存，命中零 D1）；
 // 挂在 edgeCache 之后——边缘缓存命中时响应已定稿，不执行；/api/health 与 runlevel 同口径跳过（不查库）；
-// setting 装载失败（如 kv 损坏/缓存绑定缺失）回落 zh-cn 缺省翻译器，不阻断请求
+// setting 装载失败（如 kv 损坏/缓存绑定缺失）回落 zh-cn 缺省翻译器，不阻断请求。
+// 协商优先级（§10.3 前台语言 = 用户偏好 > 站点语言，此前仅界面成立、API 消息断链）：
+//  - /api/admin/*：adminLang（后台界面语言独立于前台，不受用户 cookie 影响）；
+//  - 其余前台接口：cookie `lang`（LangSwitch setPref 写入，非 httpOnly，同域自动携带；
+//    值必须在 AVAILABLE_LOCALES 内，非法值忽略）> setting.lang。
+// SEO 产物（sitemap/prerender）是全站性内容，仍按 setting.lang 生成，不参与用户协商。
+function cookieLangOf(header: string | undefined): string | null {
+  const m = /(?:^|;\s*)lang=([^;]+)/.exec(header ?? '');
+  if (!m?.[1]) return null;
+  try {
+    const v = decodeURIComponent(m[1]).toLowerCase();
+    return AVAILABLE_LOCALES.includes(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
 app.use('*', async (c, next) => {
   if (c.req.path !== '/api/health') {
     try {
-      c.set('t', createApiT((await loadSetting(c.get('cache'), c.get('db'))).lang));
+      const setting = await loadSetting(c.get('cache'), c.get('db'));
+      const lang = c.req.path.startsWith('/api/admin/')
+        ? setting.adminLang || setting.lang
+        : (cookieLangOf(c.req.header('cookie')) ?? setting.lang);
+      c.set('t', createApiT(lang));
     } catch {
       c.set('t', t0);
     }

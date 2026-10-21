@@ -1,7 +1,8 @@
 /**
  * JWT HS256（WebCrypto，§8.1 Token 轨）：载荷 {uid, tv: token_version, iat, exp}，
  * Cookie `at` TTL 100 天（8640000s）。
- * 改密吊销：user.token_version+1 使旧 JWT 的 tv 复核失败。
+ * 改密吊销：user.token_version+1 使旧 JWT 的 tv 复核失败（loadViewer 每请求比对，
+ * 比对复用 user:{uid} 装载查询，无额外 D1 成本）。
  */
 
 export interface JwtPayload {
@@ -13,8 +14,6 @@ export interface JwtPayload {
 
 /** Access token TTL（秒） */
 export const ACCESS_TOKEN_TTL = 8640000;
-/** 复核窗口：签发超 30 分钟的 token 使用时回查 token_version */
-export const TOKEN_RECHECK_AFTER = 1800;
 
 const enc = new TextEncoder();
 
