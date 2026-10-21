@@ -95,3 +95,68 @@ export async function deleteThreadSeoHtml(deps: SeoDeps, tid: number): Promise<v
     console.warn(`[seo] delete html failed for tid=${tid}:`, err);
   }
 }
+/* ---------------- 改名 SEO 重建队列（§20.2 C 档） ---------------- */
+
+/** bbs_kv 队列键：v = [{uid, cursor}]（JSON），expiry 30 天防无限残留 */
+const RENAME_QUEUE_KEY = 'seo:rename-pending';
+const RENAME_QUEUE_TTL = 30 * 86400;
+
+type RenameEntry = { uid: number; cursor: number };
+
+async function readRenameQueue(db: D1b): Promise<RenameEntry[]> {
+  const row = await db.prepare<{ v: string }>('SELECT v FROM bbs_kv WHERE k = ?').bind(RENAME_QUEUE_KEY).first<{ v: string }>();
+  try {
+    const q = JSON.parse(row?.v ?? '[]') as RenameEntry[];
+    return Array.isArray(q) ? q.filter((x) => x && Number(x.uid) > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 改名入队（backfillUsername 旁路调用）：seo/{tid}.html 烧录的是回写前的旧楼主名，
+ * D1 快照回写不触发 SEO 重建——由 cron 每小时档消费队列逐批重生成。
+ * 幂等：同 uid 已在队则跳过。尽力而为（与改名回写同语义），失败仅告警。
+ */
+export async function enqueueSeoRename(db: D1b, uid: number): Promise<void> {
+  try {
+    const q = await readRenameQueue(db);
+    if (q.some((x) => Number(x.uid) === uid)) return;
+    q.push({ uid, cursor: 0 });
+    await db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,?)').bind(RENAME_QUEUE_KEY, JSON.stringify(q), RENAME_QUEUE_TTL).run();
+  } catch (err) {
+    console.warn('[seo] enqueue rename-rebuild failed:', err);
+  }
+}
+
+/**
+ * 消费队列头部用户：按 tid 游标重建该用户名下主题的 SEO HTML（generate 内部 SELECT 读的是
+ * 回写后的 bbs_thread.username，产物即为新名）。每轮 ≤limit 条：
+ * 每条 = 2 D1 + 1 R2 put ≈ 3 子请求，limit=10 → ~32 子请求（含队列读写 2 D1），
+ * 与每小时档既有任务共存仍留免费层 50 上限余量。普通作者（<240 帖）一天内完成；
+ * 极端大作者多天消化——改名 SEO 陈旧本可接受（§20.2 已声明），慢速重建纯增益。
+ * 未过审/已删主题（generate 返 false）顺带删除旧产物。返回本轮处理条数。
+ */
+export async function seoRebuildRenamed(deps: SeoDeps, limit = 10): Promise<number> {
+  const { db, cache, env } = deps;
+  if (!env.FILES || typeof env.FILES.put !== 'function') return 0;
+  const q = await readRenameQueue(db);
+  const head = q[0];
+  if (!q.length || !head) return 0;
+  const uid = Number(head.uid);
+  const cursor = Number(head.cursor ?? 0);
+  const r = await db
+    .prepare<{ tid: number }>('SELECT tid FROM bbs_thread WHERE uid = ? AND tid > ? ORDER BY tid ASC LIMIT ?')
+    .bind(uid, cursor, limit)
+    .all();
+  let done = 0;
+  for (const row of r.results) {
+    const tid = Number(row.tid);
+    if (!(await generateThreadSeoHtml({ db, cache, env }, tid))) await deleteThreadSeoHtml({ db, cache, env }, tid);
+    done++;
+  }
+  if (r.results.length < limit) q.shift();
+  else q[0] = { uid, cursor: Number(r.results[r.results.length - 1]?.tid ?? cursor) };
+  await db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,?)').bind(RENAME_QUEUE_KEY, JSON.stringify(q), RENAME_QUEUE_TTL).run();
+  return done;
+}

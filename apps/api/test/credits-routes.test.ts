@@ -32,6 +32,14 @@ function rules(over: Record<string, Partial<SqlRule>> = {}): SqlRule[] {
     { test: /^SELECT uid FROM bbs_user WHERE username = \?/, first: (p: readonly unknown[]) => (String(p[0]) === 'nobody' ? null : { uid: 3 }) },
     { test: /^SELECT plid FROM bbs_paylist WHERE tid = \? AND uid = \? AND type = 1/, first: null },
     { test: /^SELECT time FROM bbs_user_pay WHERE uid = \? AND type = 6 ORDER BY time DESC LIMIT 1/, first: null },
+    // —— 读路径（②b）：面板 / 流水 / 已购 ——
+    { test: /^SELECT COUNT\(\*\) AS c FROM bbs_user_pay WHERE uid = \?/, first: { c: 1 } },
+    {
+      test: /SELECT cid,status,num,type,credit_type,code,time FROM bbs_user_pay WHERE uid = \? ORDER BY/,
+      rows: [{ cid: 9, status: 1, num: 1050, type: 6, credit_type: 3, code: '', time: 1700000000 }],
+    },
+    { test: /SELECT COUNT\(\*\) AS c FROM bbs_paylist p JOIN bbs_thread t ON t\.tid = p\.tid WHERE p\.uid = \? AND p\.type = 1/, first: { c: 1 } },
+    { test: /FROM bbs_paylist p JOIN bbs_thread t ON t\.tid = p\.tid[\s\S]*ORDER BY p\.paytime DESC/, rows: () => [{ tid: 9, fid: 1, uid: 7, subject: '付费主题', posts: 0, top: 0, closed: 0, digest: 0, create_date: 1700000000, last_date: 1700000000, views: 1, username: 'seller', lastusername: 'seller', avatar: 0, lastpid: 1, ok: 1 }] },
     // —— viewer / 装配 ——
     { test: /FROM bbs_session WHERE sid/, first: (p: readonly unknown[]) => ({ uid: Number(p[0]) === 0 ? 0 : 2, last_date: now() }) },
     { test: /FROM bbs_user WHERE uid = \?/, first: () => BUYER },
@@ -188,5 +196,58 @@ describe('POST /api/me/credits/transfer（三币种转账）', () => {
     expect(sqls).toMatch(/UPDATE bbs_user SET credits = credits \+ \? WHERE uid = \?/);
     expect(sqls).toMatch(/'transfer_out'/);
     expect(sqls).toMatch(/'transfer_in'/);
+  });
+});
+describe('读路径（②b：myCredits / record / purchased）', () => {
+  it('GET /api/me/credits：未登录 → NOT_LOGIN', async () => {
+    const r = makeEnv(rules({ 'FROM bbs_session WHERE sid': { first: () => ({ uid: 0, last_date: now() }) } }));
+    const res = await app.request('/api/me/credits', { headers: headers() }, r.env);
+    expect((await jsonOf(res)).code).toBe(Code.NOT_LOGIN);
+  });
+
+  it('GET /api/me/credits：面板返回三币余额 + 兑换参数（trade）', async () => {
+    const r = makeEnv(rules());
+    const res = await app.request('/api/me/credits', { headers: headers() }, r.env);
+    const body = await jsonOf(res);
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { uid: number; credits: number; golds: number; rmbs: number; progress: number; trade: { exchangeN: number; min: number } };
+    expect(d.uid).toBe(BUYER.uid);
+    expect(d.credits).toBe(BUYER.credits);
+    expect(d.golds).toBe(BUYER.golds);
+    expect(d.rmbs).toBe(BUYER.rmbs);
+    expect(d.progress).toBe(100); // gid=1 管理组不参与等级进度
+    expect(d.trade.exchangeN).toBe(100); // tt_credits 规则装载
+    expect(d.trade.min).toBe(1000);
+  });
+
+  it('GET /api/me/credits/record：流水分页 + 人民币分→元折算 + typeName/statusName 落位', async () => {
+    const r = makeEnv(rules());
+    const res = await app.request('/api/me/credits/record?page=1', { headers: headers() }, r.env);
+    const body = await jsonOf(res);
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { total: number; totalPage: number; list: { cid: number; num: number; displayNum: number; creditType: number; typeName: string; statusName: string }[] };
+    expect(d.total).toBe(1);
+    expect(d.totalPage).toBe(1);
+    const row = d.list[0]!;
+    expect(row.cid).toBe(9);
+    expect(row.num).toBe(1050);
+    expect(row.displayNum).toBe(10.5); // credit_type=3 人民币：1050 分 → ¥10.5
+    expect(row.creditType).toBe(3);
+    expect(row.typeName).toBeTruthy();
+    expect(row.statusName).toBeTruthy();
+  });
+
+  it('GET /api/me/credits/purchased：已购清单走 paylist JOIN thread（type=1 过滤）', async () => {
+    const r = makeEnv(rules());
+    const res = await app.request('/api/me/credits/purchased?page=1', { headers: headers() }, r.env);
+    const body = await jsonOf(res);
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { total: number; list: { tid: number; subject: string }[] };
+    expect(d.total).toBe(1);
+    expect(d.list[0]?.tid).toBe(9);
+    expect(d.list[0]?.subject).toBe('付费主题');
+    // 列表查询必须带 type=1 过滤（已购语义），不得泄露其他 paylist 类型
+    const listCall = r.calls.find((c) => /FROM bbs_paylist p JOIN bbs_thread t ON t\.tid = p\.tid[\s\S]*ORDER BY p\.paytime DESC/.test(c.sql));
+    expect(listCall?.sql).toContain('p.type = 1');
   });
 });

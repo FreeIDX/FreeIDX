@@ -74,7 +74,15 @@ app.use('*', async (c, next) => {
 app.use(
   '*',
   cors({
-    origin: (origin, c) => origin ?? c.env.SITE_URL,
+    // 白名单化（§20.4 安全项）：credentials:true 下反射任意 Origin = 任意外站可携 Cookie 跨域读响应。
+    // 仅放行站点自身域 + 本地 dev（vite 5173，dev proxy /api→8787 为同源请求）；白名单外一律回落
+    // 站点域——ACAO 与请求 Origin 不符 → 浏览器直接拒绝跨域读取，不产生暴露。
+    origin: (origin, c) => {
+      const site = (c.env.SITE_URL ?? '').replace(/\/$/, '');
+      if (!origin) return site; // 同源/curl：不构成跨域暴露
+      const allow = new Set([site, 'http://localhost:5173', 'http://127.0.0.1:5173']);
+      return allow.has(origin) ? origin : site;
+    },
     credentials: true,
     allowHeaders: ['Content-Type', 'X-CSRF-Token'],
     exposeHeaders: ['X-Db-Queries-Warn', 'X-Edge-Cache'],

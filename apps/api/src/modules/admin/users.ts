@@ -26,6 +26,7 @@ import { destroyUserSessions, ipToLong, ipToStr } from '../../core/auth/session'
 
 import { core, getExecCtx, intParam, patchRuntime, randomPresetAvatar, totalPageOf, type ReadEnv } from '../shared';
 import { attachKeysForUserPurge, purgeR2Objects, userPurgeStmts } from '../../core/purge';
+import { enqueueSeoRename } from '../seo/generate';
 import type { Cache } from '../../core/cache';
 
 type Ctx = Context<ReadEnv>;
@@ -45,15 +46,18 @@ async function readJson(c: Ctx): Promise<Record<string, unknown>> {
 }
 
 /** 改名反规范化回写（§5.2/§20 设计承诺落地，照 backfillAvatar 模式）：
- *  username 按 uid、lastusername 按 lastuid 各一条全量 UPDATE，`<> 新值` 守卫使
+  *  username 按 uid、lastusername 按 lastuid 各一条全量 UPDATE，`<> 新值` 守卫使
  *  rows_written = 实际需改行（改名极低频，5000 帖作者一次改名 ≈ 5000 行，占免费层
  *  10 万行写/天 5%）。waitUntil 旁路不占请求时长；失败尽力而为——cronDaily 校准批
- *  中的 lastusername 自愈语句每日兜底。 */
+ *  中的 lastusername 自愈语句每日兜底。
+ *  SEO 队列：seo/{tid}.html 烧录旧楼主名，随改名入队（seo:rename-pending），
+ *  由 cron 每小时档 seoRebuildRenamed 分批重建（§20.2 C 档）。 */
 async function backfillUsername(c: Context<ReadEnv>, uid: number, username: string): Promise<void> {
   const db = c.get('db');
   const q = Promise.all([
     db.prepare('UPDATE bbs_thread SET username = ? WHERE uid = ? AND username <> ?').bind(username, uid, username).run(),
     db.prepare('UPDATE bbs_thread SET lastusername = ? WHERE lastuid = ? AND lastusername <> ?').bind(username, uid, username).run(),
+    enqueueSeoRename(db, uid),
   ]);
   const ex = await getExecCtx(c);
   if (ex?.waitUntil) ex.waitUntil(q);

@@ -13,6 +13,7 @@ import { queueGc } from './queue';
 import { getExtensions } from './extensions';
 import { reconcilePending, sweepStaleOrders } from './payment/orchestrator';
 import { demoteExpiredVip } from './order';
+import { seoRebuildRenamed } from '../modules/seo/generate';
 
 export const ONLINE_HOLD_TIME_DEFAULT = 300;
 const DAY = 86400;
@@ -280,6 +281,16 @@ export async function handleScheduled(
         if (removed) console.log(`[cron:attach-gc] removed=${removed}`);
       } catch (err) {
         console.warn('[cron:attach-gc] failed:', err instanceof Error ? err.message : err);
+      }
+      // 改名 SEO 重建（§20.2 C 档）：消费 seo:rename-pending 队列，每轮 10 tid（子请求预算内），
+      // 重生成烧录了旧楼主名的 seo/{tid}.html；普通作者一天内完成，极端大作者多天消化。
+      try {
+        if (deps.env) {
+          const rebuilt = await seoRebuildRenamed({ db, cache, env: deps.env });
+          if (rebuilt) console.log(`[cron:seo-rebuild] rebuilt=${rebuilt}`);
+        }
+      } catch (err) {
+        console.warn('[cron:seo-rebuild] failed:', err instanceof Error ? err.message : err);
       }
       break;
     }

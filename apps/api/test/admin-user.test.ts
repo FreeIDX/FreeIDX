@@ -106,6 +106,10 @@ describe('用户管理（T3-6）', () => {
     // 最后回复人快照：WHERE lastuid 命中该用户作为最后回复人的主题
     const lu = calls.find((c) => /UPDATE bbs_thread SET lastusername = \? WHERE lastuid = \? AND lastusername <> \?/.test(c.sql));
     expect(lu?.params).toEqual(['newname', 5, 'newname']);
+    // §20.2 C 档：改名同时入队 SEO 重建（seo/{tid}.html 烧录旧名，由 cron 每小时档消费）
+    const enqueue = calls.find((c) => /REPLACE INTO bbs_kv/.test(c.sql) && String(c.params[0]) === 'seo:rename-pending');
+    expect(enqueue).toBeTruthy();
+    expect(JSON.parse(String(enqueue?.params[1] ?? '[]'))).toEqual([{ uid: 5, cursor: 0 }]);
   });
 
   it('PUT：无变化字段 → VALIDATION_ERROR', async () => {

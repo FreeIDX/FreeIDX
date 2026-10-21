@@ -10,7 +10,7 @@ import { Code } from '@freeidx/shared';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
 import { Cache, l0Clear } from '../src/core/cache';
 import type { D1b } from '../src/core/db';
-import { generateThreadSeoHtml, deleteThreadSeoHtml, seoKey } from '../src/modules/seo/generate';
+import { generateThreadSeoHtml, deleteThreadSeoHtml, seoKey, enqueueSeoRename, seoRebuildRenamed } from '../src/modules/seo/generate';
 
 const now = () => Math.floor(Date.now() / 1000);
 const SETTING = JSON.stringify({
@@ -182,5 +182,85 @@ describe('写接口 SEO 旁路集成（T2-7 DoD）', () => {
     );
     expect(((await res.json()) as { code: number }).code).toBe(Code.OK);
     expect(calls.some((c) => /SELECT tid,subject,username,create_date,posts,views FROM bbs_thread/.test(c.sql))).toBe(false);
+  });
+});
+describe('改名 SEO 重建队列（§20.2 C 档）', () => {
+  const QUEUE_KEY = 'seo:rename-pending';
+
+  /** 队列专用规则：bbs_kv 按 k 分流（setting / 队列）；游标取行按 uid+cursor 参数返回 */
+  function queueRules(over: { tids?: number[]; queue?: { uid: number; cursor: number }[]; threadOk?: number } = {}) {
+    const tids = over.tids ?? [];
+    const queue = over.queue ?? [];
+    const rules: SqlRule[] = [
+      { test: /SELECT v FROM bbs_kv WHERE k = \?/, first: (p: readonly unknown[]) => ({ v: String(p[0]) === QUEUE_KEY ? JSON.stringify(queue) : SETTING }) },
+      { test: /REPLACE INTO bbs_kv/, rows: [] },
+      { test: /SELECT tid FROM bbs_thread WHERE uid = \? AND tid > \? ORDER BY tid ASC LIMIT \?/, rows: (p: readonly unknown[]) => tids.filter((t) => t > Number(p[1])).slice(0, Number(p[2])).map((tid) => ({ tid })) },
+      { test: /SELECT tid,subject,username,create_date,posts,views,ok FROM bbs_thread/, first: () => ({ ...SEO_THREAD, ok: over.threadOk ?? 1 }) },
+      { test: /SELECT message_fmt FROM bbs_post WHERE tid = \? ORDER BY pid ASC/, first: { message_fmt: '<p>正文</p>' } },
+      { test: /SELECT v FROM bbs_cache/, first: null },
+      { test: /REPLACE INTO bbs_cache/, rows: [] },
+      { test: /DELETE FROM bbs_cache/, rows: [] },
+    ];
+    return rules;
+  }
+
+  it('enqueue：入队写 kv，同 uid 幂等跳过', async () => {
+    const { db, calls } = fakeD1Sql(queueRules());
+    await enqueueSeoRename(db as never, 5);
+    const writes = calls.filter((c) => /REPLACE INTO bbs_kv/.test(c.sql) && String(c.params[0]) === QUEUE_KEY);
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0]?.params[1]))).toEqual([{ uid: 5, cursor: 0 }]);
+    // 二次入队（队列已含 uid=5）→ 不再写 kv
+    const second = fakeD1Sql(queueRules({ queue: [{ uid: 5, cursor: 0 }] }));
+    await enqueueSeoRename(second.db as never, 5);
+    expect(second.calls.some((c) => /REPLACE INTO bbs_kv/.test(c.sql))).toBe(false);
+  });
+
+  it('rebuild：首批满 limit → 逐 tid 生成产物并推进 cursor（不移出队列）', async () => {
+    const { db, calls } = fakeD1Sql(queueRules({ queue: [{ uid: 5, cursor: 0 }], tids: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21] }));
+    const r2 = fakeR2();
+    const env = { DB: db, CACHE: fakeKv(), FILES: r2, SITE_URL: 'http://localhost' };
+    const cache = new Cache(env as never, db as never);
+    const n = await seoRebuildRenamed({ db: db as never, cache, env: env as never }, 10);
+    expect(n).toBe(10);
+    expect(r2.store.has(seoKey(11))).toBe(true);
+    expect(r2.store.has(seoKey(20))).toBe(true);
+    expect(r2.store.has(seoKey(21))).toBe(false); // 尾批未到
+    const write = calls.find((c) => /REPLACE INTO bbs_kv/.test(c.sql) && String(c.params[0]) === QUEUE_KEY);
+    expect(JSON.parse(String(write?.params[1] ?? '[]'))).toEqual([{ uid: 5, cursor: 20 }]);
+  });
+
+  it('rebuild：尾批（< limit）→ 处理完移出队列并清空', async () => {
+    const { db, calls } = fakeD1Sql(queueRules({ queue: [{ uid: 5, cursor: 20 }], tids: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21] }));
+    const r2 = fakeR2();
+    const env = { DB: db, CACHE: fakeKv(), FILES: r2, SITE_URL: 'http://localhost' };
+    const cache = new Cache(env as never, db as never);
+    const n = await seoRebuildRenamed({ db: db as never, cache, env: env as never }, 10);
+    expect(n).toBe(1); // 只剩 tid=21
+    expect(r2.store.has(seoKey(21))).toBe(true);
+    const write = calls.find((c) => /REPLACE INTO bbs_kv/.test(c.sql) && String(c.params[0]) === QUEUE_KEY);
+    expect(JSON.parse(String(write?.params[1] ?? '[]'))).toEqual([]);
+  });
+
+  it('rebuild：未过审主题（generate=false）→ 删除旧产物而非重生成', async () => {
+    const { db } = fakeD1Sql(queueRules({ queue: [{ uid: 5, cursor: 0 }], tids: [11], threadOk: 0 }));
+    const r2 = fakeR2();
+    r2.store.set(seoKey(11), { value: '<html>old</html>' }); // 预置改名前旧产物
+    const env = { DB: db, CACHE: fakeKv(), FILES: r2, SITE_URL: 'http://localhost' };
+    const cache = new Cache(env as never, db as never);
+    const n = await seoRebuildRenamed({ db: db as never, cache, env: env as never }, 10);
+    expect(n).toBe(1);
+    expect(r2.store.has(seoKey(11))).toBe(false);
+  });
+
+  it('rebuild：空队列 / 无 R2 → 零处理', async () => {
+    const { db } = fakeD1Sql(queueRules({ queue: [] }));
+    const env = { DB: db, CACHE: fakeKv(), FILES: fakeR2(), SITE_URL: 'http://localhost' };
+    const cache = new Cache(env as never, db as never);
+    expect(await seoRebuildRenamed({ db: db as never, cache, env: env as never })).toBe(0);
+
+    const e2 = { DB: db, CACHE: fakeKv(), FILES: {}, SITE_URL: 'http://localhost' };
+    const c2 = new Cache(e2 as never, db as never);
+    expect(await seoRebuildRenamed({ db: db as never, cache: c2, env: e2 as never })).toBe(0);
   });
 });
