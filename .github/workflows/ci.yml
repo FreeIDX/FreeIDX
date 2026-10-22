@@ -32,6 +32,14 @@ jobs:
         run: |
           npx wrangler d1 create freeidx --local || true
           npx wrangler d1 migrations apply freeidx --local
+      # 门禁 3.5：迁移终态必须与 schema.sql 快照逐对象一致
+      # 防的是「迁移文件都对、终态却漂移」：新增迁移漏了热路径索引（0021/0022 都漏过），
+      # 或改了迁移却忘了同步快照。
+      # 关键作用：schema.sql 是「已验证终态」的基准，所以它同时能抓出「重排/合并迁移时漏列漏索引」——
+      # 若将来把 0001~0022 折叠成一份，新旧终态的任何差异都会在这里红，不必依赖人工逐行比对。
+      - name: D1 schema snapshot check
+        working-directory: apps/api
+        run: pnpm db:schema:check
       # 门禁 4：lint
       - run: pnpm lint
 

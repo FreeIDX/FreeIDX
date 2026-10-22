@@ -12,6 +12,8 @@
     "db:apply": "wrangler d1 migrations apply freeidx --local",
     "db:apply:remote": "wrangler d1 migrations apply freeidx --remote",
     "db:migrations:check": "wrangler d1 migrations list freeidx --local --json",
+    "db:schema:dump": "node scripts/schema.mjs dump",
+    "db:schema:check": "node scripts/schema.mjs check",
     "db:seed": "wrangler d1 execute freeidx --local --file=./seed/seed.sql",
     "db:seed:remote": "wrangler d1 execute freeidx --local=false --file=./seed/seed.sql"
   },

@@ -12,6 +12,8 @@
     "deploy:api": "pnpm --filter @freeidx/api deploy",
     "db:apply": "pnpm --filter @freeidx/api db:apply",
     "db:seed": "pnpm --filter @freeidx/api db:seed",
+    "db:schema:dump": "pnpm --filter @freeidx/api db:schema:dump",
+    "db:schema:check": "pnpm --filter @freeidx/api db:schema:check",
     "i18n:types": "node scripts/gen-i18n-types.mjs && node scripts/gen-i18n-groupnames.mjs",
     "i18n:check": "node scripts/gen-i18n-types.mjs --check && node scripts/gen-i18n-groupnames.mjs --check && node scripts/audit-i18n.mjs && node scripts/check-i18n.mjs && node scripts/check-hardcoded-zh.mjs && node scripts/check-i18n-values.mjs",
     "i18n:baseline": "node scripts/check-hardcoded-zh.mjs --update",

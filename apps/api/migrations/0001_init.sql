@@ -2,6 +2,10 @@
 -- MySQL→SQLite 转换（§5.1）：unix 秒 INTEGER、去 ENGINE、独立 CREATE INDEX、保留 bbs_ 前缀。
 -- session_data 合并进 session.data（D1 单行 2MB）；核心表 16 张 + email_code
 -- + 会员体系 4 张（vip_plan/order/point_log/card）+ ad_slot。
+--
+-- ⚠️ 本文件是**历史起点，不是终态**：此后 0002~0022 又加了十余列、多张表与成批索引。
+--    想看全库最终长什么样，看 apps/api/schema.sql（由本地库自动导出，唯一可读终态）；
+--    本文件不可改写——已部署库的 d1_migrations 按文件名认账，改内容不会重跑也不会补列。
 
 --> 0001_user
 CREATE TABLE bbs_user (
