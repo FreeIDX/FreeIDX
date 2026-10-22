@@ -13,7 +13,7 @@ import { GroupId, type AdminKey } from '@freeidx/shared';
 import { useAuth } from '../store/auth';
 import { Avatar } from '../components/Avatar';
 import { Icon, type IconName } from '../components/icons';
-import { useAdminT, type AdminT } from './t';
+import { useAdminDictReady, useAdminT, type AdminT } from './t';
 import { Card, ErrorState, cx } from './ui';
 import { AdminLoginModal } from './AdminLoginModal';
 import { PageLoading } from '../components/PageLoading';
@@ -150,6 +150,8 @@ export function AdminLayout() {
   const load = useAuth((s) => s.load);
   const signOut = useAuth((s) => s.signOut);
   const t = useAdminT();
+  /* 后台词典（admin 分区）按需拉取：未到位前内容区先占位，避免闪出词条 key */
+  const dictReady = useAdminDictReady();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const title = routeTitle(location.pathname, t);
@@ -240,7 +242,7 @@ export function AdminLayout() {
         <main id="body" className={cx('flex-1 bg-transparent', shift)}>
           {/* 内容区：全宽 + 现代留白（<md 16px，≥md 20px） */}
           <div className="w-full p-4 md:p-5">
-            {!loaded ? (
+            {!loaded || !dictReady ? (
               <Card>{t('submiting', '加载中')}…</Card>
             ) : !me ? (
               <Card title={t('admin_login', '管理登陆')}>

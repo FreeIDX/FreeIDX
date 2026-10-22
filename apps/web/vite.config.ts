@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { i18nSplitPlugin } from '../../scripts/i18n-split.plugin';
 
 const webRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -75,7 +76,8 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(appVersion),
     __COMMIT_SHA__: JSON.stringify(commitSha),
   },
-  plugins: [react(), tailwindcss()],
+  // 词典按「命名空间 × 语言」分包（前台 bbs / 后台 admin 各自成 chunk，见 packages/shared/src/i18n/bundles.ts）
+  plugins: [react(), tailwindcss(), i18nSplitPlugin(resolve(webRoot, '../../packages/shared/src/i18n'))],
   server: {
     proxy: {
       // 本地同域开发：/api 与 /files 转发到 Worker（§13.2 同域方案的本地等价）
@@ -93,6 +95,16 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: vendorChunkOf,
+        /**
+         * 词典 chunk 命名：bbs（前台）与 admin（后台）同属一个语言时默认都叫 `<locale>-<hash>`，
+         * 产物列表里无法区分。按虚拟模块 id 显式命名，便于核对「前台到底下了哪几个包」。
+         */
+        chunkFileNames: (chunk) => {
+          const virtual = chunk.moduleIds.find((id) => id.startsWith('\0virtual:freeidx-i18n/'));
+          const m = virtual ? /\/(bbs|admin)\/([a-z]{2}-[a-z]{2})$/.exec(virtual) : null;
+          if (m) return `assets/i18n-${m[1]}-${m[2]}-[hash].js`;
+          return 'assets/[name]-[hash].js';
+        },
       },
     },
   },

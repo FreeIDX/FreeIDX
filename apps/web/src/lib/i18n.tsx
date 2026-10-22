@@ -9,7 +9,7 @@ import {
   type FrontKey,
   type LocaleBundles,
 } from '@freeidx/shared';
-import { EMPTY_BUNDLES, getLoadedBundle, loadLocaleBundle } from '@freeidx/shared/i18n/bundles';
+import { EMPTY_BUNDLES, getLoadedBundle, loadLocaleBundle, subscribeBundles } from '@freeidx/shared/i18n/bundles';
 import { setUiLocale } from './api';
 import { useAuth } from '../store/auth';
 
@@ -78,23 +78,25 @@ export function useLang(): string {
  *  - 目标语言已加载 → 直接返回；
  *  - 未加载 → 沿用 DEFAULT_LOCALE 并后台发起加载，到位后切到目标语言。
  * 与既有链路一致：站点语言本就来自 bootstrap，首屏同为「先 en-us 再切换」，不新增可见行为。
+ * 订阅同时覆盖 bbs / admin 两个分区：后台词典晚于 bbs 到位时，已挂载的后台界面自动重取。
  */
 export function useLocaleBundle(lang: string): LocaleBundles {
   const [bundle, setBundle] = useState<LocaleBundles>(
     () => getLoadedBundle(lang) ?? getLoadedBundle(DEFAULT_LOCALE) ?? EMPTY_BUNDLES,
   );
   useEffect(() => {
-    const hit = getLoadedBundle(lang);
-    if (hit) {
-      setBundle(hit);
-      return;
-    }
     let alive = true;
-    void loadLocaleBundle(lang).then((b) => {
-      if (alive && b) setBundle(b);
-    });
+    const sync = (): void => {
+      if (!alive) return;
+      /* getLoadedBundle 返回合并快照的稳定引用：无新分区到位时 setState 同一对象，React 直接跳过重渲染 */
+      setBundle(getLoadedBundle(lang) ?? getLoadedBundle(DEFAULT_LOCALE) ?? EMPTY_BUNDLES);
+    };
+    const off = subscribeBundles(sync);
+    sync();
+    if (!getLoadedBundle(lang)) void loadLocaleBundle(lang).then(sync);
     return () => {
       alive = false;
+      off();
     };
   }, [lang]);
   return bundle;
