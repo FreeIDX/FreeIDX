@@ -1,8 +1,0 @@
-name = "migtest"
-main = "src/index.ts"
-compatibility_date = "2026-10-01"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "migtest"
-database_id = "11111111-1111-1111-1111-111111111111"
