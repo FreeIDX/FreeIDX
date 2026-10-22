@@ -2,6 +2,7 @@ name: Deploy to Cloudflare
 
 # 生产发布：自动开通/复用 D1 与 KV，把真实 ID 只写进构建工作区（不提交），再部署单个 Worker。
 # 首次上线：手动触发并勾上 apply_migrations + run_seed；之后只推 main。
+# 总开关：仓库 Variable CLOUDFLARE_DEPLOY 设为 false 可整体跳过发布；未创建时默认发布。
 
 on:
   push:
@@ -28,12 +29,15 @@ jobs:
   # 门禁（单一事实源：复用 ci.yml 的 gates = typecheck/i18n/test/迁移 dry-run/lint）。
   # 此前 deploy 与 CI 平行执行，CI 红灯时生产照常发布；现在生产发布必须先全绿。
   ci:
+    # 发布总开关：变量未创建时默认发布；仅在仓库 Variable CLOUDFLARE_DEPLOY 显式设为 false 时跳过
+    if: ${{ vars.CLOUDFLARE_DEPLOY != 'false' }}
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
 
   deploy:
     needs: ci
+    if: ${{ vars.CLOUDFLARE_DEPLOY != 'false' }}
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
