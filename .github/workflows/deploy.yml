@@ -45,6 +45,9 @@ jobs:
       SITE_URL: ${{ vars.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 版本号 = 包版本 + 提交总数（vite.config.ts），浅克隆会把总数固定成 1，必须取全量历史
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

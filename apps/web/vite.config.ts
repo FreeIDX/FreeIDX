@@ -1,6 +1,53 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+
+const webRoot = dirname(fileURLToPath(import.meta.url));
+
+function git(args: string[]): string | null {
+  try {
+    return execFileSync('git', args, {
+      cwd: webRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 构建版本号：<package 版本>+<提交总数>[.dirty]。
+ *
+ * 每次提交后 `git rev-list --count HEAD` 自动 +1，因此后台「版本更新」页的
+ * 当前版本随提交自动变化，不需要手改代码；正式发版只提升 apps/web/package.json
+ * 的 version 并补发布索引。没有 git 元数据（如源码压缩包构建）时退化为包版本。
+ */
+function resolveAppVersion(): string {
+  const overridden = process.env.VITE_APP_VERSION?.trim();
+  if (overridden) return overridden;
+
+  let base = '0.0.0';
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(webRoot, 'package.json'), 'utf8')) as { version?: string };
+    base = pkg.version ?? base;
+  } catch {
+    // 读取失败时用兜底版本，不阻断构建
+  }
+
+  const count = git(['rev-list', '--count', 'HEAD']);
+  const sha = git(['rev-parse', '--short=7', 'HEAD']);
+  const dirty = git(['status', '--porcelain', '--untracked-files=no']) ? '.dirty' : '';
+  const build = count && Number(count) > 0 ? count : sha;
+  return build ? `${base}+${build}${dirty}` : base;
+}
+
+const appVersion = resolveAppVersion();
+const commitSha = process.env.VITE_COMMIT_SHA?.trim() || git(['rev-parse', 'HEAD']) || '';
 
 /**
  * 供应商分包：把不随业务代码变化的依赖拆成独立 chunk。
@@ -23,6 +70,11 @@ function vendorChunkOf(id: string): string | undefined {
 }
 
 export default defineConfig({
+  // 构建期确定版本与提交，运行时不发额外请求；后台「版本更新」页直接读取
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+    __COMMIT_SHA__: JSON.stringify(commitSha),
+  },
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {

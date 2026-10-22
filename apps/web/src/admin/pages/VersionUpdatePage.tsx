@@ -17,15 +17,21 @@ import {
   REPO_URL,
   fetchReleaseChangelog,
   fetchReleaseIndex,
+  isSameCommit,
   normalizeVersion,
   shortCommit,
   type ReleaseEntry,
 } from '../release-index';
 
-/** 站点代码版本；与仓库 .github/releases/version.json 的 tag 对齐 */
-const CURRENT_VERSION = '1.0.0';
-/** 构建期注入的提交号（部署流水线设置 VITE_COMMIT_SHA） */
-const CURRENT_COMMIT = (import.meta.env.VITE_COMMIT_SHA as string | undefined) ?? null;
+/** 构建期注入：<package 版本>+<提交总数>[.dirty]，每次提交后自动变化（见 vite.config.ts） */
+declare const __APP_VERSION__: string;
+/** 构建期注入：当前构建对应的完整提交哈希 */
+declare const __COMMIT_SHA__: string;
+
+/** 当前构建版本号（去掉可能的 v 前缀），如 1.0.0+128；未命中发布 Tag 时展示它 */
+const CURRENT_VERSION = normalizeVersion(__APP_VERSION__);
+/** 当前运行构建的提交号 */
+const CURRENT_COMMIT = __COMMIT_SHA__ || null;
 
 /** 索引/日志变动不频繁，缓存 5 分钟，避免每次进页都打 GitHub */
 const CACHE_TIME = 5 * 60 * 1000;
@@ -73,7 +79,7 @@ function ReleaseCard({ entry, previousTag }: { entry: ReleaseEntry; previousTag:
     retry: false,
   });
 
-  const isCurrent = normalizeVersion(entry.tagName) === normalizeVersion(CURRENT_VERSION);
+  const isCurrent = isSameCommit(entry.targetCommitish, CURRENT_COMMIT);
   const status = entry.draft
     ? { tone: 'warning' as const, text: t('admin_version_draft') }
     : entry.prerelease
@@ -145,6 +151,11 @@ export function VersionUpdatePage() {
 
   const releases = q.data ?? [];
   const latest = releases.find((r) => !r.draft && !r.prerelease) ?? releases[0] ?? null;
+  // 运行中的提交若正好是某个发布 Tag 指向的提交，就直接展示该 Tag（例如 v1.1.0），
+  // 这样打 Tag 后无需重新部署，页面也能立刻把「当前版本」收敛到发布版本。
+  const runningRelease = CURRENT_COMMIT
+    ? (releases.find((r) => isSameCommit(r.targetCommitish, CURRENT_COMMIT)) ?? null)
+    : null;
 
   return (
     <>
@@ -163,7 +174,7 @@ export function VersionUpdatePage() {
 
       <section className={cx(cardCls, 'overflow-hidden')}>
         <div className="grid gap-px bg-line-soft sm:grid-cols-2 xl:grid-cols-4">
-          <Metric icon="tag" label={t('admin_version_current')} value={`v${CURRENT_VERSION}`} mono />
+          <Metric icon="tag" label={t('admin_version_current')} value={runningRelease?.tagName ?? `v${CURRENT_VERSION}`} mono />
           <Metric icon="rocket" label={t('admin_version_latest')} value={latest?.tagName ?? '-'} mono />
           <Metric icon="git_commit" label={t('admin_version_current_commit')} value={shortCommit(CURRENT_COMMIT)} mono />
           <Metric
