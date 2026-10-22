@@ -61,7 +61,7 @@
   "apps/web/src/components/AnnouncementBar.tsx": 0,
   "apps/web/src/components/Pagination.tsx": 0,
   "apps/web/src/App.tsx": 0,
-  "apps/web/src/admin/pages/AboutPage.tsx": 0,
+  "apps/web/src/admin/pages/VersionUpdatePage.tsx": 0,
   "apps/web/src/admin/pages/ExtensionPage.tsx": 0,
   "apps/web/src/components/VBadge.tsx": 0,
   "apps/web/src/themes/light/pages/NotFoundPage.tsx": 0

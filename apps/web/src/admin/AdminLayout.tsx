@@ -39,7 +39,7 @@ interface MenuGroup {
 }
 
 /** 菜单项与功能一一对应，仅按现代版式归为「内容/用户/系统」三组；
- *  全部菜单文案采用中文字面量（主页/导航栏设置/创建版块/帖子列表/用户管理/开通会员/积分设置/广播消息/基础设置/插件中心/运行维护/关于项目） */
+ *  全部菜单文案采用中文字面量（主页/导航栏设置/创建版块/帖子列表/用户管理/开通会员/积分设置/广播消息/基础设置/插件中心/运行维护/版本更新） */
 const MENU: MenuGroup[] = [
   {
     label: null,
@@ -83,8 +83,8 @@ const MENU: MenuGroup[] = [
       { key: 'theme', to: '/admin/themes', label: { textKey: 'admin_menu_theme', fallback: 'Theme Management' }, icon: 'image', prefixes: ['/admin/themes'] },
       { key: 'plugin', to: '/admin/extensions', label: { textKey: 'admin_menu_plugin', fallback: 'Plugin Center' }, icon: 'plug', prefixes: ['/admin/extensions'] },
       { key: 'other', to: '/admin/other', label: { textKey: 'admin_menu_other', fallback: 'Maintenance' }, icon: 'wrench', prefixes: ['/admin/other', '/admin/modlogs'] },
-      /* 「关于」菜单项 */
-      { key: 'about', to: '/admin/about', label: { textKey: 'admin_menu_about', fallback: 'About' }, icon: 'warning_circle', prefixes: ['/admin/about'] },
+      /* 「版本更新」菜单项：发布索引托管在仓库 .github/releases，页内直读 GitHub raw */
+      { key: 'about', to: '/admin/about', label: { textKey: 'admin_menu_about', fallback: 'Version Updates' }, icon: 'tag', prefixes: ['/admin/about'] },
     ],
   },
 ];

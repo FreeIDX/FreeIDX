@@ -130,6 +130,8 @@ jobs:
         env:
           # 未设置时前端不渲染人机验证组件（Turnstile.tsx:28），不影响部署
           VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+          # 后台「版本更新」页的「当前提交」取此值
+          VITE_COMMIT_SHA: ${{ github.sha }}
 
       - name: 部署 Worker（含前端静态资源）
         working-directory: apps/api

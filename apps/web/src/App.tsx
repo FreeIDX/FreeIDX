@@ -22,7 +22,9 @@ import { ThemeRoute } from './lib/theme/route';
 /* 后台是独立外壳（自带 Layout 与闸门），整块懒加载：普通访客完全不下发后台代码 */
 const AdminLayout = lazy(() => import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
 const AdminIndexPage = lazy(() => import('./admin/pages/AdminIndexPage').then((m) => ({ default: m.AdminIndexPage })));
-const AboutPage = lazy(() => import('./admin/pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+const VersionUpdatePage = lazy(() =>
+  import('./admin/pages/VersionUpdatePage').then((m) => ({ default: m.VersionUpdatePage })),
+);
 const SettingPage = lazy(() => import('./admin/pages/SettingPage').then((m) => ({ default: m.SettingPage })));
 const NavBarSettingPage = lazy(() => import('./admin/pages/NavBarSettingPage').then((m) => ({ default: m.NavBarSettingPage })));
 const EmailSettingPage = lazy(() => import('./admin/pages/EmailSettingPage').then((m) => ({ default: m.EmailSettingPage })));
@@ -98,7 +100,7 @@ function AdminRoutes() {
           <Route path="check/*" element={<CheckPage />} />
           {/* 加V认证四档：待审核 / 已通过 / 手动加V / 收费设置 */}
           <Route path="v/*" element={<AdminVPage />} />
-          <Route path="about" element={<AboutPage />} />
+          <Route path="about" element={<VersionUpdatePage />} />
           <Route path="*" element={<ComingSoon label={t('admin_page_not_found')} />} />
         </Route>
       </Routes>

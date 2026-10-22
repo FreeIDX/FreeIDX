@@ -4,7 +4,7 @@
  *  - 审核动作不重复造接口：复用前台 POST /api/check 与 POST /api/recycle，
  *    确认文案与前台 thread_js 口径一致；
  *  - 设置：一般设置（user_check/recycle）+ 用户组矩阵（发帖/回帖/编辑审核 + 查看回收站）+ 板块矩阵（发帖/回帖/编辑审核），
- *    服务端保存为「先全清后置选中」；广告推广卡不做（与 AboutPage 去致谢口径一致）。
+ *    服务端保存为「先全清后置选中」；广告推广卡不做（沿用旧版关于页去致谢的口径）。
  */
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router';
