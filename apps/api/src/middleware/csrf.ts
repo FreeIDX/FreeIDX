@@ -10,6 +10,7 @@ import type { Env } from '../types/env';
 import type { D1b } from '../core/db';
 import type { Cache } from '../core/cache';
 import type { ApiT } from '../core/i18n';
+import { isHttpsRequest } from '../core/site';
 import { AppError } from './envelope';
 
 type CtxEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT } };
@@ -31,7 +32,8 @@ function safeEqual(a: string, b: string): boolean {
 export const csrf = createMiddleware<CtxEnv>(async (c, next) => {
   if (!c.req.path.startsWith('/api/')) return next();
 
-  const secure = (c.env.SITE_URL ?? '').startsWith('https://');
+  // Secure 跟随当前请求协议（多域名/预览域下 SITE_URL 可能未配置或与实际请求域不一致）
+  const secure = isHttpsRequest(c);
   const cookieOpts = { path: '/', sameSite: 'Lax' as const, secure, httpOnly: false };
   const token = getCookie(c, 'csrf');
 

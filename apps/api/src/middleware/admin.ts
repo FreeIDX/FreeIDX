@@ -8,6 +8,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 import { ADMIN_TOKEN_TTL, Code, GroupId } from '@freeidx/shared';
 import { AppError } from './envelope';
 import { issueAdminToken, readAdminToken } from '../core/auth/admin';
+import { isHttpsRequest } from '../core/site';
 import type { ReadEnv } from '../modules/shared';
 
 const cookieAttrs = (secure: boolean) => ({ path: '/', httpOnly: true, sameSite: 'Lax' as const, secure });
@@ -16,7 +17,8 @@ export function adminGuard(): MiddlewareHandler<ReadEnv> {
   return async (c, next) => {
     const t = c.get('t');
     const secret = c.env.ADMIN_JWT_SECRET ?? c.env.JWT_SECRET ?? '';
-    const secure = (c.env.SITE_URL ?? '').startsWith('https://');
+    // Secure 跟随当前请求协议（多域名/预览域下 SITE_URL 可能与实际请求域不一致）
+    const secure = isHttpsRequest(c);
     if (!secret) throw new AppError(Code.NO_PERMISSION, t('guard.secretMissing'), {}, 403);
 
     const reject = (message: string): never => {

@@ -16,6 +16,7 @@ import { getExtensions } from '../../core/extensions';
 import { escAttr } from '../../core/fmt';
 import type { ExtensionsRuntime } from '../../core/extensions/registry';
 import { classifyUserAgent, matchPolicyCrawler, pageRoute } from '../../core/crawler';
+import { canonicalBase } from '../../core/site';
 import type { Env } from '../../types/env';
 
 type ReadEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number } };
@@ -48,11 +49,10 @@ export function seoCoreRoutes(): Hono<ReadEnv> {
     }
     const rt = await getExtensions(c.get('cache'), c.get('db'));
     const base = ['User-agent: *', ...CORE_ROBOTS_BASE.slice(1), 'Disallow: /api/'];
-    // 插件贡献的 {SITE_URL} 占位在请求期替换（站点域名属运行时绑定）
-    const body = assembleRobots(base, rt.robots).replace(
-      /\{SITE_URL\}/g,
-      (c.env.SITE_URL ?? new URL(c.req.url).origin).replace(/\/$/, ''),
-    );
+    // 插件贡献的 {SITE_URL} 占位在请求期替换：主域名 = 后台「站点网址」优先（多域名部署），
+    // SITE_URL 兜底；两者皆空回落当前请求域。sitemap 绝对地址必须指向主域名，否则备用域会各自声明一份。
+    const setting = await loadSetting(c.get('cache'), c.get('db'));
+    const body = assembleRobots(base, rt.robots).replace(/\{SITE_URL\}/g, canonicalBase(c, setting));
     edgeStore(c.req.url, SHARED_UA, body, ROBOTS_TTL, maybeCtx(c), 'text/plain; charset=utf-8');
     return c.text(body, 200, {
       'content-type': 'text/plain; charset=utf-8',
@@ -135,7 +135,8 @@ async function buildFallback(
   const setting = await loadSetting(cache, db);
   const t = createApiT(setting.lang);
   const canonical = new URL(c.req.url).pathname;
-  const rt = c.env.SITE_URL ? `${c.env.SITE_URL.replace(/\/$/, '')}${canonical}` : canonical;
+  // 预渲染 HTML 的 canonical / 翻页绝对链接一律用主域名（后台「站点网址」优先，SITE_URL 兜底）
+  const rt = `${canonicalBase(c, setting)}${canonical}`;
 
   if (route.kind === 'thread' && route.id) {
     const tid = route.id;

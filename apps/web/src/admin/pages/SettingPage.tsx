@@ -274,8 +274,8 @@ export function SettingPage() {
         <Field label={t('setting_close_reason', '关闭原因')} htmlFor="s-runlevel_reason" hint={t('setting_close_reason_hint', '站点关闭或仅管理员可访问时，显示给访客的提示文字')}>
           <Input id="s-runlevel_reason" value={form.runlevel_reason ?? ''} onChange={(e) => set('runlevel_reason', e.target.value)} />
         </Field>
-        <Field label={t('setting_site_url', '站点网址')} htmlFor="s-url" hint={t('setting_site_url_hint', '需以 https:// 开头；SEO 规范链接和站点地图都使用此地址')}>
-          <Input id="s-url" value={form.url ?? ''} onChange={(e) => set('url', e.target.value)} placeholder="https://example.com" />
+        <Field label={t('setting_site_url', '站点网址')} htmlFor="s-url" hint={t('setting_site_url_hint', '绑定了多个域名时填主域名（https:// 开头，只填域名，不带路径）。其他域名访问页面会自动 301 到这里；邮件链接、SEO 规范链接与站点地图、支付回跳也使用此地址。留空则使用当前访问域名')}>
+          <Input id="s-url" value={form.url ?? ''} onChange={(e) => set('url', e.target.value)} placeholder="https://www.example.com" />
         </Field>
         <Field label={t('keyword', '关键词')} htmlFor="s-kw">
           <Input id="s-kw" value={form.kw ?? ''} onChange={(e) => set('kw', e.target.value)} />

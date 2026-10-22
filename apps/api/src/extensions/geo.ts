@@ -8,6 +8,7 @@
  * geo 不重复实现预渲染（§16.4「正文/JSON-LD 唯一归属」原则，插件零依赖）。
  */
 import { loadSetting, loadForumlist, loadGrouplist } from '../core/loaders';
+import { canonicalBase } from '../core/site';
 import { forumListAccessFilter } from '../core/access';
 import type { D1b } from '../core/db';
 import type { Cache } from '../core/cache';
@@ -257,7 +258,8 @@ function makeLlmsHandler(contentLicense: string) {
       loadForumlist(cache, db),
       loadGrouplist(cache, db),
     ]);
-    const base = (ctx.env.SITE_URL ?? '').replace(/\/$/, '');
+    // llms.txt 的链接同样用主域名（后台「站点网址」优先，SITE_URL 兜底，最后回落当前请求域）
+    const base = canonicalBase(ctx, setting);
     const visible = forumListAccessFilter(forumlist, 0, grouplist);
     const digest = await db
       .prepare<{ tid: number; subject: string }>(

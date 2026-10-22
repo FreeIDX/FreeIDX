@@ -11,6 +11,7 @@ import type { AccessCtx, AccessRow, ForumForAccess, GroupForAccess } from './acc
 import type { Env } from '../types/env';
 import { ACCESS_TOKEN_TTL, verifyJwt } from './auth/jwt';
 import { createSession, ipToLong, touchSession } from './auth/session';
+import { isHttpsRequest } from './site';
 
 export interface ForumRow extends ForumForAccess {
   name: string;
@@ -174,14 +175,14 @@ function cookieOf(c: ViewerCtx, name: string): string | undefined {
   return undefined;
 }
 
-const isHttps = (siteUrl: string | undefined): boolean => (siteUrl ?? '').startsWith('https://');
 export const reqIp = (c: ViewerCtx): string =>
   c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? '0.0.0.0';
 const reqIpLong = (c: ViewerCtx): number => ipToLong(reqIp(c));
 
 function setSidCookie(c: ViewerCtx, sid: string): void {
   const attrs = ['Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${ACCESS_TOKEN_TTL}`];
-  if (isHttps(c.env.SITE_URL)) attrs.push('Secure');
+  // Secure 按当前请求协议判定（多域名/预览域可能未配置 SITE_URL，配置值也可能与请求域不一致）
+  if (isHttpsRequest(c)) attrs.push('Secure');
   c.header('Set-Cookie', `sid=${sid}; ${attrs.join('; ')}`);
 }
 

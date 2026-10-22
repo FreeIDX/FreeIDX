@@ -1567,6 +1567,7 @@ export type ApiKey =
   | 'admin.sendFailed'
   | 'admin.showOff'
   | 'admin.showOn'
+  | 'admin.siteUrlInvalid'
   | 'admin.slotTypeInvalid'
   | 'admin.statusInvalid'
   | 'admin.systemGroupProtected'

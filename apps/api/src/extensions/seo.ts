@@ -13,8 +13,9 @@ import type { D1b } from '../core/db';
 import type { Cache } from '../core/cache';
 import { SHARED_UA, edgeLookup, edgeStore, isPersonalRequest, maybeCtx } from '../core/cache/edge';
 import { SUBREQUEST_HARD_LIMIT } from '../core/db/budget';
-import { loadForumlist, loadGrouplist } from '../core/loaders';
+import { loadForumlist, loadGrouplist, loadSetting } from '../core/loaders';
 import { loadExtSecret, saveExtConfig } from '../core/ext-store';
+import { canonicalBase, canonicalBaseFromSetting } from '../core/site';
 import type { ExtensionApi, ExtensionCtx, ExtensionModule } from '../core/extensions/registry';
 import { createApiT } from '../core/i18n';
 import { L } from '../core/i18n';
@@ -114,7 +115,7 @@ const SITEMAP_TTL = 3600;
 async function sitemapXml(c: unknown): Promise<unknown> {
   const ctx = c as {
     get: (k: string) => unknown;
-    env: { SITE_URL: string };
+    env: { SITE_URL?: string };
     req: { url: string; raw: { headers: { get: (name: string) => string | null } } };
   };
   // 带登录轨 Cookie 的请求（站长自查）跳过读缓存，保证配置变更当场可见
@@ -124,7 +125,9 @@ async function sitemapXml(c: unknown): Promise<unknown> {
   }
   const db = ctx.get('db') as D1b;
   const cache = ctx.get('cache') as Cache;
-  const base = (ctx.env.SITE_URL ?? '').replace(/\/$/, '');
+  // 多域名部署：sitemap 里的绝对地址一律指向主域名（后台「站点网址」优先，SITE_URL 兜底）
+  const setting = await loadSetting(cache, db);
+  const base = canonicalBase(ctx, setting);
   const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
   // 仅收录游客（gid=0）可读版块，与前台可见性一致（§16.2）
   const visible = forumListAccessFilter(forumlist, 0, grouplist);
@@ -470,13 +473,16 @@ export const seoPlugin: ExtensionModule = {
   schema: SEO_SCHEMA,
   setup(api: ExtensionApi) {
     api.registerRoute('GET', '/sitemap.xml', sitemapXml);
-    api.registerRoute('GET', '*.htm', (c) => {
-      const ctx = c as { req: { path: string }; env: { SITE_URL: string } };
+    api.registerRoute('GET', '*.htm', async (c) => {
+      const ctx = c as {
+        get: (k: string) => unknown;
+        env: { SITE_URL?: string };
+        req: { url: string; path: string };
+      };
       const target = mapLegacyPath(ctx.req.path);
-      const loc = /^https?:\/\//.test(ctx.env.SITE_URL ?? '')
-        ? new URL(target, ctx.env.SITE_URL.replace(/\/$/, '') + '/').href
-        : target;
-      return new Response(null, { status: 301, headers: { location: loc } });
+      // 旧链 301 也跳主域名：登录态 host-only + SEO 唯一地址，避免备用域继续产出重复链接
+      const setting = await loadSetting(ctx.get('cache') as Cache, ctx.get('db') as D1b);
+      return new Response(null, { status: 301, headers: { location: `${canonicalBase(ctx, setting)}${target}` } });
     });
     // {SITE_URL} 占位由核心 robots 路由请求期替换（装配引擎归核心）
     api.contributeRobots(20, ['Sitemap: {SITE_URL}/sitemap.xml']);
@@ -564,8 +570,10 @@ function makePushCron(
       const cache = ctx?.cache;
       const env = ctx?.env;
       if (!db || !cache) return; // 无请求态上下文（装配期未注入）→ 短路
-      const base = (env?.SITE_URL ?? '').replace(/\/$/, '');
-      if (!/^https?:\/\//.test(base)) return;
+      // 主域名取后台「站点网址」优先（多域名部署），SITE_URL 兜底；都未配置则不推送（避免推错域名）
+      const setting = await loadSetting(cache, db);
+      const base = canonicalBaseFromSetting(setting, env);
+      if (!base) return;
       const host = new URL(base).host;
       const since = cron.now - Math.max(1, cron.sinceLastSec);
       const urls = await recentThreadUrls(db, cache, base, since);

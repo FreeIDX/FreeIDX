@@ -11,6 +11,8 @@ import type { Cache } from '../cache';
 import type { D1b } from '../db';
 import { loadExtConfig, loadExtSecret } from '../ext-store';
 import { loadExtensionsState } from '../extensions/registry';
+import { loadSetting } from '../loaders';
+import { canonicalBaseFromSetting } from '../site';
 
 interface ProviderRegistration {
   provider: PaymentProvider;
@@ -59,22 +61,18 @@ interface ResolvedConfig extends PaymentConfig {
   [k: string]: unknown;
 }
 
-/** 站点源（env.SITE_URL 去尾斜杠）；未配置返回 ''（本地/测试未设时不注入） */
-function siteOrigin(env: Env | undefined): string {
-  return String(env?.SITE_URL ?? '').trim().replace(/\/+$/, '');
-}
-
 /** 装配 cfg：明文 config ∪ 解密 secret（secret 覆盖同名键；master key 缺失则 secret 为空，安全失败） */
 export async function resolveProviderConfig(cache: Cache, db: D1b, env: Env | undefined, id: string): Promise<ResolvedConfig> {
-  const [config, secret] = await Promise.all([
+  const [config, secret, setting] = await Promise.all([
     loadExtConfig(cache, db, id),
     loadExtSecret(db, id, env?.SECRETS_MASTER_KEY),
+    loadSetting(cache, db),
   ]);
   const cfg = { ...config, ...secret } as ResolvedConfig;
-  // 回跳地址默认注入站点源：通道内未配置时回落的是「支付网关 API 主机 + /done」
+  // 回跳地址默认注入主域名：通道内未配置时回落的是「支付网关 API 主机 + /done」
   // （如 api.stripe.com/done、api-m.paypal.com/done），付款成功会把买家丢在网关域名上。
-  // 这里统一按后台文案「留空使用站点默认」的语义补站点首页。
-  const origin = siteOrigin(env);
+  // 这里统一按后台文案「留空使用站点默认」的语义补站点首页；主域名取后台「站点网址」优先（多域名部署）。
+  const origin = canonicalBaseFromSetting(setting, env);
   if (origin) {
     if (!cfg.successUrl) cfg.successUrl = `${origin}/`;
     if (!cfg.cancelUrl) cfg.cancelUrl = `${origin}/`;

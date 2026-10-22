@@ -108,7 +108,8 @@ jobs:
                 echo "::error::仓库 Variable SITE_URL 需为 https:// 开头的纯域名，当前值不合法"; exit 1 ;;
             esac
           else
-            echo "::warning::未设置 Variable SITE_URL，沿用仓库默认 http://localhost:8787（邮件链接与 canonical 会用错域名）"
+            # 未设置属正常：主域名以后台「站点网址」为准，未配置时回落当前请求域名
+            echo "未设置 Variable SITE_URL，主域名以后台「站点网址」为准（多域名绑定下推荐只配后台）"
           fi
 
           echo "D1=$DB  KV=$KV"
@@ -152,7 +153,7 @@ jobs:
           {
             echo "## 部署完成"
             echo ""
-            echo "- 站点：${SITE_URL:-https://freeidx-api.<你的子域>.workers.dev}"
+            echo "- 站点主域名：${SITE_URL:-以后台「站点网址」为准（未配置时用当前请求域名）}"
             echo "- D1/KV ID 由本次构建解析并回填，仓库里保持占位值"
             echo "- 运行时密钥（JWT_SECRET 等）在 Cloudflare 后台 Secrets，本流水线不覆盖"
           } >> "$GITHUB_STEP_SUMMARY"

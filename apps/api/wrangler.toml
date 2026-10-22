@@ -36,7 +36,10 @@ bucket_name = "freeidx-files"
 crons = ["*/5 * * * *", "0 * * * *", "0 3 * * *"]
 
 [vars]
-SITE_URL = "http://localhost:8787"
+# 主域名兜底（可选，留空即可）：对外绝对地址（邮件/SEO canonical/支付回跳）优先取后台「站点网址」，
+# 这里只在后台留空时兜底；两者都空则回落当前请求域名。多域名绑定下无需在此写死域名。
+# 本地开发同理：留空即按请求域（http://localhost:8787）生成链接。
+SITE_URL = ""
 # 密钥不入库（§13.1）：
 #   wrangler secret put JWT_SECRET      # JWT/HMAC 密钥（含 csrf 签名）
 #   （邮件无仓库密钥：发信走 cloudflare:sockets 直连 SMTP 账号池，账号在后台「邮件设置」配置，

@@ -13,6 +13,7 @@ import { loadSetting } from '../../core/loaders';
 import { createApiT } from '../../core/i18n';
 import { getExtensions } from '../../core/extensions';
 import { escAttr } from '../../core/fmt';
+import { canonicalBaseFromSetting } from '../../core/site';
 import { getExecCtx, type ReadEnv } from '../shared';
 import { newPageMeta, renderFallbackHtml } from './core';
 
@@ -59,7 +60,8 @@ export async function generateThreadSeoHtml(deps: SeoDeps, tid: number): Promise
 
     const setting = await loadSetting(cache, db);
     const t = createApiT(setting.lang);
-    const site = (env.SITE_URL ?? '').replace(/\/$/, '');
+    // 写时定稿无请求上下文：主域名取后台「站点网址」优先，SITE_URL 兜底；都未配置则用相对路径
+    const site = canonicalBaseFromSetting(setting, env);
     const canonical = `${site}/thread/${tid}`;
     const meta = newPageMeta('thread', canonical, setting, { tid, seoTitle: th.subject, lastDate: th.create_date });
 

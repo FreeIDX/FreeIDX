@@ -21,6 +21,7 @@ import { issueAccessToken, ACCESS_TOKEN_TTL } from '../../core/auth/jwt';
 import { issueAdminToken } from '../../core/auth/admin';
 import { isEmail, isPassword, isUsername } from '../../core/auth/validate';
 import { getEmailProvider } from '../../core/email';
+import { canonicalBase, isHttpsRequest } from '../../core/site';
 import { verifyTurnstile } from '../../core/turnstile';
 import { USER_SESSION_COLS } from '../../core/db/columns';
 import type { D1b, Stmt } from '../../core/db';
@@ -95,7 +96,7 @@ async function grant(c: Context<ReadEnv>, uid: number, tokenVersion: number, gid
     useragent: c.req.header('user-agent') ?? '',
     url: new URL(c.req.url).pathname,
   });
-  const secure = (c.env.SITE_URL ?? '').startsWith('https://');
+  const secure = isHttpsRequest(c);
   setCookie(c, 'sid', sid, { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: ACCESS_TOKEN_TTL });
   if (c.env.JWT_SECRET) {
     const at = await issueAccessToken(c.env.JWT_SECRET, uid, tokenVersion);
@@ -363,7 +364,7 @@ export function authRoutes(): Hono<ReadEnv> {
     const uid = Number(user.uid);
     const adminAt = await issueAdminToken(adminSecret, uid, Number(user.token_version ?? 0));
     // Cookie 属性与 grant() 的 admin_at 段保持一致，避免前后台轨的 secure/maxAge 语义分叉
-    const secure = (c.env.SITE_URL ?? '').startsWith('https://');
+    const secure = isHttpsRequest(c);
     setCookie(c, 'admin_at', adminAt, { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: ADMIN_TOKEN_TTL });
     // v.upgradeNeeded 不透出：本接口只重发后台令牌，改密升级链路由 /api/auth/login 负责（§8.4）
     return ok(c, t('auth.loginDone'), { data: { uid } });
@@ -409,7 +410,9 @@ export function authRoutes(): Hono<ReadEnv> {
       .prepare('INSERT INTO bbs_email_code (email, code, scene, create_date, expiry, used) VALUES (?, ?, ?, ?, ?, 0)')
       .bind(email, token, RESET_SCENE, ts, ts + RESET_TOKEN_TTL)
       .run();
-    const base = (c.env.SITE_URL ?? '').replace(/\/$/, '');
+    // 邮件里的重置链接必须指向主域名（后台「站点网址」优先），不能跟随当前请求域——
+    // 否则从备用域发起的找回密码会把链接写成备用域，而登录态是 host-only，用户点开后又是游客。
+    const base = canonicalBase(c, setting);
     const link = `${base}/reset-password?email=${encodeURIComponent(email)}&token=${token}`;
     // 发信同样走 waitUntil 不阻塞（§D.6 映射）；token 行已入库，投递失败不影响链接有效性
     const work = provider
@@ -480,7 +483,7 @@ export function authRoutes(): Hono<ReadEnv> {
       // 登录态不可辨（如库瞬时故障读不到用户）时至少撤销当前 session 行
       await destroySession(db, sid);
     }
-    const secure = (c.env.SITE_URL ?? '').startsWith('https://');
+    const secure = isHttpsRequest(c);
     setCookie(c, 'sid', '', { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: 0 });
     setCookie(c, 'at', '', { path: '/', httpOnly: true, sameSite: 'Lax', secure, maxAge: 0 });
     // 后台轨 Cookie 一并清除：登出即退出后台，防 admin_at 残留复用

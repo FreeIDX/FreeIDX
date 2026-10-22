@@ -75,6 +75,22 @@ function validate(input: Record<string, unknown>, cur: Record<string, unknown>, 
         items.push({ label, url, sort: Number(o.sort ?? 0) || 0, on: o.on === 0 || o.on === '0' ? 0 : 1 });
       }
       out.nav = JSON.stringify(items);
+    } else if (k === 'url') {
+      /* 主域名（多域名绑定时唯一对外地址）：必须 https，只保留 origin（路径/查询/尾斜杠一律丢弃）；
+         留空表示未配置 —— 对外地址回落 SITE_URL，再回落当前请求域 */
+      const raw = String(v ?? '').trim();
+      if (!raw) {
+        out.url = '';
+      } else {
+        let u: URL | null = null;
+        try {
+          u = new URL(raw);
+        } catch {
+          u = null;
+        }
+        if (!u || u.protocol !== 'https:') throw new AppError(Code.VALIDATION_ERROR, t('admin.siteUrlInvalid'));
+        out.url = u.origin;
+      }
     } else if (INT_KEYS.has(k)) {
       const n = Number(v);
       if (!Number.isInteger(n) || n < 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.fieldNonNegative', { k }));

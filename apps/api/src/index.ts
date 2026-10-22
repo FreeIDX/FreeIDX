@@ -13,6 +13,8 @@ import { ok, handleError, handleNotFound } from './middleware/envelope';
 import { runlevel } from './middleware/runlevel';
 import { csrf } from './middleware/csrf';
 import { adminGuard } from './middleware/admin';
+import { canonicalHostRedirect } from './middleware/canonical-host';
+import { requestOrigin } from './core/site';
 import { handleScheduled } from './core/cron';
 import { getExtensions } from './core/extensions';
 import { classifyUserAgent, matchRegisteredPath } from './core/crawler';
@@ -77,19 +79,24 @@ app.use(
   '*',
   cors({
     // 白名单化（§20.4 安全项）：credentials:true 下反射任意 Origin = 任意外站可携 Cookie 跨域读响应。
-    // 仅放行站点自身域 + 本地 dev（vite 5173，dev proxy /api→8787 为同源请求）；白名单外一律回落
-    // 站点域——ACAO 与请求 Origin 不符 → 浏览器直接拒绝跨域读取，不产生暴露。
+    // 多域名部署下「站点自身域」按请求 Host 动态判定（各绑定域名各自同源），另放行本地 dev（vite 5173，
+    // dev proxy /api→8787 为同源请求）；白名单外一律回落请求域——ACAO 与请求 Origin 不符 → 浏览器直接
+    // 拒绝跨域读取，不产生暴露。不读 SITE_URL：部署变量可能未配置或与实际绑定域名不一致。
     origin: (origin, c) => {
-      const site = (c.env.SITE_URL ?? '').replace(/\/$/, '');
-      if (!origin) return site; // 同源/curl：不构成跨域暴露
-      const allow = new Set([site, 'http://localhost:5173', 'http://127.0.0.1:5173']);
-      return allow.has(origin) ? origin : site;
+      const self = requestOrigin(c);
+      if (!origin) return self; // 同源/curl：不构成跨域暴露
+      const allow = new Set([self, 'http://localhost:5173', 'http://127.0.0.1:5173']);
+      return allow.has(origin) ? origin : self;
     },
     credentials: true,
     allowHeaders: ['Content-Type', 'X-CSRF-Token'],
     exposeHeaders: ['X-Db-Queries-Warn', 'X-Edge-Cache'],
   }),
 );
+// 多域名收敛（canonical host）：页面导航落到非主域名时 301 到后台「站点网址」。
+// 必须紧跟 cors（跳转响应同样要带跨域头），先于 edgeCache（避免备用域命中缓存后无法收敛）。
+app.use('*', canonicalHostRedirect());
+
 // 边缘响应缓存（§7 读取屏障）：游客匿名只读接口命中即返回，不走 runlevel 的 setting 查询。
 // 必须挂在 cors 之后（命中响应同样要带跨域头）、runlevel 之前（否则省不掉 D1 读）。
 app.use('*', edgeCache());
