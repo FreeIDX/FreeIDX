@@ -3,7 +3,16 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import i18nPlugin from './scripts/eslint-plugin-i18n.mjs';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/.wrangler/**', '**/node_modules/**', 'packages/shared/src/i18n/gen/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/.wrangler/**',
+      '**/node_modules/**',
+      'packages/shared/src/i18n/gen/**',
+      /* 本地对照用的第三方参考源码，不属于本仓库代码（已在 .gitignore 忽略） */
+      'InsightFlare-main/**',
+    ],
+  },
   ...tseslint.configs.recommended,
   {
     rules: {
