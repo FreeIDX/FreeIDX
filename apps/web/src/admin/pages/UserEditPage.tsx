@@ -4,7 +4,7 @@
  * 取用户菜单三档（列表/用户组/创建）——编辑态 active='list'、新建态 active='create'；
  * 卡内小标题「编辑用户」只在编辑态显示，新建态不渲染；
  * 底部整行次要按钮「返回」（mt-3）两态都有（跳回列表，不用 history.back()）。
- * 口令口径：服务端只接受**前端预哈希的 32 位 md5 串**（与前台登录同口径，见 lib/md5），
+ * 口令口径：服务端只接受**前端预哈希的 32 位 md5 串**（与前台登录同口径，见 shared 的 md5Hex），
  * 且改口令会同时 token_version+1 并销毁该用户全部会话——编辑页必须把这条后果写在字段说明里。
  * 编辑取数：后台没有 GET /api/admin/users/:uid，用列表接口的精确搜索（type=uid）拿单行；
  * 该投影带 email，所以编辑态可以直接回填并按 diff 提交。
@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { GroupId } from '@freeidx/shared';
+import { GroupId, md5Hex } from '@freeidx/shared';
 import { createUser, getUsers, updateUser } from '../api';
 import type { AdminUserRow } from '../types';
 import { useAdminT } from '../t';
@@ -21,7 +21,6 @@ import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
 import { useAuth } from '../../store/auth';
 import { USER_TABS } from '../tabs';
-import { md5 } from '../../lib/md5';
 import { fmtDate } from '../../lib/api';
 import { Alert, Button, Card, ErrorState, Field, Input, LinkButton, PageTitle, Select, SubmitRow, TabBar } from '../ui';
 
@@ -70,14 +69,14 @@ export function UserEditPage() {
     if (form.username !== origin.username) out.username = form.username;
     if (form.gid !== origin.gid) out.gid = form.gid;
     if (form.ok !== origin.ok) out.ok = form.ok;
-    if (form.password) out.password = md5(form.password);
+    if (form.password) out.password = md5Hex(form.password);
     return out;
   };
 
   const submit = useAdminAction(
     async () => {
       if (isNew) {
-        const d = await createUser({ email: form.email.trim(), username: form.username, password: md5(form.password), gid: form.gid });
+        const d = await createUser({ email: form.email.trim(), username: form.username, password: md5Hex(form.password), gid: form.gid });
         navigate(`/admin/users/${d.uid}/edit`, { replace: true });
         return d;
       }

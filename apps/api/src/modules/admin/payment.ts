@@ -3,7 +3,7 @@
  * 挂载于 adminGuard 之后（已强制 gid=1）。通道启停/密钥配置不在此，统一走 §15.4 通用 /api/admin/extensions/{id}。
  * 私钥永不回显；退款编排复用 payment-core issueRefund（通道退款 + 状态机回写），补单复用状态机 markPaid/fulfillOrder（幂等）。
  */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { Code, LEVEL_GROUP_MIN, type ApiKey, type OrderStatusValue } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b } from '../../core/db';
@@ -24,21 +24,9 @@ import {
 import { issueRefund } from '../../core/payment/orchestrator';
 import { deleteCards, generateCards, listCards, voidCards } from '../../extensions/card';
 import type { ApiT } from '../../core/i18n';
-import { intParam, type ReadEnv } from '../shared';
+import { intParam, readJsonObject, type ReadEnv } from '../shared';
 
-type Ctx = Context<ReadEnv>;
 const nowSec = (): number => Math.floor(Date.now() / 1000);
-
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    const v = (await c.req.json()) as unknown;
-    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error();
-    return v as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJsonObject'));
-  }
-}
 
 function planDto(p: VipPlanRow): Record<string, unknown> {
   let perks: unknown = {};
@@ -116,7 +104,7 @@ export function adminPaymentRoutes(): Hono<ReadEnv> {
   app.post('/api/admin/vip/plans', async (c) => {
     const db = c.get('db') as D1b;
     const t = c.get('t');
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const input = await normalizePlan(db, body, t);
     const row = await createPlan(db, input, nowSec());
     return ok(c, t('common.created'), { data: row ? planDto(row) : null });
@@ -127,7 +115,7 @@ export function adminPaymentRoutes(): Hono<ReadEnv> {
     const t = c.get('t');
     const id = intParam(c.req.param('id'));
     if (id <= 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.idInvalid'));
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const input = await normalizePlan(db, body, t);
     const row = await updatePlan(db, id, input);
     if (!row) throw new AppError(Code.NOT_FOUND, t('common.planNotFound'));
@@ -199,7 +187,7 @@ export function adminPaymentRoutes(): Hono<ReadEnv> {
   app.post('/api/admin/cards', async (c) => {
     const db = c.get('db') as D1b;
     const t = c.get('t');
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const planId = intParam(String(body.planId ?? body.plan_id ?? ''));
     if (planId <= 0) throw new AppError(Code.VALIDATION_ERROR, t('order.planRequired'));
     const plan = await findPlan(db, planId);
@@ -224,7 +212,7 @@ export function adminPaymentRoutes(): Hono<ReadEnv> {
   app.post('/api/admin/cards/void', async (c) => {
     const db = c.get('db') as D1b;
     const t = c.get('t');
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const ids = parseCardIds(body, t);
     const voided = await voidCards(db, ids, nowSec());
     return ok(c, t('admin.cardVoidDone'), { data: { voided } });
@@ -234,7 +222,7 @@ export function adminPaymentRoutes(): Hono<ReadEnv> {
   app.post('/api/admin/cards/delete', async (c) => {
     const db = c.get('db') as D1b;
     const t = c.get('t');
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const ids = parseCardIds(body, t);
     const deleted = await deleteCards(db, ids);
     return ok(c, t('admin.cardDeleteDone'), { data: { deleted } });

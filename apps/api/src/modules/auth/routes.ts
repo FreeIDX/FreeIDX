@@ -13,7 +13,7 @@ import { Hono, type Context } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { ADMIN_TOKEN_TTL, Code, GroupId, type LoginReq, type RegisterReq } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
-import { core, randomPresetAvatar, type ReadEnv } from '../shared';
+import { core, randomPresetAvatar, readJson, type ReadEnv } from '../shared';
 import { loadSetting, loadViewer, reqIp } from '../../core/loaders';
 import { createSession, destroySession, destroyUserSessions, ipToLong } from '../../core/auth/session';
 import { hashPassword, verifyClientPassword } from '../../core/auth';
@@ -85,15 +85,6 @@ async function loadRegisterCredits(db: D1b): Promise<{ credits: number; golds: n
     return Number.isFinite(n) ? n : 0;
   };
   return { credits: get('d_credit'), golds: get('d_gold'), rmbs: get('d_rmb') };
-}
-
-async function readJson<T>(c: Context<ReadEnv>): Promise<T> {
-  const t = c.get('t');
-  try {
-    return await c.req.json<T>();
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
 }
 
 /** 双轨签发（§8.1）：session 行 + Cookie sid，配置了 JWT_SECRET 再发 Cookie at；gid=1 追加后台 Cookie admin_at（T3-3） */

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useAuth } from '../store/auth';
 import { confirmPasswordReset, requestPasswordReset } from '../lib/api';
 import { apiErrorMessage } from '../lib/errors';
-import { md5 } from '../lib/md5';
+import { md5Hex } from '@freeidx/shared';
 import { Turnstile } from '../components/Turnstile';
 import { authSubmitCls, AuthAnnouncement } from '../components/AuthForms';
 import { IconInput } from '../components/ui';
@@ -47,7 +47,7 @@ export function ResetPwPage() {
           setErr(t('repeat_password_incorrect'));
           return;
         }
-        await confirmPasswordReset({ email: emailFromLink, token, password: md5(password) });
+        await confirmPasswordReset({ email: emailFromLink, token, password: md5Hex(password) });
         setDone(true);
       } else {
         await requestPasswordReset({ email, turnstileToken: turnstile || undefined });

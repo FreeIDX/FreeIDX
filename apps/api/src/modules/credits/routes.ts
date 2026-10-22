@@ -25,7 +25,7 @@ import { forumAccessMod } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
 import { getExtensions } from '../../core/extensions';
 import { THREAD_LIST_COLS_T } from '../../core/db/columns';
-import { core, intParam, totalPageOf, type ReadEnv } from '../shared';
+import { core, intParam, readJson, totalPageOf, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
@@ -46,15 +46,6 @@ interface Core {
 async function emitGroupChanged(core: Core, uid: number, oldGid: number, newGid: number): Promise<void> {
   const rt = await getExtensions(core.cache, core.db, undefined, { preloadConfigs: false });
   await rt.bus.emit('user:group-changed', { uid, oldGid, newGid });
-}
-
-async function readJson<T>(c: Ctx): Promise<T> {
-  const t = c.get('t');
-  try {
-    return await c.req.json<T>();
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
 }
 
 /* ------------------------------------------------------------------ *

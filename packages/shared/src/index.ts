@@ -3,6 +3,7 @@ export * from './constants';
 export * from './permissions';
 export * from './api-types';
 export * from './extensions';
+export * from './md5';
 export * from './i18n';
 export * from './i18n/locales';
 export * from './i18n/gen/keys';

@@ -7,22 +7,13 @@
  * 全部路由挂在 adminGuard 之后（app.use('/api/admin/*')）；发送者 uid 取 admin_at token（操作者真实身份）。
  */
 import { Hono, type Context } from 'hono';
-import { getCookie } from 'hono/cookie';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
-import { readAdminToken } from '../../core/auth/admin';
 import { NoticeType, noticeSend, escapeHtml } from '../../core/notice';
 import type { Stmt } from '../../core/db';
-import { core, intParam, totalPageOf, type ReadEnv } from '../shared';
+import { adminUidOf, core, intParam, totalPageOf, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
-
-/** 操作者 uid：admin_at token payload（adminGuard 已校验有效） */
-async function adminUidOf(c: Ctx): Promise<number> {
-  const secret = c.env.ADMIN_JWT_SECRET ?? c.env.JWT_SECRET ?? '';
-  const p = await readAdminToken(getCookie(c, 'admin_at'), secret);
-  return Number(p?.uid ?? 0);
-}
 
 export function adminNoticeRoutes(): Hono<ReadEnv> {
   const app = new Hono<ReadEnv>();

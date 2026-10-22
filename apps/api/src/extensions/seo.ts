@@ -18,6 +18,7 @@ import { loadExtSecret, saveExtConfig } from '../core/ext-store';
 import type { ExtensionApi, ExtensionCtx, ExtensionModule } from '../core/extensions/registry';
 import { createApiT } from '../core/i18n';
 import { L } from '../core/i18n';
+import { escAttr } from '../core/fmt';
 
 /** 站点验证文件名白名单（防路径穿越，仅允许安全字符）；schema 的 verifyFiles.keyPattern 与此同源 */
 const SAFE_FILE = /^[A-Za-z0-9._-]{1,80}$/;
@@ -516,8 +517,6 @@ export const seoPlugin: ExtensionModule = {
     api.registerCron(makePushCron(api.ctx, cfg));
   },
 };
-
-const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 /** 近段更新主题的绝对 URL 列表（供 IndexNow/百度推送；仅可读版块 + 主题详情，≤2000 条） */
 async function recentThreadUrls(db: D1b, cache: Cache, base: string, sinceTs: number): Promise<string[]> {

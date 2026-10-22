@@ -2,7 +2,7 @@
  * T2-1 单测：md5 正确性（RFC 1321 向量）、PBKDF2 新旧格式校验、待升级标记、同请求 CPU <8ms（DoD）。
  */
 import { describe, expect, it } from 'vitest';
-import { md5Hex } from '../src/core/auth/md5';
+import { md5Hex } from '@freeidx/shared';
 import {
   PBKDF2_ITERATIONS,
   hashPassword,

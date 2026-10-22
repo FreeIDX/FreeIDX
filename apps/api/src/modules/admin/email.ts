@@ -13,20 +13,9 @@ import { AppError, ok } from '../../middleware/envelope';
 import { loadExtSecret, saveExtConfig, saveExtSecret } from '../../core/ext-store';
 import { getEmailSettingState } from '../../core/email';
 import type { ApiT } from '../../core/i18n';
-import { core, type ReadEnv } from '../shared';
+import { core, readJsonObject, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
-
-async function readJsonObject(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    const v = (await c.req.json()) as unknown;
-    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error();
-    return v as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJsonObject'));
-  }
-}
 
 /** 校验单行池配置，返回规范化后的明文字段；密码单独处理（增量保持） */
 function validateRow(raw: unknown, idx: number, t: ApiT): {

@@ -18,7 +18,7 @@ import { loadForumlist, loadGrouplist, loadViewer, makeAccessCtx, loadSetting } 
 import { forumAccessMod, forumAccessUser } from '../../core/access';
 import { chargePoints, creditDeltaStmts, loadCreditsRules, upgradeGroupByCredits } from '../../core/points';
 import { getExtensions } from '../../core/extensions';
-import { intParam, type ReadEnv } from '../shared';
+import { decodeBase64, intParam, type ReadEnv } from '../shared';
 import type { ApiT } from '../../core/i18n';
 import {
   ATTACH_MAX_BYTES,
@@ -34,19 +34,6 @@ import {
 
 type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
-
-/** data URL / 裸 base64 → 字节 */
-function decodeBase64(raw: string, t: ApiT): Uint8Array {
-  const b64 = raw.includes(',') && raw.slice(0, 5).toLowerCase() === 'data:' ? raw.slice(raw.indexOf(',') + 1) : raw;
-  try {
-    const bin = atob(b64.trim());
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidBase64'));
-  }
-}
 
 /** RFC 5987 双栈文件名（ASCII 回退 + UTF-8 精确） */
 function disposition(type: 'inline' | 'attachment', name: string): string {

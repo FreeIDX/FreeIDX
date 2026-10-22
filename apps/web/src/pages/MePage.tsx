@@ -31,7 +31,7 @@ import {
 import { apiErrorMessage } from '../lib/errors';
 import { posInt } from '../lib/params';
 import { fileToPngDataUrlResize } from '../lib/image';
-import { md5 } from '../lib/md5';
+import { md5Hex } from '@freeidx/shared';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/icons';
 import { FollowUserList } from '../components/FollowUserList';
@@ -168,7 +168,7 @@ export function MePage() {
     }
     setPwBusy(true);
     try {
-      await changePassword({ oldPassword: md5(oldPw), newPassword: md5(newPw) });
+      await changePassword({ oldPassword: md5Hex(oldPw), newPassword: md5Hex(newPw) });
       setPwOk(t('password_changed'));
       setOldPw('');
       setNewPw('');

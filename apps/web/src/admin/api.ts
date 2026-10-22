@@ -129,7 +129,7 @@ export const getPointRank = (type: 'credits' | 'golds' | 'rmbs', page = 1) =>
   apiGet<PageData<{ uid: number; username: string; credits: number; golds: number; rmbs: number }>>(
     `/api/admin/points/rank?type=${type}&page=${page}`,
   );
-/** password 必须是前端预哈希后的 32 位串（与前台登录同口径，见 lib/md5）；gid 缺省 101 */
+/** password 必须是前端预哈希后的 32 位串（与前台登录同口径，见 shared 的 md5Hex）；gid 缺省 101 */
 export const createUser = (input: { email: string; username: string; password: string; gid?: number }) =>
   apiSend<{ uid: number; gid: number }>('POST', '/api/admin/users', input);
 export const updateUser = (

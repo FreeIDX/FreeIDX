@@ -22,6 +22,11 @@ export function htmlSpecialChars(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/** HTML 属性值转义（SEO 模板/OG/JSON-LD 属性拼接用） */
+export function escAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 /** HTML 化顺序敏感（空格→&nbsp; 先于 tab，tab 展开内的空格不再二次替换） */
 export function xnTxtToHtml(s: string): string {
   let out = htmlSpecialChars(s);

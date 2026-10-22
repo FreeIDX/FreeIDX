@@ -9,11 +9,10 @@
 
  *  deleteuser 归 T3-2（不走 forumAccessMod）；mod:executed 事件（契约②）逐条发射。
  */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { Code, GroupId, type ModThreadsReq } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
-import type { D1b, Stmt } from '../../core/db';
-import type { Cache } from '../../core/cache';
+import type { Stmt } from '../../core/db';
 import { forumAccessMod } from '../../core/access';
 import { loadForumlist, loadGrouplist, loadSetting, loadViewer, makeAccessCtx, type ForumRow } from '../../core/loaders';
 import { CheckStatus, hasSeeCheck } from '../../core/check';
@@ -21,10 +20,9 @@ import { attachKeysByTid, attachKeysForUserPurge, purgeR2Objects, threadPurgeStm
 import { getExtensions } from '../../core/extensions';
 import { revokeAffectedUids, revokeForPostDelete, settleDigestChanges, threadRevokeEntries, upgradeGroupsByCredits, type RevokeEntry } from '../../core/points';
 import { NoticeType, noticeModHtml, noticeSendMany } from '../../core/notice';
-import { deleteThreadSeoHtml } from '../seo/generate';
-import { core, getExecCtx, intParam, patchRuntime, type ReadEnv } from '../shared';
+import { invalidateThreadSeo } from '../seo/generate';
+import { core, getExecCtx, intParam, patchRuntime, readJson, type ReadEnv } from '../shared';
 
-type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
 
 interface ModThread {
@@ -48,26 +46,6 @@ interface ModlogRow {
   comment: string;
   create_date: number;
   action: string;
-}
-
-async function readJson<T>(c: Ctx): Promise<T> {
-  const t = c.get('t');
-  try {
-    return await c.req.json<T>();
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
-}
-
-/** SEO HTML 失效旁路：未绑 R2 跳过（零额外查询），有上下文 waitUntil（请求期 CPU≈0） */
-async function invalidateSeo(core: { db: D1b; cache: Cache }, c: Ctx, tids: number[]): Promise<void> {
-  const files = c.env.FILES as unknown as { put?: unknown } | undefined;
-  if (!files || typeof files.put !== 'function' || !tids.length) return;
-  const deps = { db: core.db, cache: core.cache, env: c.env };
-  const work = Promise.all(tids.map((tid) => deleteThreadSeoHtml(deps, tid).catch(() => undefined)));
-  const ex = await getExecCtx(c);
-  if (ex?.waitUntil) ex.waitUntil(work);
-  else await work;
 }
 
 export function modRoutes(): Hono<ReadEnv> {
@@ -292,7 +270,7 @@ export function modRoutes(): Hono<ReadEnv> {
 
 
     if (purgedTids.length) await patchRuntime(cache, { threads: -purgedTids.length });
-    if (seoTids.length) await invalidateSeo({ db, cache }, c, seoTids);
+    if (seoTids.length) await invalidateThreadSeo({ db, cache }, c, seoTids);
 
     const rt = await getExtensions(cache, db, undefined, { preloadConfigs: false });
     for (const e of executed) await rt.bus.emit('mod:executed', { uid: v.uid, tid: e.tid, action: e.action });
@@ -350,7 +328,7 @@ export function modRoutes(): Hono<ReadEnv> {
 
     if (tids.length) await patchRuntime(cache, { threads: -tids.length });
     await patchRuntime(cache, { users: -1 });
-    await invalidateSeo({ db, cache }, c, tids);
+    await invalidateThreadSeo({ db, cache }, c, tids);
 
     // R2 对象尽力删除（失败不影响一致性）：附件（本人上传 + 本人主题内他人上传）+ 头像（键可由 uid 推导）
     const ex = await getExecCtx(c);

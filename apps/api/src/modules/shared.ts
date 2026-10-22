@@ -3,15 +3,64 @@
  * 后两者原先在 mod/check/write/admin 四处各有一份完全相同的实现，统一收敛到此（唯一事实源）。
  */
 import type { Context } from 'hono';
+import { getCookie } from 'hono/cookie';
+import { Code } from '@freeidx/shared';
 import type { D1b } from '../core/db';
 import type { Cache } from '../core/cache';
 import type { Env } from '../types/env';
+import { AppError } from '../middleware/envelope';
+import { readAdminToken } from '../core/auth/admin';
 import type { ApiT } from '../core/i18n';
 
 export type ReadEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT } };
 
 export function core(c: Context<ReadEnv>): { db: D1b; cache: Cache } {
   return { db: c.get('db'), cache: c.get('cache') };
+}
+
+/** 操作者 uid：admin_at token payload（adminGuard 已校验有效），用于 modlog/审计归属 */
+export async function adminUidOf(c: Context<ReadEnv>): Promise<number> {
+  const secret = c.env.ADMIN_JWT_SECRET ?? c.env.JWT_SECRET ?? '';
+  const p = await readAdminToken(getCookie(c, 'admin_at'), secret);
+  return Number(p?.uid ?? 0);
+}
+
+/** 请求体 JSON（解析失败统一 INVALID_JSON）；形状由调用方按需断言 */
+export async function readJson<T = Record<string, unknown>>(c: Context<ReadEnv>): Promise<T> {
+  const t = c.get('t');
+  try {
+    return (await c.req.json()) as T;
+  } catch {
+    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
+  }
+}
+
+/** 请求体必须是 JSON 对象（数组/标量/空体一律 INVALID_JSON_OBJECT） */
+export async function readJsonObject(c: Context<ReadEnv>): Promise<Record<string, unknown>> {
+  const t = c.get('t');
+  try {
+    const v = (await c.req.json()) as unknown;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error();
+    return v as Record<string, unknown>;
+  } catch {
+    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJsonObject'));
+  }
+}
+
+/** 表单布尔位落库：1/true/'1'/'true' → 1，其余 → 0 */
+export const as01 = (v: unknown): number => (v === 1 || v === true || v === '1' || v === 'true' ? 1 : 0);
+
+/** data URL / 裸 base64 → 字节 */
+export function decodeBase64(raw: string, t: ApiT): Uint8Array {
+  const b64 = raw.includes(',') && raw.slice(0, 5).toLowerCase() === 'data:' ? raw.slice(raw.indexOf(',') + 1) : raw;
+  try {
+    const bin = atob(b64.trim());
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch {
+    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidBase64'));
+  }
 }
 
 /**

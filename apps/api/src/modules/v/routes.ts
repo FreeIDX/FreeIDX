@@ -16,7 +16,7 @@ import type { D1b, Stmt } from '../../core/db';
 import { loadViewer } from '../../core/loaders';
 import { loadExtConfig } from '../../core/ext-store';
 import { creditTypeCol, creditTypeLabel } from '../../core/points';
-import { core, type ReadEnv } from '../shared';
+import { core, readJson, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
@@ -46,15 +46,6 @@ interface VApplyRow {
   v_file: string;
   status: number;
   remark: string;
-}
-
-async function readJson<T>(c: Ctx): Promise<T> {
-  const t = c.get('t');
-  try {
-    return await c.req.json<T>();
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
 }
 
 /* ------------------------------------------------------------------ *

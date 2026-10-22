@@ -1,6 +1,7 @@
 /**
- * MD5（纯 TS，无依赖）：迁移期口令链要求前端对明文做 `md5(raw)` 预哈希再提交
- * （后端校验 32hex 后 PBKDF2 再哈希，§8.4）。UTF-8 输入、32 位小写 hex 输出。
+ * MD5（纯 TS，无依赖）：WebCrypto 不提供 MD5，而口令链要求
+ * `md5(前端md5(明文)+salt)` 存量兼容校验与前端预哈希两处都用同一算法（§8.4）。
+ * 输入按 UTF-8 编码、输出 32 位小写 hex；口令级短串，CPU 微秒级。
  */
 const S = [
   7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
@@ -16,9 +17,10 @@ function rotl(x: number, c: number): number {
   return (x << c) | (x >>> (32 - c));
 }
 
-export function md5(input: string): string {
+export function md5Hex(input: string): string {
   const msg = new TextEncoder().encode(input);
   const bitLen = msg.length * 8;
+  // padding：0x80 + 零填充 + 64bit 小端长度（≡56 mod 64 补位）
   const withPad = msg.length % 64 <= 55 ? 56 - (msg.length % 64) : 120 - (msg.length % 64);
   const buf = new Uint8Array(msg.length + withPad + 8);
   buf.set(msg);
@@ -64,11 +66,9 @@ export function md5(input: string): string {
     d0 = (d0 + D) | 0;
   }
 
-  return [a0, b0, c0, d0]
-    .map((w) => {
-      let hex = '';
-      for (let i = 0; i < 4; i++) hex += ((w >>> (i * 8)) & 0xff).toString(16).padStart(2, '0');
-      return hex;
-    })
-    .join('');
+  return [a0, b0, c0, d0].map((w) => {
+    let hex = '';
+    for (let i = 0; i < 4; i++) hex += ((w >>> (i * 8)) & 0xff).toString(16).padStart(2, '0');
+    return hex;
+  }).join('');
 }

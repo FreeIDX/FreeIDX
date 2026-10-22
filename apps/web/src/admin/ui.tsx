@@ -8,7 +8,7 @@
  * 令牌来自 globals.css 的 @theme（前后台共用），勿写死色值。
  */
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '../lib/api';
 import { Code } from '@freeidx/shared';
 import { Icon } from '../components/icons';
@@ -452,6 +452,22 @@ export function Table({
         </thead>
         <tbody>{children}</tbody>
       </table>
+    </div>
+  );
+}
+
+/** 列表页码（setSearchParams 的对象写法不接受 undefined，统一只读） */
+export function usePage(): number {
+  const [sp] = useSearchParams();
+  return Math.max(1, Number(sp.get('page') ?? 1) || 1);
+}
+
+/** 待处理队列分页（行内右对齐，单页时不渲染） */
+export function QueuePager({ page, totalPage, path }: { page: number; totalPage: number; path: string }) {
+  if (totalPage <= 1) return null;
+  return (
+    <div className="mt-3 flex justify-end">
+      <AdminPagination page={page} totalPage={totalPage} href={(p) => (p === 1 ? path : `${path}?page=${p}`)} />
     </div>
   );
 }

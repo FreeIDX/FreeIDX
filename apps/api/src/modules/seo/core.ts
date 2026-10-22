@@ -13,6 +13,7 @@ import { BOT_HTML_TTL, SHARED_UA, edgeLookup, edgeStore, isPersonalRequest, mayb
 import { loadSetting } from '../../core/loaders';
 import { createApiT } from '../../core/i18n';
 import { getExtensions } from '../../core/extensions';
+import { escAttr } from '../../core/fmt';
 import type { ExtensionsRuntime } from '../../core/extensions/registry';
 import { classifyUserAgent, matchPolicyCrawler, pageRoute } from '../../core/crawler';
 import type { Env } from '../../types/env';
@@ -91,9 +92,6 @@ export function newPageMeta(
       return { ...base, title: setting.sitename, description: setting.desc || setting.brief };
   }
 }
-
-const escAttr = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** 模板串兜底渲染（微秒级；绝不在热路径触发 SSR；失败由调用侧 try/catch 回落） */
 export function renderFallbackHtml(meta: PageMeta, bodyHtml: string): string {

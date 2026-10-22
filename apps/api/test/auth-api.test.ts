@@ -4,9 +4,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../src/index';
-import { Code } from '@freeidx/shared';
+import { Code, md5Hex } from '@freeidx/shared';
 import { l0Clear } from '../src/core/cache';
-import { md5Hex } from '../src/core/auth/md5';
 import { hashPassword } from '../src/core/auth';
 import { isEmail, isPassword, isUsername } from '../src/core/auth/validate';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';

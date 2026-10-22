@@ -5,30 +5,18 @@
  *   - GET/POST/PUT/DELETE /api/admin/ad-slots（?ad_preview=1 含草稿位）
  * 私钥永不回显（仅返回是否已配置的元信息），不进日志。
  */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { ADMIN_CATALOG, extSchemaOf } from '../../core/extensions';
 import { loadExtensionsState } from '../../core/extensions/registry';
 import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtSecret, extSecretKey } from '../../core/ext-store';
 import type { ApiT } from '../../core/i18n';
-import { core, type ReadEnv } from '../shared';
+import { core, readJsonObject, type ReadEnv } from '../shared';
 
-type Ctx = Context<ReadEnv>;
 const nowSec = (): number => Math.floor(Date.now() / 1000);
 
 const SLOT_TYPES = new Set(['html', 'image', 'adsense']);
-
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    const v = (await c.req.json()) as unknown;
-    if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error();
-    return v as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJsonObject'));
-  }
-}
 
 /** 合并写回 kv 'extensions'（仅改动传入的 id），失效缓存使下次请求即热插拔。
  *  首次落 kv 的缺省值取目录 manifest（本地扩展随 Worker 部署、installed 恒为 1），
@@ -161,7 +149,7 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
     const id = c.req.param('id');
     const mod = ADMIN_CATALOG.find((m) => m.manifest.id === id);
     if (!mod) throw new AppError(Code.NOT_FOUND, t('common.extNotFound'));
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
 
     const patch: { installed?: 0 | 1; enable?: 0 | 1 } = {};
     const enable = asFlag(body.enable);
@@ -217,7 +205,7 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
   app.post('/api/admin/ad-slots', async (c) => {
     const { db } = core(c);
     const t = c.get('t');
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const s = normalizeSlot(body, false, t);
     const row = await db
       .prepare<{ id: number }>(
@@ -235,7 +223,7 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
     if (!Number.isInteger(id) || id <= 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.idInvalid'));
     const exists = await db.prepare<{ id: number }>('SELECT id FROM bbs_ad_slot WHERE id = ?').bind(id).first<{ id: number }>();
     if (!exists) throw new AppError(Code.NOT_FOUND, t('common.adSlotNotFound'));
-    const body = await readJson(c);
+    const body = await readJsonObject(c);
     const s = normalizeSlot(body, true, t);
     const cols: string[] = [];
     const params: (number | string)[] = [];

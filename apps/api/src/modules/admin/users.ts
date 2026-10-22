@@ -15,7 +15,7 @@
  * 全部路由挂在 adminGuard 之后（app.use('/api/admin/*')）。
  */
 import { Hono, type Context } from 'hono';
-import { Code, GroupId } from '@freeidx/shared';
+import { Code, GroupId, MOD_PERMS, USER_PERMS } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import { loadGrouplist, reqIp } from '../../core/loaders';
@@ -24,26 +24,13 @@ import { hashPassword } from '../../core/auth';
 import { isEmail, isPassword, isUsername } from '../../core/auth/validate';
 import { destroyUserSessions, ipToLong, ipToStr } from '../../core/auth/session';
 
-import { core, getExecCtx, intParam, patchRuntime, randomPresetAvatar, totalPageOf, type ReadEnv } from '../shared';
+import { as01, core, getExecCtx, intParam, patchRuntime, randomPresetAvatar, readJson, totalPageOf, type ReadEnv } from '../shared';
 import { attachKeysForUserPurge, purgeR2Objects, userPurgeStmts } from '../../core/purge';
 import { enqueueSeoRename } from '../seo/generate';
 import type { Cache } from '../../core/cache';
 
 type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
-const as01 = (v: unknown): number => (v === 1 || v === true || v === '1' || v === 'true' ? 1 : 0);
-
-const USER_PERMS = ['allowread', 'allowthread', 'allowpost', 'allowattach', 'allowdown'] as const;
-const MOD_PERMS = ['allowtop', 'allowupdate', 'allowdelete', 'allowmove', 'allowbanuser', 'allowdeleteuser', 'allowviewip'] as const;
-
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    return (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
-}
 
 /** 改名反规范化回写（§5.2/§20 设计承诺落地，照 backfillAvatar 模式）：
   *  username 按 uid、lastusername 按 lastuid 各一条全量 UPDATE，`<> 新值` 守卫使

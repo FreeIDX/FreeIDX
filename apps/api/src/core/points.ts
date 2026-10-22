@@ -433,17 +433,7 @@ export async function revokeForPostDelete(core: Core, entries: RevokeEntry[]): P
  * 精华变更差额结算（tt_credits）：
  * 结算额 = 新级别奖励 − 旧级别奖励（三币种各算，可为负；级别 0 视为全 0）。
  * biz_key 带随机尾缀：精华可反复升降，同一 (tid, 级别) 组合会重复出现，不能使用固定幂等键。
- */
-export async function settleDigestChange(
-  core: Core,
-  o: { uid: number; tid: number; before: number; after: number },
-): Promise<void> {
-  await settleDigestChanges(core, [o]);
-}
-
-/**
- * 精华变更差额结算（批量）：单条语义与 settleDigestChange 完全一致，
- * 但 N 条合并为一次 DB.batch —— N 个子请求降为 1（§7）。
+ * N 条合并为一次 DB.batch —— N 个子请求降为 1（§7）。
  * 随机幂等尾缀逐条生成，保持「精华可反复升降」的既有行为。
  */
 export async function settleDigestChanges(

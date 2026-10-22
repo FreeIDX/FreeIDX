@@ -9,26 +9,16 @@
  *   PUT  /api/admin/v/setting  {type, count}      保存收费参数（op=2）
  * 全部路由挂在 adminGuard 之后（app.use('/api/admin/*')）。
  */
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { saveExtConfig } from '../../core/ext-store';
 import { noticeSend, NoticeType } from '../../core/notice';
-import { core, intParam, totalPageOf, type ReadEnv } from '../shared';
+import { core, intParam, readJson, totalPageOf, type ReadEnv } from '../shared';
 import { loadVFee, V_EXT_ID } from '../v/routes';
 import type { Cache } from '../../core/cache';
 
-type Ctx = Context<ReadEnv>;
 const PAGE_SIZE = 20;
-
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    return (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
-}
 
 export function adminVRoutes(): Hono<ReadEnv> {
   const app = new Hono<ReadEnv>();

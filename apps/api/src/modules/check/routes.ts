@@ -27,33 +27,10 @@ import {
 } from '../../core/purge';
 import { revokeAffectedUids, revokeForPostDelete, threadRevokeEntries, upgradeGroupByCredits, upgradeGroupsByCredits } from '../../core/points';
 import { getExtensions } from '../../core/extensions';
-import { deleteThreadSeoHtml, generateThreadSeoHtml } from '../seo/generate';
-import { core, getExecCtx, patchRuntime, type ReadEnv } from '../shared';
+import { scheduleSeo } from '../seo/generate';
+import { core, getExecCtx, patchRuntime, readJson, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
-
-async function readJson<T>(c: Ctx): Promise<T> {
-  const t = c.get('t');
-  try {
-    return await c.req.json<T>();
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
-}
-
-/** SEO HTML 旁路（gen=重建 / del=失效）：未绑 R2 跳过，有上下文 waitUntil（请求期 CPU≈0） */
-async function scheduleSeo(db: D1b, cache: Cache, c: Ctx, tid: number, mode: 'gen' | 'del'): Promise<void> {
-  const files = c.env.FILES as unknown as { put?: unknown } | undefined;
-  if (!files || typeof files.put !== 'function') return;
-  const deps = { db, cache, env: c.env };
-  const work =
-    mode === 'del'
-      ? deleteThreadSeoHtml(deps, tid)
-      : generateThreadSeoHtml(deps, tid).then((written) => (written ? undefined : deleteThreadSeoHtml(deps, tid)));
-  const ex = await getExecCtx(c);
-  if (ex?.waitUntil) ex.waitUntil(work);
-  else await work;
-}
 
 /**
  * 主题真删（审核 opt=-2 / 回收站彻底删除/清空共用）：
@@ -88,7 +65,7 @@ export async function purgeThread(
   }
   await patchRuntime(cache, { threads: -1 });
   await cache.del('forumlist');
-  await scheduleSeo(db, cache, c, tid, 'del');
+  await scheduleSeo({ db, cache }, c, tid, 'del');
   purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
   const rt = await getExtensions(cache, db, undefined, { preloadConfigs: false });
   await rt.bus.emit('thread:deleted', { tid, fid: Number(t.fid) });
@@ -141,7 +118,7 @@ export function checkRoutes(): Hono<ReadEnv> {
             const rt = await getExtensions(cache, db, undefined, { preloadConfigs: false });
             await rt.bus.emit('user:group-changed', { uid: purge.uid, oldGid: up.oldGid, newGid: up.newGid });
           }
-          await scheduleSeo(db, cache, c, purge.tid, 'gen');
+          await scheduleSeo({ db, cache }, c, purge.tid, 'gen');
           purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
           const rt = await getExtensions(cache, db, undefined, { preloadConfigs: false });
           await rt.bus.emit('post:deleted', { pid: id, tid: purge.tid, uid: purge.uid });
@@ -189,7 +166,7 @@ export function checkRoutes(): Hono<ReadEnv> {
           await cache.del('forumlist');
           if (tids.length) await patchRuntime(cache, { threads: -tids.length });
           await patchRuntime(cache, { users: -1 });
-          for (const tid of tids) await scheduleSeo(db, cache, c, tid, 'del');
+          for (const tid of tids) await scheduleSeo({ db, cache }, c, tid, 'del');
           const ex = await getExecCtx(c);
           purgeR2Objects(c.env, ex, attachKeys);
           // 头像 R2 对象尽力删除（与 mod 删用户一致；失败不影响一致性）
@@ -234,7 +211,7 @@ export function checkRoutes(): Hono<ReadEnv> {
         db.prepare('UPDATE bbs_thread SET ok = ? WHERE tid = ?').bind(CheckStatus.NORMAL, tid) as unknown as Stmt,
         db.prepare('UPDATE bbs_post SET ok = ? WHERE tid = ? AND isfirst = 1').bind(CheckStatus.NORMAL, tid) as unknown as Stmt,
       ]);
-      await scheduleSeo(db, cache, c, tid, 'gen');
+      await scheduleSeo({ db, cache }, c, tid, 'gen');
     }
 
     return ok(c, t('check.recycleDone'));

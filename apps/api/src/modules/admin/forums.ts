@@ -13,26 +13,21 @@
  * 单帖编辑（正文级）在本模块直写，权限由 adminGuard（gid=1）保证。
  * 全部路由挂在 adminGuard（app.use('/api/admin/*')）之后。
  */
-import { Hono, type Context } from 'hono';
-import { getCookie } from 'hono/cookie';
+import { Hono } from 'hono';
 import { Code, GroupId } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
-import type { Cache } from '../../core/cache';
 import { loadForumlist, loadGrouplist } from '../../core/loaders';
-import { readAdminToken } from '../../core/auth/admin';
 import { ipToLong } from '../../core/auth/session';
 import { postMessageFmt } from '../../core/fmt';
-import { deleteThreadSeoHtml } from '../seo/generate';
+import { invalidateThreadSeo } from '../seo/generate';
 import { filesBucket } from '../attach/core';
 import { attachKeysByTids, purgeR2Objects } from '../../core/purge';
 import { extractImageUrls, extractSummary } from '../write/routes';
 import type { ApiT } from '../../core/i18n';
-import { core, getExecCtx, intParam, patchRuntime, totalPageOf, type ReadEnv } from '../shared';
+import { adminUidOf, as01, core, getExecCtx, intParam, patchRuntime, readJson, totalPageOf, type ReadEnv } from '../shared';
 
-type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
-const as01 = (v: unknown): number => (v === 1 || v === true || v === '1' || v === 'true' ? 1 : 0);
 /** 可选整数过滤值：未传参/空串/非数字 → null（= 不参与过滤）；0 是合法值，故不能用 intParam 的默认值语义 */
 function intFilter(v: string | undefined): number | null {
   if (v === undefined || v.trim() === '') return null;
@@ -79,22 +74,6 @@ interface AccessInput {
   allowdown?: unknown;
 }
 
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    return (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
-}
-
-/** 操作者 uid：admin_at token payload（adminGuard 已校验有效），用于 modlog 归属 */
-async function adminUidOf(c: Ctx): Promise<number> {
-  const secret = c.env.ADMIN_JWT_SECRET ?? c.env.JWT_SECRET ?? '';
-  const p = await readAdminToken(getCookie(c, 'admin_at'), secret);
-  return Number(p?.uid ?? 0);
-}
-
 /** 归一化 access 输入：过滤非法 gid，5 项权限转 0/1 */
 function normAccess(raw: unknown): AccessInput[] {
   if (!Array.isArray(raw)) return [];
@@ -129,16 +108,6 @@ async function childCount(db: D1b, fid: number): Promise<number> {
     .bind(fid)
     .first<{ c: number }>();
   return Number(r?.c ?? 0);
-}
-
-/** SEO HTML 失效旁路（删版块时清主题静态产物）；未绑 R2 跳过 */
-async function invalidateSeo(deps: { db: D1b; cache: Cache; env: Ctx['env'] }, c: Ctx, tids: number[]): Promise<void> {
-  const files = c.env.FILES as unknown as { put?: unknown } | undefined;
-  if (!files || typeof files.put !== 'function' || !tids.length) return;
-  const work = Promise.all(tids.map((tid) => deleteThreadSeoHtml(deps, tid).catch(() => undefined)));
-  const ex = await getExecCtx(c);
-  if (ex?.waitUntil) ex.waitUntil(work);
-  else await work;
 }
 
 export function adminForumRoutes(): Hono<ReadEnv> {
@@ -335,7 +304,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     await cache.del('forumlist');
     if (tids.length) {
       await patchRuntime(cache, { threads: -tids.length });
-      await invalidateSeo({ db, cache, env: c.env }, c, tids);
+      await invalidateThreadSeo({ db, cache }, c, tids);
     }
     return ok(c, t('common.deleted'), { data: { fid, threads: tids.length } });
   });
@@ -504,7 +473,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
 
     await db.batch(stmts);
     if (moved) await cache.del('forumlist');
-    await invalidateSeo({ db, cache, env: c.env }, c, [tid]);
+    await invalidateThreadSeo({ db, cache }, c, [tid]);
     return ok(c, t('common.saved'), { data: { tid } });
   });
 

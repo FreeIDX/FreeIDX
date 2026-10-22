@@ -5,12 +5,15 @@
  *  - head 贡献：经 getExtensions().bus.emit('render:head', meta)，seo 插件的 OG/JSON-LD 在此并入（契约⑤）。
  *  - 韧性：整体 try/catch，失败仅回落到分发侧模板串兜底，绝不影响写请求成功语义。
  */
+import type { Context } from 'hono';
 import type { D1b } from '../../core/db';
 import type { Cache } from '../../core/cache';
 import type { Env } from '../../types/env';
 import { loadSetting } from '../../core/loaders';
 import { createApiT } from '../../core/i18n';
 import { getExtensions } from '../../core/extensions';
+import { escAttr } from '../../core/fmt';
+import { getExecCtx, type ReadEnv } from '../shared';
 import { newPageMeta, renderFallbackHtml } from './core';
 
 interface SeoDeps {
@@ -18,9 +21,6 @@ interface SeoDeps {
   cache: Cache;
   env: Env;
 }
-
-const escAttr = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 interface ThreadSeoRow {
   tid: number;
@@ -94,6 +94,40 @@ export async function deleteThreadSeoHtml(deps: SeoDeps, tid: number): Promise<v
   } catch (err) {
     console.warn(`[seo] delete html failed for tid=${tid}:`, err);
   }
+}
+
+/** SEO HTML 旁路调度（写时定稿产物）：未绑定 R2 跳过；有执行上下文 waitUntil，否则内联等待 */
+export async function scheduleSeo(
+  deps: { db: D1b; cache: Cache },
+  c: Context<ReadEnv>,
+  tid: number,
+  mode: 'gen' | 'del',
+): Promise<void> {
+  const files = c.env.FILES as unknown as { put?: unknown } | undefined;
+  if (!files || typeof files.put !== 'function') return;
+  const seoDeps = { db: deps.db, cache: deps.cache, env: c.env };
+  const work =
+    mode === 'del'
+      ? deleteThreadSeoHtml(seoDeps, tid)
+      : generateThreadSeoHtml(seoDeps, tid).then((written) => (written ? undefined : deleteThreadSeoHtml(seoDeps, tid)));
+  const ex = await getExecCtx(c);
+  if (ex?.waitUntil) ex.waitUntil(work);
+  else await work;
+}
+
+/** SEO HTML 批量失效旁路（列表删除/版块删除）：未绑定 R2 跳过；有执行上下文 waitUntil，否则内联等待 */
+export async function invalidateThreadSeo(
+  deps: { db: D1b; cache: Cache },
+  c: Context<ReadEnv>,
+  tids: number[],
+): Promise<void> {
+  const files = c.env.FILES as unknown as { put?: unknown } | undefined;
+  if (!files || typeof files.put !== 'function' || !tids.length) return;
+  const seoDeps = { db: deps.db, cache: deps.cache, env: c.env };
+  const work = Promise.all(tids.map((tid) => deleteThreadSeoHtml(seoDeps, tid).catch(() => undefined)));
+  const ex = await getExecCtx(c);
+  if (ex?.waitUntil) ex.waitUntil(work);
+  else await work;
 }
 /* ---------------- 改名 SEO 重建队列（§20.2 C 档） ---------------- */
 

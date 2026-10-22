@@ -5,7 +5,7 @@
  * 重哈希发生在改密（低频、本就单次哈希）或迁移任务；接口含 iterations 参数，调参不动业务代码。
  * 入参口令均为前端预哈希串（存量数据迁移期保留）。
  */
-import { md5Hex } from './md5';
+import { md5Hex } from '@freeidx/shared';
 
 /** S1 spike 本机标定：2 万次 ≈2.7ms（≤8ms 目标 3 倍余量，抗 workerd 波动）；远端复核后再上调 */
 export const PBKDF2_ITERATIONS = 20_000;

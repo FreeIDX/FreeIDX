@@ -12,7 +12,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import type { ApiT } from '../../core/i18n';
 import type { D1b } from '../../core/db';
 import { filesBucket } from '../attach/core';
-import { core, type ReadEnv } from '../shared';
+import { core, readJson, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
 
@@ -86,15 +86,6 @@ function validate(input: Record<string, unknown>, cur: Record<string, unknown>, 
     }
   }
   return out;
-}
-
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    return (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
 }
 
 /** 读 kv 'setting' 存储态 JSON（解析失败视为空对象） */

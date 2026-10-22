@@ -18,21 +18,10 @@ import type { Stmt } from '../../core/db';
 import { USER_ADMIN_LIST_COLS } from '../../core/db/columns';
 import { ipToStr } from '../../core/auth/session';
 import { loadGrouplist, loadSetting } from '../../core/loaders';
-import { core, intParam, totalPageOf, type ReadEnv } from '../shared';
+import { as01, core, intParam, readJson, totalPageOf, type ReadEnv } from '../shared';
 import { purgeThread } from '../check/routes';
 
 type Ctx = Context<ReadEnv>;
-const as01 = (v: unknown): number => (v === 1 || v === true || v === '1' || v === 'true' ? 1 : 0);
-
-async function readJson(c: Ctx): Promise<Record<string, unknown>> {
-  const t = c.get('t');
-  try {
-    return (await c.req.json()) as Record<string, unknown>;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
-}
-
 /** 审核队列 page/size（后台约定，默认 20） */
 function pageArgs(c: Ctx): { page: number; size: number; offset: number } {
   const page = Math.max(1, intParam(c.req.query('page'), 1));

@@ -43,8 +43,8 @@ import {
 } from '../../core/points';
 import { NoticeType, noticeQuoteHtml, noticeReplyHtml, noticeSend } from '../../core/notice';
 import { associateAttachments } from '../attach/routes';
-import { generateThreadSeoHtml, deleteThreadSeoHtml } from '../seo/generate';
-import { getExecCtx, intParam, patchRuntime, type ReadEnv } from '../shared';
+import { scheduleSeo } from '../seo/generate';
+import { getExecCtx, intParam, patchRuntime, readJson, type ReadEnv } from '../shared';
 import type { ApiT } from '../../core/i18n';
 
 type Ctx = Context<ReadEnv>;
@@ -118,25 +118,6 @@ async function emit<N extends EventName>(core: Core, event: N, payload: EventPay
   const rt = await getExtensions(core.cache, core.db, undefined, { preloadConfigs: false });
   await rt.bus.emit(event, payload);
 }
-
-/**
- * SEO HTML 生成调度（T2-7，写时定稿产物）。请求期 CPU≈0：优先 waitUntil 旁路，无执行上下文时内联等待。
- * 未绑定 R2（FILES 无 put）→ 整段跳过（零额外查询，本地/测试安全）。mode='gen' 生成（不存在则删）；'del' 主动失效。
- */
-async function scheduleSeo(core: Core, c: Ctx, tid: number, mode: 'gen' | 'del'): Promise<void> {
-  const files = c.env.FILES as unknown as { put?: unknown } | undefined;
-  if (!files || typeof files.put !== 'function') return;
-  const deps = { db: core.db, cache: core.cache, env: c.env };
-  const work =
-    mode === 'del'
-      ? deleteThreadSeoHtml(deps, tid)
-      : generateThreadSeoHtml(deps, tid).then((written) => (written ? undefined : deleteThreadSeoHtml(deps, tid)));
-  const ex = await getExecCtx(c);
-  if (ex) ex.waitUntil?.(work);
-  else await work;
-}
-
-/** Hono 无 ExecutionContext 绑定时 c.executionCtx 会抛错（本地/测试）——安全取用（见 modules/shared.ts） */
 
 /** 标签归一（idx_tag 轻量实现）：仅保留 light 扩展「标签定义」内的名称（服务端白名单），
  *  ≤4 个、每个 ≤12 字、剔空白/逗号、去重，存逗号分隔串；未定义标签直接丢弃（与发帖页可选集合一致） */
@@ -684,15 +665,6 @@ async function deletePost(c: Ctx): Promise<Response> {
   await emit(core, 'post:deleted', { pid, tid, uid: postUid });
   await scheduleSeo(core, c, tid, 'gen');
   return ok(c, t('common.deleted'), { data: { pid, tid } });
-}
-
-async function readJson<T>(c: Ctx): Promise<T> {
-  const t = c.get('t');
-  try {
-    return await c.req.json<T>();
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidJson'));
-  }
 }
 
 export function writeRoutes(): Hono<ReadEnv> {

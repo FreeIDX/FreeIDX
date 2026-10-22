@@ -7,7 +7,7 @@
  *    服务端保存为「先全清后置选中」；广告推广卡不做（与 AboutPage 去致谢口径一致）。
  */
 import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkAudit, fmtDate, recycleThread } from '../../lib/api';
 import { apiErrorMessage } from '../../lib/errors';
@@ -26,7 +26,6 @@ import { useAdminT } from '../t';
 import { useGroupName } from '../../lib/i18n';
 import { CHECK_TABS } from '../tabs';
 import {
-  AdminPagination,
   Alert,
   Button,
   Card,
@@ -34,9 +33,11 @@ import {
   Field,
   PageTitle,
   PermissionMatrix,
+  QueuePager,
   Select,
   TabBar,
   Table,
+  usePage,
 } from '../ui';
 
 const PAGE_SIZE = 20;
@@ -51,21 +52,6 @@ function CheckTabs() {
   const t = useAdminT();
   const active = useActiveTab();
   return <TabBar active={active} items={CHECK_TABS.map((x) => ({ k: x.k, to: x.to, text: t(x.textKey, x.fallback) }))} />;
-}
-
-/** 列表页码（setSearchParams 的对象写法不接受 undefined，统一只读） */
-function usePage(): number {
-  const [sp] = useSearchParams();
-  return Math.max(1, Number(sp.get('page') ?? 1) || 1);
-}
-
-function QueuePager({ page, totalPage, path }: { page: number; totalPage: number; path: string }) {
-  if (totalPage <= 1) return null;
-  return (
-    <div className="mt-3 flex justify-end">
-      <AdminPagination page={page} totalPage={totalPage} href={(p) => (p === 1 ? path : `${path}?page=${p}`)} />
-    </div>
-  );
 }
 
 /**

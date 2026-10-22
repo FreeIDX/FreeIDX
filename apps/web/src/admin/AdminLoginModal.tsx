@@ -9,9 +9,9 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
+import { md5Hex } from '@freeidx/shared';
 import { ApiError } from '../lib/api';
 import { queryClient } from '../lib/query-client';
-import { md5 } from '../lib/md5';
 import { useAuth } from '../store/auth';
 import { postAdminToken } from './api';
 import { useAdminT } from './t';
@@ -76,7 +76,7 @@ export function AdminLoginModal() {
     setError('');
     try {
       // 与前台登录同口径：明文不出前端，服务端拿到的是 32 位 md5 预哈希
-      await postAdminToken(md5(password));
+      await postAdminToken(md5Hex(password));
       setState('ok');
       setPassword('');
       // 成功：短暂展示「登录成功」后收起弹窗，失效全量查询让当前页带着新 admin_at 重取

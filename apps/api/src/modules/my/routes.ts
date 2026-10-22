@@ -20,28 +20,14 @@ import { destroyUserSessions } from '../../core/auth/session';
 import { isPassword } from '../../core/auth/validate';
 import { loadExtConfig } from '../../core/ext-store';
 import { LIGHT_EXT_ID, parseLightConfig } from '../../extensions/light';
-import type { ApiT } from '../../core/i18n';
 import type { Stmt } from '../../core/db';
 import type { Env } from '../../types/env';
 import type { ReadEnv } from '../shared';
-import { intParam, avatarAutoOf } from '../shared';
+import { decodeBase64, intParam, avatarAutoOf } from '../shared';
 
 type Ctx = Context<ReadEnv>;
 const AVATAR_MAX_BYTES = 40_000; // 头像字节上限
 const now = () => Math.floor(Date.now() / 1000);
-
-/** data URL / 裸 base64 → 字节 */
-function decodeBase64(raw: string, t: ApiT): Uint8Array {
-  const b64 = raw.includes(',') && raw.slice(0, 5).toLowerCase() === 'data:' ? raw.slice(raw.indexOf(',') + 1) : raw;
-  try {
-    const bin = atob(b64.trim());
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  } catch {
-    throw new AppError(Code.VALIDATION_ERROR, t('common.invalidBase64'));
-  }
-}
 
 /** 头像 R2 key：avatar/{%09d uid 前 3 位}/{uid}.png（/files 直链已放行 avatar/ 前缀） */
 export function avatarKey(uid: number): string {
