@@ -6,8 +6,8 @@
     "changelogPath": ".github/releases/changelog/v1.0.0.md",
     "publishedAt": "2026-10-22T14:14:31+08:00",
     "createdAt": "2026-10-22T14:14:31+08:00",
-    "updatedAt": "2026-10-22T14:14:31+08:00",
-    "targetCommitish": "c7fffba922d59f4565033e51e7de6fd04c99e4cb",
+    "updatedAt": "2026-10-22T18:21:14+08:00",
+    "targetCommitish": "816c38559acc6b2d0a20f56ab15b69169e53c497",
     "authorLogin": "kevin",
     "draft": false,
     "prerelease": false
