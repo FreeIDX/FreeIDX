@@ -1,0 +1,52 @@
+name = "freeidx-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# 合并部署：前端 SPA 产物作为本 Worker 的静态资源一起上线（apps/web 的 Vite outDir）
+[assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# 除静态资源目录外的请求一律先进 Worker：/api、/files、爬虫预渲染 HTML、.htm 旧链 301、robots/sitemap。
+# 不列进这里的路径会由静态资源直接应答，Worker 不运行 → 预渲染与 301 失效。
+# /assets/*（构建产物）与 /emoicon /avatars /theme-light /fonts（public/ 根级纯静态资源）
+# 全部走否定模式交回静态资源层：CF 对静态资源请求免费且不计 Worker 请求额度，
+# 否则每张头像/表情/背景/字体都会消耗 1 次 Worker 请求，并白白触发中间件链路（含 2 次 KV 读）。
+run_worker_first = ["/*", "!/assets/*", "!/emoicon/*", "!/avatars/*", "!/theme-light/*", "!/fonts/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "freeidx"
+database_id = "00000000-0000-0000-0000-000000000000" # TODO: wrangler d1 create freeidx 后回填
+
+[[kv_namespaces]]
+binding = "CACHE" # 代码中经 env.CACHE 访问，保持不变
+# 云端命名空间名用 freeidx-cache（避免与其他项目重名），CI 自动创建/复用
+id = "00000000-0000-0000-0000-000000000000" # TODO: wrangler kv namespace create freeidx-cache 后回填
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "freeidx-files"
+# 建议给桶加一条生命周期规则（CI 会尝试自动配置，见 r2-lifecycle.json / deploy.yml）：
+#   前缀 tmp/ 1 天过期 —— 临时附件的最终兜底（Worker 侧每小时 GC 只删 40 个/轮，受免费层子请求限额约束）
+# 手动等价入口：Dashboard → R2 → freeidx-files → Settings → Object Lifecycle Rules
+
+[triggers]
+# §11.1：每 5 分钟档 + 每日凌晨档；§15.3 每小时掉单对账档（T5-7）
+# 每日档错开 03:01：避免与 */5、每小时档在 03:00 并发读改写 runtime（today* 会被旧值覆盖）
+crons = ["*/5 * * * *", "0 * * * *", "1 3 * * *"]
+
+[vars]
+# 主域名兜底（可选，留空即可）：对外绝对地址（邮件/SEO canonical/支付回跳）优先取后台「站点网址」，
+# 这里只在后台留空时兜底；两者都空则回落当前请求域名。多域名绑定下无需在此写死域名。
+# 本地开发同理：留空即按请求域（http://localhost:8787）生成链接。
+SITE_URL = ""
+# 密钥不入库（§13.1）：
+#   wrangler secret put JWT_SECRET      # JWT/HMAC 密钥（含 csrf 签名）
+#   （邮件无仓库密钥：发信走 cloudflare:sockets 直连 SMTP 账号池，账号在后台「邮件设置」配置，
+#     落 ext:email:config / ext:email:secret；README 旧文档中的 EMAIL_API_KEY 已废弃）
+#   wrangler secret put TURNSTILE_SECRET
+#   wrangler secret put SECRETS_MASTER_KEY  # 插件密钥 AES-GCM master key（§15.5）
+
+[observability]
+enabled = true

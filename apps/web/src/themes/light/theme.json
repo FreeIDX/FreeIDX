@@ -1,0 +1,23 @@
+{
+  "id": "light",
+  "name": {
+    "zh-cn": "简蓝主题",
+    "zh-tw": "簡藍主題",
+    "en-us": "Simple Blue",
+    "ja-jp": "簡藍テーマ",
+    "ko-kr": "간람 테마",
+    "fr-fr": "Simple Blue",
+    "de-de": "Simple Blue",
+    "es-es": "Simple Blue",
+    "ru-ru": "Simple Blue",
+    "th-th": "Simple Blue"
+  },
+  "description": {
+    "zh-cn": "内置基底主题：整站布局与全部前台页面均在本主题目录内实现，几十项外观配置在插件中心「简蓝主题」中维护。",
+    "en-us": "Built-in base theme: the site layout and every front-end page are implemented inside this theme folder; appearance options live in the Simple Blue plugin."
+  },
+  "version": "1.0.0",
+  "author": "FreeIDX",
+  "order": 0,
+  "configPath": "/admin/extensions/light"
+}

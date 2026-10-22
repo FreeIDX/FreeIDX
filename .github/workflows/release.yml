@@ -1,0 +1,71 @@
+name: Publish Release
+
+# 推送 v* Tag 时自动完成：
+#   1. 按 Tag 生成发布索引与更新日志（scripts/gen-release.mjs）
+#   2. 把索引提交回 main（GITHUB_TOKEN 推送不会触发其它工作流）
+#   3. 创建 GitHub Release（已存在则跳过）
+# 后台「版本更新」页直读仓库 raw 文件，因此索引更新后无需重新构建站点。
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 在 main 上提交索引；全量历史用于计算上一发布..当前 Tag 的提交区间
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 生成发布索引与更新日志
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node scripts/gen-release.mjs
+
+      - name: 提交发布索引与包版本
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$(git status --porcelain .github/releases apps/web/package.json apps/api/package.json packages/shared/package.json)" ]; then
+            echo "发布记录没有变化，跳过提交"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/releases apps/web/package.json apps/api/package.json packages/shared/package.json
+          git commit -m "chore(release): ${TAG}"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，跳过创建"
+            exit 0
+          fi
+          PRE=""
+          case "$TAG" in
+            *-*) PRE="--prerelease" ;;
+          esac
+          gh release create "$TAG" \
+            --title "FreeIDX ${TAG}" \
+            --notes-file ".github/releases/changelog/${TAG}.md" \
+            --verify-tag \
+            $PRE

@@ -1,0 +1,28 @@
+{
+  "name": "@freeidx/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "db:apply": "wrangler d1 migrations apply freeidx --local",
+    "db:apply:remote": "wrangler d1 migrations apply freeidx --remote",
+    "db:migrations:check": "wrangler d1 migrations list freeidx --local --json",
+    "db:seed": "wrangler d1 execute freeidx --local --file=./seed/seed.sql",
+    "db:seed:remote": "wrangler d1 execute freeidx --local=false --file=./seed/seed.sql"
+  },
+  "dependencies": {
+    "@freeidx/shared": "workspace:*",
+    "hono": "^4.9.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250822.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.32.0"
+  }
+}
