@@ -1,0 +1,20 @@
+# Workers 静态资源响应头（仅对「assets 层直接应答」的请求生效，见 wrangler.toml 的 run_worker_first）
+# 这些路径都是内容不变的大文件/带版本指纹，交给浏览器长缓存，避免每次导航都回源协商。
+#
+# 注意：/fonts/* 未带内容 hash，替换字体时必须同步改文件名（见 globals.css 的 @font-face），
+# 否则 immutable 会让老访客永远用旧字体。
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/theme-light/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/emoicon/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/avatars/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

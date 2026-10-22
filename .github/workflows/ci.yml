@@ -22,6 +22,8 @@ jobs:
       - run: pnpm typecheck
       # 门禁 1.5：i18n 生成物与 PHP 源一致（T1-5，一次生成纳入 CI）
       - run: pnpm i18n:check
+      # 门禁 1.6：字体子集覆盖全部词条用字（防新增生僻字后静默回退系统字）
+      - run: pnpm fonts:check
       # 门禁 2：单测（含三预算断言）
       - run: pnpm test
       # 门禁 3：D1 迁移 dry-run（本地 SQLite 全量应用）

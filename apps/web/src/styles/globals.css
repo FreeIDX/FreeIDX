@@ -111,11 +111,19 @@
  * 主蓝 #0084ff（导航/标签/分页）、发帖按钮 #006eff、画布 #f2f2f2、白卡 6px 悬浮投影、
  * 发丝线 rgba(178,186,194,.15)、正文链接 #1f4977。遗留令牌名全部保留并映射到主题色。
  */
+/*
+ * 正文字体：源字体 885.7KB（6619 字形）按「常用 3500 字 ∪ 站点用字」再子集为 ~454KB（-49%），
+ * 未收录的生僻字回退系统字（微软雅黑/苹方），中文长文实测回退率 0.08%。
+ * 生成：pnpm fonts:build（scripts/gen-font-subset.mjs）；校验：pnpm fonts:check。
+ *
+ * 注意：/fonts/* 在 public/_headers 里声明了 immutable，换字体必须同时升级文件名版本号（v1 → v2），
+ * 否则老访客一年内不会重新拉取。
+ */
 @font-face {
   font-family: 'HarmonyOS_Sans_SC_Medium';
   font-style: normal;
   font-display: swap;
-  src: url('/fonts/HarmonyOS_Sans_SC_Medium.subset.woff2') format('woff2');
+  src: url('/fonts/HarmonyOS_Sans_SC_Medium.subset.v1.woff2') format('woff2');
 }
 
 @theme {

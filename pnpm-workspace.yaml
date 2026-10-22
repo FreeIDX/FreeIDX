@@ -1,6 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+# unicode-properties@1.4.0 的 package.json exports 路径写错（./dist.main.cjs），
+# 会让 fontkit（fonts:build/fonts:check 用）在 require 阶段直接 MODULE_NOT_FOUND；1.4.1 已修复。
+overrides:
+  unicode-properties: ^1.4.1
 onlyBuiltDependencies:
   - esbuild
   - workerd
