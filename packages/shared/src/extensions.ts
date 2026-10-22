@@ -15,6 +15,12 @@ export interface ExtensionManifest {
   enable: 0 | 1;
   dependencies?: Record<string, string>;
   capabilities?: Record<string, unknown>;
+  /**
+   * 不在「插件中心」列表中展示（详情/启停接口仍可用）。
+   * 用途：主题类插件已由「主题管理」统一呈现（如简蓝主题 light），插件中心再列一次会重复；
+   * 但其配置表单仍托管在 /admin/extensions/{id}，故只隐藏列表项，不摘除目录条目。
+   */
+  hiddenInCatalog?: boolean;
 }
 
 /** 生命周期事件（契约 ②） */

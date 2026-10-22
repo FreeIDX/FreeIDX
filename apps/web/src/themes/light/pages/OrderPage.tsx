@@ -8,13 +8,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { checkoutOrder, fetchOrder, redeemOrder, type CheckoutData } from '../lib/api';
-import { apiErrorMessage } from '../lib/errors';
-import { fmtDate } from '../lib/api';
-import { useAuth } from '../store/auth';
-import { useAuthModal } from '../store/authModal';
-import { useT } from '../lib/i18n';
-import { Alert, Breadcrumb, Button, Card, inputCls } from '../components/ui';
+import { checkoutOrder, fetchOrder, redeemOrder, type CheckoutData } from '../../../lib/api';
+import { apiErrorMessage } from '../../../lib/errors';
+import { fmtDate } from '../../../lib/api';
+import { useAuth } from '../../../store/auth';
+import { useAuthModal } from '../../../store/authModal';
+import { useT } from '../../../lib/i18n';
+import { Alert, Breadcrumb, Button, Card, inputCls } from '../../../components/ui';
 
 /** 分 → 元（2 位小数）+ 币种 ISO 代码 */
 function priceOf(cents: number, currency: string): string {

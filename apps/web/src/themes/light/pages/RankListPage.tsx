@@ -5,14 +5,14 @@
  */
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { getRankList, type RankListData } from '../lib/api';
-import { posInt } from '../lib/params';
-import { useAuth } from '../store/auth';
-import { useT } from '../lib/i18n';
-import { Avatar } from '../components/Avatar';
-import { Breadcrumb, Card, CardTabs, cx } from '../components/ui';
-import { Pagination } from '../components/Pagination';
-import { RankNo } from '../components/rank';
+import { getRankList, type RankListData } from '../../../lib/api';
+import { posInt } from '../../../lib/params';
+import { useAuth } from '../../../store/auth';
+import { useT } from '../../../lib/i18n';
+import { Avatar } from '../../../components/Avatar';
+import { Breadcrumb, Card, CardTabs, cx } from '../../../components/ui';
+import { Pagination } from '../../../components/Pagination';
+import { RankNo } from '../../../components/rank';
 
 type RankSort = 'threads' | 'posts' | 'credits' | 'golds' | 'rmbs';
 const SORTS: RankSort[] = ['threads', 'posts', 'credits', 'golds', 'rmbs'];

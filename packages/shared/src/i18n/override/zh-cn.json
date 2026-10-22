@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "数字越小越靠前（前台按 sort 升序展示）",
   "vip_sort_label": "排序",
   "vip_status_disabled": "停用",
-  "vip_updated": "计划已更新"
+  "vip_updated": "计划已更新",
+  "admin_menu_theme": "主题管理",
+  "admin_theme_config": "该主题的配置项在插件中心维护",
+  "admin_theme_current": "当前启用",
+  "admin_theme_dev_doc": "完整规范见 docs/theme-spec.md",
+  "admin_theme_dev_step1": "新建文件夹 apps/web/src/themes/<id>/，文件夹名即主题 id",
+  "admin_theme_dev_step2": "放入 theme.json（名称/简介/版本）与 index.tsx（默认导出 ThemeModule）",
+  "admin_theme_dev_step3": "可选 theme.css 与 preview.png；无需改动任何注册文件",
+  "admin_theme_dev_title": "主题开发规范",
+  "admin_theme_empty": "未发现任何内置主题",
+  "admin_theme_enable": "启用",
+  "admin_theme_in_use": "使用中",
+  "admin_theme_reset": "恢复默认",
+  "admin_theme_reset_done": "已恢复默认主题",
+  "admin_theme_settings": "设置",
+  "admin_theme_switched": "已启用「{name}」，刷新前台页面后生效"
  }
 }

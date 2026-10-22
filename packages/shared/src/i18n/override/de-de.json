@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "Kleinere Zahlen erscheinen weiter vorn (Frontend sortiert aufsteigend nach sort)",
   "vip_sort_label": "Sortierung",
   "vip_status_disabled": "Deaktiviert",
-  "vip_updated": "Tarif aktualisiert"
+  "vip_updated": "Tarif aktualisiert",
+  "admin_menu_theme": "Theme-Verwaltung",
+  "admin_theme_config": "Die Optionen dieses Themes werden im Plugin-Center verwaltet",
+  "admin_theme_current": "Aktiv",
+  "admin_theme_dev_doc": "Vollständige Spezifikation: docs/theme-spec.md",
+  "admin_theme_dev_step1": "Ordner apps/web/src/themes/<id>/ anlegen; der Ordnername ist die Theme-ID",
+  "admin_theme_dev_step2": "theme.json (Name/Beschreibung/Version) und index.tsx (Standardexport eines ThemeModule) hinzufügen",
+  "admin_theme_dev_step3": "Optional theme.css und preview.png; keine Registrierungsdatei nötig",
+  "admin_theme_dev_title": "Theme-Entwicklungsspezifikation",
+  "admin_theme_empty": "Kein integriertes Theme gefunden",
+  "admin_theme_enable": "Aktivieren",
+  "admin_theme_in_use": "In Verwendung",
+  "admin_theme_reset": "Auf Standard zurücksetzen",
+  "admin_theme_reset_done": "Standard-Theme wiederhergestellt",
+  "admin_theme_settings": "Einstellungen",
+  "admin_theme_switched": "\"{name}\" aktiviert. Frontend neu laden, um es anzuwenden."
  }
 }

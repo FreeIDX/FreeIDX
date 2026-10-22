@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "ค่าน้อยแสดงก่อน (ฝั่งผู้ใช้เรียง sort จากน้อยไปมาก)",
   "vip_sort_label": "ลำดับ",
   "vip_status_disabled": "ปิดใช้",
-  "vip_updated": "อัปเดตแผนแล้ว"
+  "vip_updated": "อัปเดตแผนแล้ว",
+  "admin_menu_theme": "จัดการธีม",
+  "admin_theme_config": "ตัวเลือกของธีมนี้จัดการในศูนย์ปลั๊กอิน",
+  "admin_theme_current": "ใช้งานอยู่",
+  "admin_theme_dev_doc": "ดูข้อกำหนดฉบับเต็มที่ docs/theme-spec.md",
+  "admin_theme_dev_step1": "สร้างโฟลเดอร์ apps/web/src/themes/<id>/ ชื่อโฟลเดอร์คือ id ของธีม",
+  "admin_theme_dev_step2": "วาง theme.json (ชื่อ/คำอธิบาย/เวอร์ชัน) และ index.tsx (ส่งออก ThemeModule เป็นค่าเริ่มต้น)",
+  "admin_theme_dev_step3": "ไม่บังคับ: theme.css และ preview.png ไม่ต้องแก้ไฟล์ลงทะเบียนใด ๆ",
+  "admin_theme_dev_title": "ข้อกำหนดการพัฒนาธีม",
+  "admin_theme_empty": "ไม่พบธีมในตัว",
+  "admin_theme_enable": "เปิดใช้งาน",
+  "admin_theme_in_use": "กำลังใช้งาน",
+  "admin_theme_reset": "คืนค่าเริ่มต้น",
+  "admin_theme_reset_done": "คืนค่าธีมเริ่มต้นแล้ว",
+  "admin_theme_settings": "ตั้งค่า",
+  "admin_theme_switched": "เปิดใช้งาน \"{name}\" แล้ว รีเฟรชหน้าเว็บเพื่อให้มีผล"
  }
 }

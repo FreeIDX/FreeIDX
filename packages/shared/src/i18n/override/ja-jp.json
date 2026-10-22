@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "数値が小さいほど前に表示されます（フロントエンドは sort の昇順で表示）",
   "vip_sort_label": "並び順",
   "vip_status_disabled": "無効",
-  "vip_updated": "プランを更新しました"
+  "vip_updated": "プランを更新しました",
+  "admin_menu_theme": "テーマ管理",
+  "admin_theme_config": "このテーマの設定項目はプラグインセンターで管理します",
+  "admin_theme_current": "現在有効",
+  "admin_theme_dev_doc": "詳細な仕様は docs/theme-spec.md",
+  "admin_theme_dev_step1": "フォルダ apps/web/src/themes/<id>/ を作成（フォルダ名がテーマ id）",
+  "admin_theme_dev_step2": "theme.json（名称/説明/バージョン）と index.tsx（ThemeModule をデフォルトエクスポート）を配置",
+  "admin_theme_dev_step3": "任意で theme.css と preview.png；登録ファイルの変更は不要",
+  "admin_theme_dev_title": "テーマ開発仕様",
+  "admin_theme_empty": "内蔵テーマが見つかりません",
+  "admin_theme_enable": "有効化",
+  "admin_theme_in_use": "使用中",
+  "admin_theme_reset": "既定に戻す",
+  "admin_theme_reset_done": "既定のテーマに戻しました",
+  "admin_theme_settings": "設定",
+  "admin_theme_switched": "「{name}」を有効化しました。フロントページを再読み込みすると反映されます"
  }
 }

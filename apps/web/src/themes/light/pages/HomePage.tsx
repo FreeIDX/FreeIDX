@@ -1,14 +1,14 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router';
-import { useAuth } from '../store/auth';
-import { apiGet } from '../lib/api';
-import { posInt } from '../lib/params';
-import { siteThreadsQuery } from '../lib/queries';
-import { InsertCode, useInsertCodes } from '../components/InsertCode';
-import { Pagination } from '../components/Pagination';
-import { ThreadList } from '../components/ThreadList';
-import { AnnouncementBar } from '../components/AnnouncementBar';
-import { CheckinCard } from '../components/CheckinCard';
+import { useAuth } from '../../../store/auth';
+import { apiGet } from '../../../lib/api';
+import { posInt } from '../../../lib/params';
+import { siteThreadsQuery } from '../../../lib/queries';
+import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
+import { Pagination } from '../../../components/Pagination';
+import { ThreadList } from '../../../components/ThreadList';
+import { AnnouncementBar } from '../../../components/AnnouncementBar';
+import { CheckinCard } from '../../../components/CheckinCard';
 import {
   Alert,
   Card,
@@ -19,10 +19,10 @@ import {
   QuickHelpCard,
   SidePanel,
   UserSideCard,
-} from '../components/ui';
-import { HotFavoritesCard, RankThreadCard, RankUserCard } from '../components/rank';
-import { useT, useGroupName } from '../lib/i18n';
-import { useLight } from '../store/theme';
+} from '../../../components/ui';
+import { HotFavoritesCard, RankThreadCard, RankUserCard } from '../../../components/rank';
+import { useT, useGroupName } from '../../../lib/i18n';
+import { useLight } from '../../../store/theme';
 
 /** 首页：左侧版块导航（主页入口 + 版块直链）+
  *  最新主题卡（卡头 tabs + 分页）+ 右栏（用户/游客卡 → 签到 → 帖子排行 → 站点数据 → 排行榜 → 注入位） */

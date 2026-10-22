@@ -9,6 +9,7 @@ import { hasSeeCheck } from '../../core/check';
 import { loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
 import { remember } from '../../core/cache';
 import { getExtensions } from '../../core/extensions';
+import { loadThemeId } from '../../core/theme';
 import { ok } from '../../middleware/envelope';
 import { core, avatarAutoOf, type ReadEnv } from '../shared';
 
@@ -113,8 +114,11 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
     const rt = await getExtensions(cache, db, c.env);
     await rt.bus.emit('bootstrap:contribute', { payload: ext });
 
+    // 启用主题 id：与 ext.light 分开两个概念——theme 选「用哪套外观」，ext.light 是简蓝的配置面
+    const theme = await loadThemeId(cache, db);
+
     return ok(c, 'ok', {
-      data: { version: '0.1.0', setting, forumlist: nodes, grouplist: groups, me, runtime, ext },
+      data: { version: '0.1.0', setting, forumlist: nodes, grouplist: groups, me, runtime, ext, theme },
     });
   });
 

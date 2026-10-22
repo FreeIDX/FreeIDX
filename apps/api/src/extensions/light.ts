@@ -2190,6 +2190,9 @@ export const lightPlugin: ExtensionModule = {
     installed: 1,
     enable: 1, // 出厂启用：前台主题即简蓝主题，停用后轮播/友链/标签/底栏等配置面整体消失
     capabilities: { theme: 'light', config: Object.keys(LIGHT_SCHEMA.fields) },
+    // 简蓝已作为内置主题 themes/light 在「主题管理」统一呈现；插件中心不再重复列出，
+    // 但其配置表单仍托管在 /admin/extensions/light（主题管理卡片「设置」跳转至此）。
+    hiddenInCatalog: true,
   },
   schema: LIGHT_SCHEMA,
   setup(api: ExtensionApi) {

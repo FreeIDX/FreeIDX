@@ -1,21 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { apiGet, fmtDate, toggleFollow } from '../lib/api';
-import { apiErrorMessage } from '../lib/errors';
-import { posInt } from '../lib/params';
-import { useT, useGroupName } from '../lib/i18n';
-import { Avatar } from '../components/Avatar';
-import { FollowUserList } from '../components/FollowUserList';
-import { PmButton } from '../components/PmButton';
-import { ThreadList } from '../components/ThreadList';
-import { UserReplyList } from '../components/UserReplyList';
-import { VBadge } from '../components/VBadge';
-import { useCursorThreads } from '../hooks/useCursorThreads';
-import { useAuth } from '../store/auth';
-import { useAuthModal } from '../store/authModal';
-import { useLight, userBgImage } from '../store/theme';
-import { Button, LinkButton, UserInfoRow, UserSideItem, cx } from '../components/ui';
+import { apiGet, fmtDate, toggleFollow } from '../../../lib/api';
+import { apiErrorMessage } from '../../../lib/errors';
+import { posInt } from '../../../lib/params';
+import { useT, useGroupName } from '../../../lib/i18n';
+import { Avatar } from '../../../components/Avatar';
+import { FollowUserList } from '../../../components/FollowUserList';
+import { PmButton } from '../../../components/PmButton';
+import { ThreadList } from '../../../components/ThreadList';
+import { UserReplyList } from '../../../components/UserReplyList';
+import { VBadge } from '../../../components/VBadge';
+import { useCursorThreads } from '../../../hooks/useCursorThreads';
+import { useAuth } from '../../../store/auth';
+import { useAuthModal } from '../../../store/authModal';
+import { useLight, userBgImage } from '../../../store/theme';
+import { Button, LinkButton, UserInfoRow, UserSideItem, cx } from '../../../components/ui';
 
 export interface UserProfile {
   uid: number;

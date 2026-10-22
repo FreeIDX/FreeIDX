@@ -2,18 +2,18 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { Code, GroupId } from '@freeidx/shared';
-import { useAuth } from '../store/auth';
-import { useLight } from '../store/theme';
-import { ApiError, apiGet, modThreads } from '../lib/api';
-import { posInt } from '../lib/params';
-import { useT } from '../lib/i18n';
+import { useAuth } from '../../../store/auth';
+import { useLight } from '../../../store/theme';
+import { ApiError, apiGet, modThreads } from '../../../lib/api';
+import { posInt } from '../../../lib/params';
+import { useT } from '../../../lib/i18n';
 import { NotFoundPage } from './NotFoundPage';
-import { Pagination } from '../components/Pagination';
-import { ThreadList, type ThreadPageData } from '../components/ThreadList';
-import { Alert, Card, CardTabs, CardTitle, CreateButton, HomeSideNav, Modal, SidePanel, TagBadge, TwoCol, cx } from '../components/ui';
-import { RankForumHotCard } from '../components/rank';
-import { Avatar } from '../components/Avatar';
-import { Icon } from '../components/icons';
+import { Pagination } from '../../../components/Pagination';
+import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
+import { Alert, Card, CardTabs, CardTitle, CreateButton, HomeSideNav, Modal, SidePanel, TagBadge, TwoCol, cx } from '../../../components/ui';
+import { RankForumHotCard } from '../../../components/rank';
+import { Avatar } from '../../../components/Avatar';
+import { Icon } from '../../../components/icons';
 
 interface ForumPageData extends ThreadPageData {
   forum?: {

@@ -6,6 +6,8 @@ import { loadLocaleBundle } from '@freeidx/shared/i18n/bundles';
 import { App } from './App';
 import { I18nProvider, initialLocale } from './lib/i18n';
 import { queryClient } from './lib/query-client';
+import { ThemeProvider } from './lib/theme/provider';
+import { resolveActiveTheme } from './lib/theme/active';
 import './styles/globals.css';
 
 /* 主题彩蛋：控制台版权输出（配色 #409EFF / #f2f3f5） */
@@ -16,17 +18,23 @@ console.log(
 );
 
 /**
- * 首屏语言包预载：词典改为按需加载后，先取回当前语言的词条再挂载，
- * 保证首次渲染即有文案（否则会先显示 key 再补文案）；加载失败也照常挂载，由 useLocaleBundle 回落。
+ * 首屏预载：语言包（词典按需加载）与启用主题（外观层）并行取回后再挂载，
+ * 保证首次渲染即有文案与正确外观（否则会先显示 key / 先闪默认主题再换肤）。
+ * 两者失败都照常挂载：语言由 useLocaleBundle 回落，主题由 resolveActiveTheme 回落 light。
  */
 void (async () => {
-  await loadLocaleBundle(initialLocale()).catch(() => undefined);
+  const [theme] = await Promise.all([
+    resolveActiveTheme(),
+    loadLocaleBundle(initialLocale()).catch(() => undefined),
+  ]);
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <I18nProvider>
-            <App />
+            <ThemeProvider theme={theme}>
+              <App />
+            </ThemeProvider>
           </I18nProvider>
         </BrowserRouter>
       </QueryClientProvider>

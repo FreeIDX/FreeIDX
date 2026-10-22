@@ -79,6 +79,8 @@ const MENU: MenuGroup[] = [
     label: { textKey: 'admin_menu_system', fallback: 'System' },
     items: [
       { key: 'setting', to: '/admin/setting', label: { textKey: 'admin_menu_setting', fallback: 'Basic Settings' }, icon: 'settings', prefixes: ['/admin/setting'] },
+      /* 「主题管理」：内置完整主题的启用/切换（主题清单由前端构建期自动发现，见 lib/theme/registry） */
+      { key: 'theme', to: '/admin/themes', label: { textKey: 'admin_menu_theme', fallback: 'Theme Management' }, icon: 'image', prefixes: ['/admin/themes'] },
       { key: 'plugin', to: '/admin/extensions', label: { textKey: 'admin_menu_plugin', fallback: 'Plugin Center' }, icon: 'plug', prefixes: ['/admin/extensions'] },
       { key: 'other', to: '/admin/other', label: { textKey: 'admin_menu_other', fallback: 'Maintenance' }, icon: 'wrench', prefixes: ['/admin/other', '/admin/modlogs'] },
       /* 「关于」菜单项 */

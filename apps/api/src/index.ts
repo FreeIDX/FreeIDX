@@ -18,6 +18,7 @@ import { getExtensions } from './core/extensions';
 import { classifyUserAgent, matchRegisteredPath } from './core/crawler';
 import { prerender, seoCoreRoutes } from './modules/seo/core';
 import { loadSetting } from './core/loaders';
+import { loadThemeId } from './core/theme';
 import { createApiT, t0, type ApiT } from './core/i18n';
 import { threadRoutes } from './modules/thread/routes';
 import { bootstrapRoutes } from './modules/bootstrap/routes';
@@ -36,6 +37,7 @@ import { checkRoutes } from './modules/check/routes';
 import { rankRoutes } from './modules/rank/routes';
 import { vRoutes } from './modules/v/routes';
 import { pluginsRoutes } from './modules/plugins/routes';
+import { themeRoutes } from './modules/theme/routes';
 import { adminRoutes } from './modules/admin/routes';
 import { adminForumRoutes } from './modules/admin/forums';
 import { adminUserRoutes } from './modules/admin/users';
@@ -185,6 +187,8 @@ app.route('/', rankRoutes());
 app.route('/', vRoutes());
 // 遗留功能扩展公开读取端点（idx_quick_reply 快速回复下拉数据 / idx_insert_code 八注入位 HTML）
 app.route('/', pluginsRoutes());
+// 主题管理：GET /api/theme/active（公开）+ GET/PUT /api/admin/theme（切启用主题，只写 kv theme）
+app.route('/', themeRoutes());
 // M3 后台（T3-4）：站点设置读写（adminGuard 已在上方注册覆盖 /api/admin/*）
 app.route('/', adminRoutes());
 // M3 后台（T3-5）：版块 CRUD + access 矩阵、主题管理列表、计数校准
@@ -212,6 +216,34 @@ app.route('/', seoCoreRoutes());
 // 后续模块逐个挂载（forum/post/my/mod/attach/admin/kv）
 
 app.onError(handleError);
+
+/**
+ * SPA 壳的主题注入：把启用主题 id 写进 `window.__FI_THEME__`，前端在首屏渲染前读取，
+ * 避免「先渲染默认主题再换肤」的闪烁，同时省掉一次 /api/theme/active 引导请求。
+ * 注入失败（读壳失败/无 </head>）一律原样返回，主题引导会回落同名接口，不影响可用性。
+ */
+async function injectThemeId(res: Response, themeId: string): Promise<Response> {
+  try {
+    const html = await res.text();
+    const script = `<script>window.__FI_THEME__=${JSON.stringify(themeId)}</script>`;
+    // 优先注入 </head>（脚本在任何业务脚本之前求值）；无 head 时退化到 </body>；都没有则原样返回文本
+    const out = html.includes('</head>')
+      ? html.replace('</head>', `${script}</head>`)
+      : html.includes('</body>')
+        ? html.replace('</body>', `${script}</body>`)
+        : null;
+    if (out === null) return new Response(html, res);
+    const headers = new Headers(res.headers);
+    // 文本已解码重写，长度/校验头与编码头全部失效，交给运行时重新编码
+    headers.delete('content-length');
+    headers.delete('etag');
+    headers.delete('content-encoding');
+    return new Response(out, { status: res.status, statusText: res.statusText, headers });
+  } catch {
+    return res;
+  }
+}
+
 // 合并部署：run_worker_first 让所有请求先进 Worker，未匹配路由必须自己兜底，
 // 否则 BrowserRouter 深链直访会拿到 JSON 404。/api、/files 保持 JSON，其余转交静态资源，
 // 由 not_found_handling="single-page-application" 回退 index.html（爬虫分支已在 prerender() 处理）。
@@ -226,8 +258,10 @@ app.notFound(async (c) => {
   // 拿到壳页则意味着插件路由未注册，同样必须 404。
   const fileLike = /\/[^/]*\.[^/.]+$/.test(p);
   const bot = classifyUserAgent(c.req.header('user-agent') ?? '') === 'searchbot';
-  if (res.headers.get('content-type')?.includes('text/html') && (fileLike || bot)) return handleNotFound(c);
-  return res;
+  if (!res.headers.get('content-type')?.includes('text/html')) return res;
+  if (fileLike || bot) return handleNotFound(c);
+  const themeId = await loadThemeId(c.get('cache'), c.get('db'));
+  return injectThemeId(res, themeId);
 });
 
 export default {

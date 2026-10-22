@@ -99,7 +99,8 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
   app.get('/api/admin/extensions', async (c) => {
     const { db, cache } = core(c);
     const state = await loadExtensionsState(cache, db);
-    const list = ADMIN_CATALOG.map((m) => {
+    // 隐藏项（如简蓝主题 light：已由「主题管理」统一呈现）不进列表，但详情/配置接口仍按 id 可用
+    const list = ADMIN_CATALOG.filter((m) => !m.manifest.hiddenInCatalog).map((m) => {
       const s = state[m.manifest.id];
       return {
         id: m.manifest.id,

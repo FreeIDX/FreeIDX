@@ -8,15 +8,15 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ModForumData } from '@freeidx/shared';
-import { apiGet, modThreads } from '../lib/api';
-import { apiErrorMessage } from '../lib/errors';
-import { nonNegInt, posInt } from '../lib/params';
-import { useAuth } from '../store/auth';
-import { Button, Card, cx } from '../components/ui';
-import { Icon } from '../components/icons';
-import { ThreadList, type ThreadPageData } from '../components/ThreadList';
-import { Pagination } from '../components/Pagination';
-import { useT } from '../lib/i18n';
+import { apiGet, modThreads } from '../../../lib/api';
+import { apiErrorMessage } from '../../../lib/errors';
+import { nonNegInt, posInt } from '../../../lib/params';
+import { useAuth } from '../../../store/auth';
+import { Button, Card, cx } from '../../../components/ui';
+import { Icon } from '../../../components/icons';
+import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
+import { Pagination } from '../../../components/Pagination';
+import { useT } from '../../../lib/i18n';
 
 /** 工具栏按钮（小尺寸：38px 高、4px 圆角、描边） */
 const toolCls =

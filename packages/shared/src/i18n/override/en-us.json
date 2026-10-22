@@ -1063,6 +1063,21 @@
   "vip_sort_hint": "Lower numbers come first (sorted ascending on frontend)",
   "vip_sort_label": "Sort order",
   "vip_status_disabled": "Disabled",
-  "vip_updated": "Plan updated"
+  "vip_updated": "Plan updated",
+  "admin_menu_theme": "Theme management",
+  "admin_theme_config": "This theme's options are maintained in the Plugin Center",
+  "admin_theme_current": "Active",
+  "admin_theme_dev_doc": "See docs/theme-spec.md for the full spec",
+  "admin_theme_dev_step1": "Create a folder apps/web/src/themes/<id>/; the folder name is the theme id",
+  "admin_theme_dev_step2": "Add theme.json (name/description/version) and index.tsx (default-export a ThemeModule)",
+  "admin_theme_dev_step3": "Optional theme.css and preview.png; no registration file needs editing",
+  "admin_theme_dev_title": "Theme development spec",
+  "admin_theme_empty": "No built-in theme found",
+  "admin_theme_enable": "Enable",
+  "admin_theme_in_use": "In use",
+  "admin_theme_reset": "Reset to default",
+  "admin_theme_reset_done": "Default theme restored",
+  "admin_theme_settings": "Settings",
+  "admin_theme_switched": "\"{name}\" enabled. Refresh the site to apply."
  }
 }

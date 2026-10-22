@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "數字越小越靠前（前臺按 sort 升序展示）",
   "vip_sort_label": "排序",
   "vip_status_disabled": "停用",
-  "vip_updated": "計劃已更新"
+  "vip_updated": "計劃已更新",
+  "admin_menu_theme": "主題管理",
+  "admin_theme_config": "該主題的設定項目在擴充中心維護",
+  "admin_theme_current": "目前啟用",
+  "admin_theme_dev_doc": "完整規範見 docs/theme-spec.md",
+  "admin_theme_dev_step1": "新增資料夾 apps/web/src/themes/<id>/，資料夾名稱即主題 id",
+  "admin_theme_dev_step2": "放入 theme.json（名稱/簡介/版本）與 index.tsx（預設匯出 ThemeModule）",
+  "admin_theme_dev_step3": "可選 theme.css 與 preview.png；無需修改任何註冊檔案",
+  "admin_theme_dev_title": "主題開發規範",
+  "admin_theme_empty": "未發現任何內建主題",
+  "admin_theme_enable": "啟用",
+  "admin_theme_in_use": "使用中",
+  "admin_theme_reset": "還原預設",
+  "admin_theme_reset_done": "已還原預設主題",
+  "admin_theme_settings": "設定",
+  "admin_theme_switched": "已啟用「{name}」，重新整理前台頁面後生效"
  }
 }

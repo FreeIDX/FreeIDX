@@ -11,15 +11,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { GroupId, AVAILABLE_LOCALES, NATIVE_LANG_NAMES } from '@freeidx/shared';
-import { useAuth } from '../store/auth';
-import { useAuthModal } from '../store/authModal';
-import { AuthModal } from './AuthModal';
-import { useT, useLang, useLangPref, useGroupName } from '../lib/i18n';
-import { Avatar } from './Avatar';
-import { Icon, type IconName } from './icons';
-import { InsertCode, useInsertCodes } from './InsertCode';
-import { cx } from './ui';
-import { useApplyTheme, useLight, useThemeMode } from '../store/theme';
+import { useAuth } from '../../store/auth';
+import { useAuthModal } from '../../store/authModal';
+import { AuthModal } from '../../components/AuthModal';
+import { useT, useLang, useLangPref, useGroupName } from '../../lib/i18n';
+import { Avatar } from '../../components/Avatar';
+import { Icon, type IconName } from '../../components/icons';
+import { InsertCode, useInsertCodes } from '../../components/InsertCode';
+import { cx } from '../../components/ui';
+import { useApplyTheme, useLight, useThemeMode } from '../../store/theme';
+import { ThemeSlot } from '../../lib/theme/slots';
 
 /** 导航项（.navbar-nav>.nav-item>.nav-link：px-4 常规 #6c757d，激活主色） */
 function NavItem({
@@ -324,7 +325,7 @@ function UserMenu() {
   );
 }
 
-export function Layout({ children }: { children: ReactNode }) {
+export function Layout({ children }: { children?: ReactNode }) {
   const setting = useAuth((s) => s.setting);
   const forumlist = useAuth((s) => s.forumlist);
   const me = useAuth((s) => s.me);
@@ -388,7 +389,10 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className={cx('theme-zh flex min-h-dvh flex-col bg-background text-foreground', light.bodyFontStyle === 2 && 'font-smiley')}>
-      {/* ============ #header：固定白色顶栏（blur 10.5px）============ */}
+      {/* ============ #header：固定白色顶栏（blur 10.5px）============
+          主题插槽：启用主题覆写 header 时整块（含移动端抽屉）由主题渲染，否则用下方简蓝实现。 */}
+      <ThemeSlot name="header">
+        <>
       <header className="fixed inset-x-0 top-0 z-[999] w-full bg-card/96 backdrop-blur-[10.5px] max-lg:border-b max-lg:border-zh-line">
         {/* PC 行（lg+） */}
         <div className="mx-auto hidden h-[75px] w-full max-w-[1140px] items-center gap-2 px-4 lg:flex 3xl:max-w-[1536px]">
@@ -644,6 +648,8 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
+        </>
+      </ThemeSlot>
 
       {error && <div className="mx-auto w-full max-w-[1140px] px-4 pt-[100px] text-sm text-destructive lg:pt-[83px] 3xl:max-w-[1536px]">{error}</div>}
 
@@ -652,7 +658,8 @@ export function Layout({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      {/* ============ footer ============ */}
+      {/* ============ footer（主题插槽：覆写时整块替换） ============ */}
+      <ThemeSlot name="footer">
       <footer className="w-full bg-card py-4 text-[13px] text-lt-grey max-lg:pb-20">
         <div className="mx-auto w-full max-w-[1140px] px-4 3xl:max-w-[1536px]">
           <InsertCode html={insertCodes.footer_start_htm} />
@@ -725,8 +732,11 @@ export function Layout({ children }: { children: ReactNode }) {
           <InsertCode html={insertCodes.footer_footer_right_end_htm} />
         </div>
       </footer>
+      </ThemeSlot>
 
-      {/* ============ 移动底部导航栏（dock_switch：55px 五格，中央凸起圆钮）============ */}
+      {/* ============ 移动底部导航栏（dock_switch：55px 五格，中央凸起圆钮）============
+          主题插槽：启用主题覆写 dock 时由主题渲染。 */}
+      <ThemeSlot name="dock">
       {light.enabled && light.dockSwitch && (
         <nav
           className="fixed inset-x-0 bottom-0 z-[1000] flex h-[55px] items-stretch border-t border-zh-line bg-card lg:hidden"
@@ -766,6 +776,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
         </nav>
       )}
+      </ThemeSlot>
 
       {light.enabled && light.backTop && <GoTop />}
 

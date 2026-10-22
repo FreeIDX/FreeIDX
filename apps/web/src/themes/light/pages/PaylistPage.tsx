@@ -5,13 +5,13 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
-import { getThreadPaylist } from '../lib/api';
-import { posInt } from '../lib/params';
-import { Avatar } from '../components/Avatar';
-import { Pagination } from '../components/Pagination';
-import { Breadcrumb, Card, Pill, cx } from '../components/ui';
-import { useAuth } from '../store/auth';
-import { useT } from '../lib/i18n';
+import { getThreadPaylist } from '../../../lib/api';
+import { posInt } from '../../../lib/params';
+import { Avatar } from '../../../components/Avatar';
+import { Pagination } from '../../../components/Pagination';
+import { Breadcrumb, Card, Pill, cx } from '../../../components/ui';
+import { useAuth } from '../../../store/auth';
+import { useT } from '../../../lib/i18n';
 
 export function PaylistPage() {
   const t = useT();

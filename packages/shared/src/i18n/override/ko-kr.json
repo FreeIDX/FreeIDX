@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "숫자가 작을수록 앞에 표시됩니다(프런트에서는 sort 오름차순으로 표시)",
   "vip_sort_label": "정렬 순서",
   "vip_status_disabled": "비활성화됨",
-  "vip_updated": "플랜이 업데이트되었습니다"
+  "vip_updated": "플랜이 업데이트되었습니다",
+  "admin_menu_theme": "테마 관리",
+  "admin_theme_config": "이 테마의 설정 항목은 플러그인 센터에서 관리합니다",
+  "admin_theme_current": "현재 사용 중",
+  "admin_theme_dev_doc": "전체 규격은 docs/theme-spec.md 참조",
+  "admin_theme_dev_step1": "폴더 apps/web/src/themes/<id>/ 생성(폴더명이 테마 id)",
+  "admin_theme_dev_step2": "theme.json(이름/설명/버전)과 index.tsx(ThemeModule 기본 내보내기) 배치",
+  "admin_theme_dev_step3": "선택 사항: theme.css와 preview.png, 등록 파일 수정 불필요",
+  "admin_theme_dev_title": "테마 개발 규격",
+  "admin_theme_empty": "내장 테마를 찾을 수 없습니다",
+  "admin_theme_enable": "사용",
+  "admin_theme_in_use": "사용 중",
+  "admin_theme_reset": "기본값으로 복원",
+  "admin_theme_reset_done": "기본 테마로 복원했습니다",
+  "admin_theme_settings": "설정",
+  "admin_theme_switched": "\"{name}\" 테마를 사용 설정했습니다. 프런트 페이지를 새로 고치면 적용됩니다"
  }
 }

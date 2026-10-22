@@ -1063,6 +1063,21 @@
   "vip_sort_hint": "Чем меньше число, тем выше позиция (на сайте сортировка по возрастанию поля sort).",
   "vip_sort_label": "Сортировка",
   "vip_status_disabled": "Отключено",
-  "vip_updated": "План обновлён."
+  "vip_updated": "План обновлён.",
+  "admin_menu_theme": "Управление темами",
+  "admin_theme_config": "Параметры этой темы настраиваются в центре плагинов",
+  "admin_theme_current": "Активна",
+  "admin_theme_dev_doc": "Полная спецификация — docs/theme-spec.md",
+  "admin_theme_dev_step1": "Создайте папку apps/web/src/themes/<id>/; имя папки — это id темы",
+  "admin_theme_dev_step2": "Добавьте theme.json (название/описание/версия) и index.tsx (экспорт ThemeModule по умолчанию)",
+  "admin_theme_dev_step3": "Необязательно: theme.css и preview.png; файлы регистрации менять не нужно",
+  "admin_theme_dev_title": "Спецификация разработки тем",
+  "admin_theme_empty": "Встроенные темы не найдены",
+  "admin_theme_enable": "Включить",
+  "admin_theme_in_use": "Используется",
+  "admin_theme_reset": "Сбросить по умолчанию",
+  "admin_theme_reset_done": "Тема по умолчанию восстановлена",
+  "admin_theme_settings": "Настроить",
+  "admin_theme_switched": "Тема «{name}» включена. Обновите сайт, чтобы применить."
  }
 }

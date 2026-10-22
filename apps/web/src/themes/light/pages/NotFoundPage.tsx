@@ -1,6 +1,6 @@
-import { LinkButton } from '../components/ui';
-import { Icon } from '../components/icons';
-import { useT } from '../lib/i18n';
+import { LinkButton } from '../../../components/ui';
+import { Icon } from '../../../components/icons';
+import { useT } from '../../../lib/i18n';
 
 /** 404 页：zh-card 居中面板（大空态图标 + 标题 + 说明 + 主色「返回首页」按钮）。 */
 export function NotFoundPage() {

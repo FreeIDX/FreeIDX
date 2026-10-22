@@ -222,6 +222,15 @@ export const updateAdSlot = (id: number, body: Partial<AdSlotInput>) => apiSend<
 export const deleteAdSlot = (id: number) => apiSend<{ id: number }>('DELETE', `/api/admin/ad-slots/${id}`);
 
 /* ------------------------------------------------------------------ *
+ * 主题管理：后端只持有「启用主题 id」（kv `theme`），主题清单由前端构建期自动发现
+ * ------------------------------------------------------------------ */
+
+/** 当前启用主题 id 与内置兜底 id（清单本身在前端 registry，不进接口） */
+export const getAdminTheme = () => apiGet<{ active: string; default: string }>('/api/admin/theme');
+/** 切换启用主题：只写 kv theme，前台整页刷新后生效 */
+export const putAdminTheme = (id: string) => apiSend<{ active: string }>('PUT', '/api/admin/theme', { id });
+
+/* ------------------------------------------------------------------ *
  * 支付管理（T5-7，§15.4）：VIP 计划 / 订单 / 卡密
  * 三个 GET 都返回 `{list}` 或 `{list,page,size}`，**没有 total**（不同 PageData），故不与 PageData 复用。
  * ------------------------------------------------------------------ */

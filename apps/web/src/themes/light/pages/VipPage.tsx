@@ -8,13 +8,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useState } from 'react';
-import { fetchPaymentProviders, fetchVipPlans, placeOrder, type PaymentProviderView, type VipPlan } from '../lib/api';
-import { apiErrorMessage } from '../lib/errors';
-import { useAuth } from '../store/auth';
-import { useAuthModal } from '../store/authModal';
-import { useT } from '../lib/i18n';
-import { Breadcrumb, Button, Card, cx } from '../components/ui';
-import { Icon } from '../components/icons';
+import { fetchPaymentProviders, fetchVipPlans, placeOrder, type PaymentProviderView, type VipPlan } from '../../../lib/api';
+import { apiErrorMessage } from '../../../lib/errors';
+import { useAuth } from '../../../store/auth';
+import { useAuthModal } from '../../../store/authModal';
+import { useT } from '../../../lib/i18n';
+import { Breadcrumb, Button, Card, cx } from '../../../components/ui';
+import { Icon } from '../../../components/icons';
 
 /** 分 → 元（2 位小数），币种以 ISO 代码展示（与后台订单口径一致） */
 function priceOf(cents: number, currency: string): string {

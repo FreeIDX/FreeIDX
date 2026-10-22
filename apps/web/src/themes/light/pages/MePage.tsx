@@ -27,23 +27,23 @@ import {
   uploadAttachment,
   uploadAvatar,
   type FollowStreamItem,
-} from '../lib/api';
-import { apiErrorMessage } from '../lib/errors';
-import { posInt } from '../lib/params';
-import { fileToPngDataUrlResize } from '../lib/image';
+} from '../../../lib/api';
+import { apiErrorMessage } from '../../../lib/errors';
+import { posInt } from '../../../lib/params';
+import { fileToPngDataUrlResize } from '../../../lib/image';
 import { md5Hex } from '@freeidx/shared';
-import { Avatar } from '../components/Avatar';
-import { Icon } from '../components/icons';
-import { FollowUserList } from '../components/FollowUserList';
-import { Pagination } from '../components/Pagination';
-import { ThreadList } from '../components/ThreadList';
-import { UserReplyList } from '../components/UserReplyList';
-import { useCursorThreads } from '../hooks/useCursorThreads';
-import { Button, Card, CardTabs, IconInput, UserCountTile, UserInfoRow, UserSideItem, cx, inputCls } from '../components/ui';
-import { useAuth } from '../store/auth';
-import { useAuthModal } from '../store/authModal';
-import { useLight, userBgImage } from '../store/theme';
-import { useT, useGroupName } from '../lib/i18n';
+import { Avatar } from '../../../components/Avatar';
+import { Icon } from '../../../components/icons';
+import { FollowUserList } from '../../../components/FollowUserList';
+import { Pagination } from '../../../components/Pagination';
+import { ThreadList } from '../../../components/ThreadList';
+import { UserReplyList } from '../../../components/UserReplyList';
+import { useCursorThreads } from '../../../hooks/useCursorThreads';
+import { Button, Card, CardTabs, IconInput, UserCountTile, UserInfoRow, UserSideItem, cx, inputCls } from '../../../components/ui';
+import { useAuth } from '../../../store/auth';
+import { useAuthModal } from '../../../store/authModal';
+import { useLight, userBgImage } from '../../../store/theme';
+import { useT, useGroupName } from '../../../lib/i18n';
 import type { UserProfile } from './UserPage';
 
 type Tab = 'info' | 'password' | 'avatar' | 'background';

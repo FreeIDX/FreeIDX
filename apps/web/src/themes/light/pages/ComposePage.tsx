@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { createThread } from '../lib/api';
-import { Composer, type ComposerSubmit } from '../components/Composer';
-import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../components/ui';
-import { Icon } from '../components/icons';
-import { useAuth } from '../store/auth';
-import { useLight } from '../store/theme';
-import { useAuthModal } from '../store/authModal';
-import { useT } from '../lib/i18n';
+import { createThread } from '../../../lib/api';
+import { Composer, type ComposerSubmit } from '../../../components/Composer';
+import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
+import { Icon } from '../../../components/icons';
+import { useAuth } from '../../../store/auth';
+import { useLight } from '../../../store/theme';
+import { useAuthModal } from '../../../store/authModal';
+import { useT } from '../../../lib/i18n';
 
 /** 发帖页（§4.4，/new 或 /forum/:fid/new）：
  *  两栏 —— 左主表单卡（8/12 栅格：版块/标题 + Composer + 标签选择 + 收费设置）、

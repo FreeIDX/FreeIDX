@@ -9,16 +9,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import type { ThreadListItem } from '@freeidx/shared';
-import { apiGet, fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../lib/api';
-import { useAuth } from '../store/auth';
-import { useT } from '../lib/i18n';
-import { useLight } from '../store/theme';
-import { Carousel } from '../components/Carousel';
-import { Avatar } from '../components/Avatar';
-import { Icon, type IconName } from '../components/icons';
-import { CardTitle, SidePanel } from '../components/ui';
-import { RankNo } from '../components/rank';
-import { siteThreadsQuery } from '../lib/queries';
+import { apiGet, fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../../../lib/api';
+import { useAuth } from '../../../store/auth';
+import { useT } from '../../../lib/i18n';
+import { useLight } from '../../../store/theme';
+import { Carousel } from '../../../components/Carousel';
+import { Avatar } from '../../../components/Avatar';
+import { Icon, type IconName } from '../../../components/icons';
+import { CardTitle, SidePanel } from '../../../components/ui';
+import { RankNo } from '../../../components/rank';
+import { siteThreadsQuery } from '../../../lib/queries';
 import { NotFoundPage } from './NotFoundPage';
 
 /** 聚合卡（卡头背景图 + .discovery-rank-list 滚动区；行渲染交由调用方） */

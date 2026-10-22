@@ -1062,6 +1062,21 @@
   "vip_sort_hint": "Los números más pequeños aparecen primero (la interfaz pública ordena de forma ascendente por sort)",
   "vip_sort_label": "Orden",
   "vip_status_disabled": "Desactivado",
-  "vip_updated": "Plan actualizado"
+  "vip_updated": "Plan actualizado",
+  "admin_menu_theme": "Gestión de temas",
+  "admin_theme_config": "Las opciones de este tema se gestionan en el centro de plugins",
+  "admin_theme_current": "Activo",
+  "admin_theme_dev_doc": "Consulta docs/theme-spec.md para la especificación completa",
+  "admin_theme_dev_step1": "Crea la carpeta apps/web/src/themes/<id>/; el nombre de la carpeta es el id del tema",
+  "admin_theme_dev_step2": "Añade theme.json (nombre/descripción/versión) e index.tsx (exporta por defecto un ThemeModule)",
+  "admin_theme_dev_step3": "Opcional: theme.css y preview.png; no hay que editar ningún archivo de registro",
+  "admin_theme_dev_title": "Especificación de desarrollo de temas",
+  "admin_theme_empty": "No se encontró ningún tema integrado",
+  "admin_theme_enable": "Activar",
+  "admin_theme_in_use": "En uso",
+  "admin_theme_reset": "Restaurar predeterminado",
+  "admin_theme_reset_done": "Tema predeterminado restaurado",
+  "admin_theme_settings": "Ajustes",
+  "admin_theme_switched": "Tema «{name}» activado. Recarga el sitio para aplicarlo."
  }
 }

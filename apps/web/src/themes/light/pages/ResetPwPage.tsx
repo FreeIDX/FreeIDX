@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { useAuth } from '../store/auth';
-import { confirmPasswordReset, requestPasswordReset } from '../lib/api';
-import { apiErrorMessage } from '../lib/errors';
+import { useAuth } from '../../../store/auth';
+import { confirmPasswordReset, requestPasswordReset } from '../../../lib/api';
+import { apiErrorMessage } from '../../../lib/errors';
 import { md5Hex } from '@freeidx/shared';
-import { Turnstile } from '../components/Turnstile';
-import { authSubmitCls, AuthAnnouncement } from '../components/AuthForms';
-import { IconInput } from '../components/ui';
-import { Icon } from '../components/icons';
-import { useT } from '../lib/i18n';
-import { useLight } from '../store/theme';
+import { Turnstile } from '../../../components/Turnstile';
+import { authSubmitCls, AuthAnnouncement } from '../../../components/AuthForms';
+import { IconInput } from '../../../components/ui';
+import { Icon } from '../../../components/icons';
+import { useT } from '../../../lib/i18n';
+import { useLight } from '../../../store/theme';
 
 /**
  * 找回密码（§4.7，两步 token 流）：

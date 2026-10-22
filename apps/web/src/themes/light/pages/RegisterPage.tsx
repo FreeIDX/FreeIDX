@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router';
-import { useAuth } from '../store/auth';
-import { RegisterForm, AuthAnnouncement } from '../components/AuthForms';
-import { useT } from '../lib/i18n';
-import { useLight } from '../store/theme';
+import { useAuth } from '../../../store/auth';
+import { RegisterForm, AuthAnnouncement } from '../../../components/AuthForms';
+import { useT } from '../../../lib/i18n';
+import { useLight } from '../../../store/theme';
 
 /**
  * §4.6 注册页：认证版式——

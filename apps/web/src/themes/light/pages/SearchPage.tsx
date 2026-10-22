@@ -2,15 +2,15 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import type { SearchUserHit, ThreadListItem } from '@freeidx/shared';
-import { apiGet } from '../lib/api';
-import { posInt } from '../lib/params';
-import { Avatar } from '../components/Avatar';
-import { Pagination } from '../components/Pagination';
-import { ThreadList } from '../components/ThreadList';
-import { Card, CardTitle, cx } from '../components/ui';
-import { Highlight } from '../components/Highlight';
-import { Icon } from '../components/icons';
-import { useT } from '../lib/i18n';
+import { apiGet } from '../../../lib/api';
+import { posInt } from '../../../lib/params';
+import { Avatar } from '../../../components/Avatar';
+import { Pagination } from '../../../components/Pagination';
+import { ThreadList } from '../../../components/ThreadList';
+import { Card, CardTitle, cx } from '../../../components/ui';
+import { Highlight } from '../../../components/Highlight';
+import { Icon } from '../../../components/icons';
+import { useT } from '../../../lib/i18n';
 
 type Range = 'thread' | 'all' | 'user';
 

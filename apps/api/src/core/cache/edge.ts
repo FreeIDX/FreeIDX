@@ -30,6 +30,8 @@ type Bucket = typeof caches.default;
 /** 匿名只读接口 → 边缘 TTL（§7 口径：列表 30s，详情 60s） */
 const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/bootstrap$/, 30],
+  // 启用主题 id：随 SPA 壳/首屏引导读取，后台切换后 30s 内边缘即更新
+  [/^\/api\/theme\/active$/, 30],
   [/^\/api\/threads$/, 30],
   [/^\/api\/forums\/\d+\/threads$/, 30],
   [/^\/api\/users\/\d+\/(?:threads|posts)$/, 30],

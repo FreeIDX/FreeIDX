@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node ../../scripts/check-themes.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && node ../../scripts/check-themes.mjs",
+    "themes:check": "node ../../scripts/check-themes.mjs",
     "lint": "eslint ."
   },
   "dependencies": {
