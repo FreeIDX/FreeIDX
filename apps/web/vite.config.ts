@@ -22,7 +22,7 @@ function git(args: string[]): string | null {
 }
 
 /**
- * 构建版本号：<package 版本>+<提交总数>[.dirty]。
+ * 构建版本号：<package 版本>+<提交总数>。
  *
  * 每次提交后 `git rev-list --count HEAD` 自动 +1，因此后台「版本更新」页的
  * 当前版本随提交自动变化，不需要手改代码；正式发版只提升 apps/web/package.json
@@ -42,9 +42,8 @@ function resolveAppVersion(): string {
 
   const count = git(['rev-list', '--count', 'HEAD']);
   const sha = git(['rev-parse', '--short=7', 'HEAD']);
-  const dirty = git(['status', '--porcelain', '--untracked-files=no']) ? '.dirty' : '';
   const build = count && Number(count) > 0 ? count : sha;
-  return build ? `${base}+${build}${dirty}` : base;
+  return build ? `${base}+${build}` : base;
 }
 
 const appVersion = resolveAppVersion();

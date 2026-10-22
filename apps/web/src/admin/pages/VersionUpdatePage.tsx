@@ -25,7 +25,7 @@ import {
   type ReleaseEntry,
 } from '../release-index';
 
-/** 构建期注入：<package 版本>+<提交总数>[.dirty]，每次提交后自动变化（见 vite.config.ts） */
+/** 构建期注入：<package 版本>+<提交总数>，每次提交后自动变化（见 vite.config.ts） */
 declare const __APP_VERSION__: string;
 /** 构建期注入：当前构建对应的完整提交哈希 */
 declare const __COMMIT_SHA__: string;
