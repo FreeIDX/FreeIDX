@@ -264,7 +264,7 @@ export function CardTabs({ items }: { items: { k: string; text: string; icon?: I
 export function IconInput({ icon, className, ...rest }: { icon: IconName } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="flex items-stretch">
-      <span className="flex items-center rounded-l-[4px] border border-r-0 border-[#ced4da] bg-[#e9ecef] px-3 text-[#6c757d]">
+      <span className="flex items-center rounded-l-[4px] border border-r-0 border-[#ced4da] bg-[#e9ecef] px-3 text-[#6c757d] dark:border-[#28262d] dark:bg-[#28262d] dark:text-[#a8abb2]">
         <Icon name={icon} />
       </span>
       <input

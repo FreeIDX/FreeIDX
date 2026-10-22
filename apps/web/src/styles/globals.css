@@ -722,9 +722,12 @@ li[id^='pid-']:target {
 
 /*
  * 认证面板：白卡（.box 风格软投影）
+ * 注意用 @theme 的 --color-card 令牌（.theme-zh / .dark .theme-zh 会整体换装），
+ * 不要用裸 HSL 三元组 --card（它只在 :root 定义，暗色下不会变）。
  */
 .auth-panel {
-  background: hsl(var(--card));
+  background: var(--color-card);
+  color: var(--color-card-foreground);
   box-shadow: 0 0 2px rgb(98 124 153 / 10%);
 }
 
