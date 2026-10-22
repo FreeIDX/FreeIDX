@@ -268,6 +268,21 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     return fc;
   }
 
+  /**
+   * 触发一次直链请求并等 `waitUntil` 旁路的缓存写落定。
+   * 缓存写是 fire-and-forget（见 edge.ts 的 wait），不传 executionCtx 时写入与断言之间存在
+   * 竞态——CI 上曾表现为「第二次请求 MISS / entries 少一条」。与 edge-cache.test.ts 同口径。
+   */
+  async function getFile(url: string, env: unknown, headers: Record<string, string> = {}) {
+    const waited: Promise<unknown>[] = [];
+    const res = await app.request(url, { headers }, env as never, {
+      waitUntil: (p: Promise<unknown>) => waited.push(p),
+      passThroughOnException: () => {},
+    } as never);
+    await Promise.all(waited); // put 存快照需读 body，必须等它落定再断言
+    return res;
+  }
+
   it('同一头像直链第二次命中边缘：R2 只读一次，命中副本保留 immutable', async () => {
     const fc = installCaches();
     const r = makeEnv(baseRules());
@@ -280,12 +295,12 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     await r.r2.put('avatar/000/1.png', 'PNG', { httpMetadata: { contentType: 'image/png' } });
 
     const url = '/files/avatar/000/1.png?v=1700000001';
-    const res1 = await app.request(url, {}, r.env as never);
+    const res1 = await getFile(url, r.env);
     expect(res1.status).toBe(200);
     expect(res1.headers.get('x-edge-cache')).toBe('MISS');
     expect(r2Gets).toBe(1);
 
-    const res2 = await app.request(url, {}, r.env as never);
+    const res2 = await getFile(url, r.env);
     expect(res2.headers.get('x-edge-cache')).toBe('HIT');
     expect(r2Gets).toBe(1); // 边缘命中不再触达 R2（省 1 次 Class B）
     // cachedCopy 保留源头的 immutable：avatar key 已 ?v= 版本化，洗掉会让浏览器退化成无版本化缓存
@@ -297,8 +312,8 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     const fc = installCaches();
     const r = makeEnv(baseRules());
     await r.r2.put('avatar/000/1.png', 'PNG', { httpMetadata: { contentType: 'image/png' } });
-    await app.request('/files/avatar/000/1.png?v=100', {}, r.env as never);
-    await app.request('/files/avatar/000/1.png?v=200', {}, r.env as never);
+    await getFile('/files/avatar/000/1.png?v=100', r.env);
+    await getFile('/files/avatar/000/1.png?v=200', r.env);
     expect(fc.entries.size).toBe(2);
   });
 
@@ -308,8 +323,8 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     await r.r2.put('avatar/000/1.png', 'PNG', { httpMetadata: { contentType: 'image/png' } });
     const url = '/files/avatar/000/1.png?v=1700000001';
     const h = { cookie: 'sid=sessA; csrf=t' };
-    await app.request(url, { headers: h }, r.env as never);
-    const res2 = await app.request(url, { headers: h }, r.env as never);
+    await getFile(url, r.env, h);
+    const res2 = await getFile(url, r.env, h);
     expect(res2.headers.get('x-edge-cache')).toBeNull();
     expect(res2.status).toBe(200);
     expect(fc.entries.size).toBe(0);
@@ -319,7 +334,7 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     const fc = installCaches();
     const r = makeEnv(baseRules());
     await r.r2.put('attach/202410/x.png', 'DATA');
-    const res = await app.request('/files/attach/202410/x.png', {}, r.env as never);
+    const res = await getFile('/files/attach/202410/x.png', r.env);
     expect(res.status).toBe(404);
     expect(fc.entries.size).toBe(0);
   });
@@ -329,8 +344,8 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     const r = makeEnv(baseRules());
     await r.r2.put('forum/8.png', 'ICON', { httpMetadata: { contentType: 'image/png' } });
     const url = '/files/forum/8.png';
-    await app.request(url, {}, r.env as never);
-    const res2 = await app.request(url, {}, r.env as never);
+    await getFile(url, r.env);
+    const res2 = await getFile(url, r.env);
     expect(res2.headers.get('x-edge-cache')).toBe('HIT');
     // forum/ key 固定、会被覆盖重传 → filesProxy 对非 avatar 前缀只给 1 天，不得被洗成长缓存
     expect(res2.headers.get('cache-control')).toBe('public, max-age=86400');
