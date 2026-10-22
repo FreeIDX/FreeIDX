@@ -84,7 +84,7 @@ const MENU: MenuGroup[] = [
       { key: 'plugin', to: '/admin/extensions', label: { textKey: 'admin_menu_plugin', fallback: 'Plugin Center' }, icon: 'plug', prefixes: ['/admin/extensions'] },
       { key: 'other', to: '/admin/other', label: { textKey: 'admin_menu_other', fallback: 'Maintenance' }, icon: 'wrench', prefixes: ['/admin/other', '/admin/modlogs'] },
       /* 「版本更新」菜单项：发布索引托管在仓库 .github/releases，页内直读 GitHub raw */
-      { key: 'about', to: '/admin/about', label: { textKey: 'admin_menu_about', fallback: 'Version Updates' }, icon: 'tag', prefixes: ['/admin/about'] },
+      { key: 'update', to: '/admin/update', label: { textKey: 'admin_menu_about', fallback: 'Version Updates' }, icon: 'tag', prefixes: ['/admin/update'] },
     ],
   },
 ];

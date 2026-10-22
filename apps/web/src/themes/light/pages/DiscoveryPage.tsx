@@ -119,7 +119,7 @@ export function DiscoveryPage() {
   });
   const online = useQuery({
     queryKey: ['online'],
-    queryFn: () => apiGet<{ total: number }>('/api/online'),
+    queryFn: () => apiGet<{ total: number }>('/api/online?summary=1'),
     staleTime: 60_000,
     enabled: discOn,
   });

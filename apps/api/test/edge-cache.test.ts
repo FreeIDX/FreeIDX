@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../src/index';
 import { l0Clear } from '../src/core/cache';
+import { API_TTL } from '../src/core/cache/edge';
 import { fakeAssets, fakeCaches, fakeD1Sql, fakeKv, fakeR2, type SqlRule } from './helpers/fake-d1';
 
 const SETTING = JSON.stringify({
@@ -106,7 +107,7 @@ describe('边缘缓存：游客只读接口', () => {
     expect(second.source.calls.length).toBe(0);
   });
 
-  it('缓存副本带 max-age，下发给客户端的响应不带', async () => {
+  it('缓存副本带 max-age，下发给客户端的响应不带（MISS 与 HIT 同口径）', async () => {
     await hit('/api/threads');
     const stored = Array.from(edge.entries.values())[0]!;
     expect(new Headers(stored.headers).get('cache-control')).toBe('public, max-age=30');
@@ -114,6 +115,12 @@ describe('边缘缓存：游客只读接口', () => {
 
     const fresh = await hit('/api/threads?fid=1', {}, envFor());
     expect(fresh.res.headers.get('cache-control')).toBeNull();
+
+    // HIT 同样不得带 max-age：HTTP 缓存键不含 Cookie，游客在 30s 窗口内登录后重新拉
+    // /api/bootstrap 会被浏览器喂回「游客版」→ 认证态串扰（登录成功但顶栏仍是游客）。
+    const second = await hit('/api/threads', {}, envFor());
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(second.res.headers.get('cache-control')).toBeNull();
   });
 
   it('查询串参与缓存键（分页/筛选各自成条目）', async () => {
@@ -157,6 +164,47 @@ describe('边缘缓存：游客只读接口', () => {
   it('非白名单接口（/api/me）不参与缓存', async () => {
     await hit('/api/me');
     expect(edge.entries.size).toBe(0);
+  });
+
+  /* 右栏/聚合类端点在 §7 扩容前完全没有边缘缓存：游客每次 PV 都真打 Worker + D1。
+     下面的表驱动断言既守「别把已接入的端点改回去」，也守正则优先级（不能让
+     /api/threads/hot-favorites 被 /api/threads/:tid 的规则吃掉）。 */
+  it('右栏/聚合类只读接口均已纳入边缘缓存，且正则互不抢占', () => {
+    const ttlOf = (path: string) => API_TTL.find(([re]) => re.test(path))?.[1];
+    const required: Array<[string, number]> = [
+      ['/api/online', 30],
+      ['/api/posts/latest', 30],
+      ['/api/rank/users', 600],
+      ['/api/rank/threads', 3600],
+      ['/api/rank/forum', 300],
+      ['/api/rank/list', 300],
+      ['/api/threads/hot-favorites', 300],
+      ['/api/threads/7/hot-posts', 60],
+      ['/api/insert-codes', 60],
+      ['/api/quick-reply-message', 300],
+      ['/api/vip/plans', 600],
+      ['/api/payment-providers', 600],
+      ['/api/checkin', 30],
+    ];
+    for (const [path, ttl] of required) expect(ttlOf(path), `${path} 的边缘 TTL`).toBe(ttl);
+    // 详情页与 hot-posts 是同级路径，细节规则不能互相覆盖
+    expect(ttlOf('/api/threads/7')).toBe(60);
+    // 付费/写侧接口必须仍在白名单外
+    for (const path of ['/api/me', '/api/orders/abc', '/api/my/favorites', '/api/threads/7/paylist']) {
+      expect(ttlOf(path), `${path} 不应参与边缘缓存`).toBeUndefined();
+    }
+  });
+
+  it('配置类接口（/api/insert-codes）命中边缘后不再读 bbs_kv', async () => {
+    const first = await hit('/api/insert-codes');
+    expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(first.source.calls.some((c) => /FROM bbs_kv/.test(c.sql))).toBe(true);
+    expect(edge.entries.size).toBe(1);
+
+    const second = await hit('/api/insert-codes', {}, envFor());
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(second.source.calls.length).toBe(0);
+    expect(await second.res.json()).toEqual(await first.res.json());
   });
 
   it('无 Cache API 环境优雅降级（workers.dev / 本地预览）', async () => {

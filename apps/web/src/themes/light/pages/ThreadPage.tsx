@@ -7,7 +7,8 @@ import { apiErrorMessage } from '../../../lib/errors';
 import { posInt } from '../../../lib/params';
 import { AttachRows } from '../../../components/AttachRows';
 import { Avatar } from '../../../components/Avatar';
-import { Composer, type ComposerSubmit, type QuotedSummary } from '../../../components/Composer';
+import type { ComposerSubmit, QuotedSummary } from '../../../components/Composer';
+import { LazyComposer, preloadComposer } from '../../../components/ComposerAsync';
 import { Icon } from '../../../components/icons';
 import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
 import { Pagination } from '../../../components/Pagination';
@@ -209,6 +210,19 @@ export function ThreadPage() {
   const forumlist = useAuth((s) => s.forumlist);
   const grouplist = useAuth((s) => s.grouplist);
   const setting = useAuth((s) => s.setting);
+  /* 编辑器 chunk 空闲预热（C3）：把 400KB 下载移出首帧关键路径，又不让「高级回复」点击等下载。
+     仅登录用户需要（游客没有回复框，预热纯属浪费流量）；me 由 bootstrap 异步到达，故依赖它。
+     空闲回调不可用时退化为 2.5s 定时（仍晚于首屏），失败由 lazy 真正渲染时重试。 */
+  const canCompose = Boolean(me);
+  useEffect(() => {
+    if (!canCompose) return;
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(() => preloadComposer());
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(preloadComposer, 2500);
+    return () => window.clearTimeout(id);
+  }, [canCompose]);
   /* 版务操作（mod_top/mod_digest/mod_close/mod_move 的 dialog 等价实现） */
   const [modDlg, setModDlg] = useState<'top' | 'digest' | 'move' | null>(null);
   const [modVal, setModVal] = useState(0);
@@ -916,7 +930,7 @@ export function ThreadPage() {
               {op ? (
                 opEditing ? (
                   <div>
-                    <Composer
+                    <LazyComposer
                       initialHtml={op.message ?? ''}
                       submitLabel={t('save')}
                       busy={edit.isPending}
@@ -1073,7 +1087,7 @@ export function ThreadPage() {
                       )}
                       {advanced ? (
                         <div className="mt-2">
-                          <Composer
+                          <LazyComposer
                             turnstile
                             quoted={quoted}
                             placeholder={t('content_placeholder')}

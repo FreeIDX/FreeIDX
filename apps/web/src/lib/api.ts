@@ -22,6 +22,28 @@ export class ApiError extends Error {
   }
 }
 
+/* ---------------- 请求超时（稳定性项 D2） ----------------
+ * 浏览器 fetch 默认没有超时：边缘节点抖动或 D1 慢查询时请求会一直挂着，
+ * 表现为「转圈不止」，且 React Query 的 retry 永远等不到一次失败。
+ * 15s 覆盖冷启动 + 慢查询的尾部；上传给更宽的窗口（大文件传一半被误杀比失败更糟）。 */
+const API_TIMEOUT_MS = 15_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+
+async function request(url: string, init?: RequestInit, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctl.signal });
+  } catch (e) {
+    // 超时归一成信封错误：上层（apiErrorMessage / React Query 的 error 态）按 ApiError 处理即可
+    if (ctl.signal.aborted) throw new ApiError(Code.SYSTEM_ERROR, uiT('err_system_busy'));
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * 会话失效通知（auth store 注册，避免 api ↔ store 循环依赖）：
  * 界面自认登录态却收到 NOT_LOGIN（服务端已吊销：改密/登出/100 天过期/管理员强制下线）时
@@ -52,7 +74,7 @@ async function envelopeOf(res: Response): Promise<ApiEnvelope & { data?: unknown
 async function sendWithCsrf<T>(doFetch: () => Promise<Response>): Promise<T> {
   let body = await envelopeOf(await doFetch());
   if (body.code === Code.CSRF_FAILED) {
-    await fetch('/api/health', { credentials: 'include' });
+    await request('/api/health', { credentials: 'include' });
     body = await envelopeOf(await doFetch());
   }
   return unwrap<T>(body as ApiEnvelope & { data?: T });
@@ -60,7 +82,7 @@ async function sendWithCsrf<T>(doFetch: () => Promise<Response>): Promise<T> {
 
 /** 信封解包（§6.1）：code<0 抛出；data 平铺返回 */
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(path, { credentials: 'include' });
+  const res = await request(path, { credentials: 'include' });
   return unwrap<T>((await envelopeOf(res)) as ApiEnvelope & { data?: T });
 }
 
@@ -73,7 +95,7 @@ function csrfToken(): string {
 /** 写请求（T2-3 双提交）：非 GET 自动携带 X-CSRF-Token */
 export function apiSend<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, payload?: unknown): Promise<T> {
   return sendWithCsrf<T>(() =>
-    fetch(path, {
+    request(path, {
       method,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
@@ -89,12 +111,16 @@ export function bootstrap(): Promise<BootstrapPayload> {
 /** 表单写请求：不设 Content-Type（浏览器带 multipart boundary），保留 CSRF + credentials，解信封同 apiSend */
 function apiSendForm<T>(method: 'POST' | 'PUT', path: string, form: FormData): Promise<T> {
   return sendWithCsrf<T>(() =>
-    fetch(path, {
-      method,
-      credentials: 'include',
-      headers: { 'X-CSRF-Token': csrfToken() },
-      body: form,
-    }),
+    request(
+      path,
+      {
+        method,
+        credentials: 'include',
+        headers: { 'X-CSRF-Token': csrfToken() },
+        body: form,
+      },
+      UPLOAD_TIMEOUT_MS,
+    ),
   );
 }
 
@@ -457,7 +483,7 @@ export function getRankForum(fid: number, limit = 10): Promise<{ list: RankThrea
  * blob 触发浏览器保存；文件名取 RFC 5987 filename*（UTF-8 精确），缺失回退 aid。
  */
 export async function downloadAttachment(aid: number): Promise<void> {
-  const res = await fetch(`/api/attachments/${aid}/download`, { credentials: 'include' });
+  const res = await request(`/api/attachments/${aid}/download`, { credentials: 'include' }, DOWNLOAD_TIMEOUT_MS);
   const ct = res.headers.get('content-type') ?? '';
   if (ct.includes('application/json')) {
     const body = (await res.json()) as ApiEnvelope;

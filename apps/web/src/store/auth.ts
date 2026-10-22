@@ -50,6 +50,15 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+/**
+ * bootstrap 单飞（性能项 C1 的配套）：首屏预载（main.tsx）、Layout 挂载、会话失效兜底
+ * 三方都可能在 loaded 变 true 之前调用 load()，没有单飞时它们会各发一次请求
+ * （每次多耗 1 次 Worker 请求，且响应乱序时可能用旧结果覆盖新结果）。
+ * force（登录/登出/会话失效）必须拿到登录态变更**之后**的结果，所以先等掉进行中的请求再发新的，
+ * 不能直接复用它。
+ */
+let bootstrapInflight: Promise<void> | null = null;
+
 export const useAuth = create<AuthState>((set, get) => ({
   loaded: false,
   setting: null,
@@ -59,11 +68,23 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
   load: async (force = false) => {
     if (get().loaded && !force) return;
+    if (bootstrapInflight) {
+      if (!force) return bootstrapInflight;
+      await bootstrapInflight.catch(() => undefined);
+    }
+    const p = (async () => {
+      try {
+        const d = await bootstrap();
+        set({ loaded: true, setting: d.setting, forumlist: d.forumlist, grouplist: d.grouplist, me: d.me, runtime: d.runtime, ext: d.ext, error: null });
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : String(e) });
+      }
+    })();
+    bootstrapInflight = p;
     try {
-      const d = await bootstrap();
-      set({ loaded: true, setting: d.setting, forumlist: d.forumlist, grouplist: d.grouplist, me: d.me, runtime: d.runtime, ext: d.ext, error: null });
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : String(e) });
+      await p;
+    } finally {
+      if (bootstrapInflight === p) bootstrapInflight = null;
     }
   },
   refresh: async () => {

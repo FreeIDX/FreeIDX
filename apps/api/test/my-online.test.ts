@@ -56,6 +56,29 @@ describe('GET /api/online（T4-2）', () => {
     expect(calls.some((c) => /FROM bbs_session s INNER JOIN bbs_user/.test(c.sql))).toBe(true);
   });
 
+  it('summary=1：只回 total，不查 500 行会话、不解析访问者', async () => {
+    const { env, calls } = makeEnv(onlineRows());
+    const body = await jsonOf(await app.request('/api/online?summary=1', {}, env));
+    expect(body.code).toBe(Code.OK);
+    expect(body.data).toEqual({ total: 7 });
+    // 少了这条查询才是路径真的变轻了（否则只是少序列化了 list）
+    expect(calls.some((c) => /FROM bbs_session s INNER JOIN bbs_user/.test(c.sql))).toBe(false);
+    expect(calls.some((c) => /SELECT COUNT\(\*\) AS c FROM bbs_session/.test(c.sql))).toBe(true);
+    // 游客本就不查 viewer；此处确认 summary 路径连 bbs_user 都不碰
+    expect(calls.some((c) => /FROM bbs_user/.test(c.sql))).toBe(false);
+  });
+
+  it('summary=1 对登录用户同样跳过 viewer 解析（不为人数查 bbs_user）', async () => {
+    const { env, calls } = makeEnv([
+      { test: /SELECT COUNT\(\*\) AS c FROM bbs_session/, first: { c: 7 } },
+      { test: /SELECT v FROM bbs_kv/, first: { v: JSON.stringify({ runlevel: 5 }) } },
+      { test: /SELECT v FROM bbs_cache/, first: null },
+    ]);
+    const body = await jsonOf(await app.request('/api/online?summary=1', { headers: loginCookie() }, env));
+    expect(body.data).toEqual({ total: 7 });
+    expect(calls.some((c) => /FROM bbs_user/.test(c.sql))).toBe(false);
+  });
+
   it('管理员（gid=1）：可见 ip_fmt（1.2.3.4）', async () => {
     const { env } = makeEnv([{ test: /FROM bbs_user WHERE uid = \?/, first: AUTHOR }, { test: /FROM bbs_session WHERE sid/, first: { uid: 1, last_date: now } }, ...onlineRows()]);
     const body = await jsonOf(await app.request('/api/online', { headers: loginCookie() }, env));

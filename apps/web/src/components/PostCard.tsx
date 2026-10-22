@@ -8,7 +8,8 @@ import { AttachRows } from './AttachRows';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
 import { VBadge } from './VBadge';
-import { Composer, type ComposerChange } from './Composer';
+import type { ComposerChange } from './Composer';
+import { LazyComposer } from './ComposerAsync';
 
 /** 楼层操作图标（右侧灰图标，hover 变蓝） */
 const action =
@@ -217,7 +218,7 @@ export function PostCard(props: {
 
         {editing ? (
           <div className="mt-2">
-            <Composer
+            <LazyComposer
               initialHtml={p.message ?? ''}
               submitLabel={t('save')}
               busy={busy}

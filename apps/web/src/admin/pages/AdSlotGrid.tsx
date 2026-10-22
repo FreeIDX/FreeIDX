@@ -62,7 +62,8 @@ export function AdSlotGrid() {
   const loaded = useMemo(() => (q.data?.slots ?? []).map(toDraft), [q.data]);
   const [removed, setRemoved] = useState<number[]>([]);
   /**
-   * 未保存草稿保护：后台默认 refetchOnWindowFocus，切窗回来重取会产生新的 q.data，
+   * 未保存草稿保护：任何来源的重取（invalidate / 轮询，以及全局 refetchOnWindowFocus 若恢复开启）
+   * 都会产生新的 q.data，
    * 若无条件灌入表单就会静默清空正在编辑的内容（保存成功后会复位此标记再同步）。
    */
   const dirtyRef = useRef(false);

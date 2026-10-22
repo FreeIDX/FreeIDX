@@ -20,6 +20,7 @@ import type { ExtensionApi, ExtensionCtx, ExtensionModule } from '../core/extens
 import { createApiT } from '../core/i18n';
 import { L } from '../core/i18n';
 import { escAttr } from '../core/fmt';
+import { CRON_DAILY } from '../core/cron-schedule';
 
 /** 站点验证文件名白名单（防路径穿越，仅允许安全字符）；schema 的 verifyFiles.keyPattern 与此同源 */
 const SAFE_FILE = /^[A-Za-z0-9._-]{1,80}$/;
@@ -563,7 +564,7 @@ function makePushCron(
   config: Record<string, unknown>,
 ): { pattern: string; name: string; run: (c: CronRunContext) => Promise<void> } {
   return {
-    pattern: '0 3 * * *', // 复用每日档触发器（§14 未新增 wrangler 触发）
+    pattern: CRON_DAILY, // 复用每日档触发器（§14 未新增 wrangler 触发）；表达式取自 core/cron-schedule
     name: 'seo:index_push',
     async run(cron: CronRunContext): Promise<void> {
       const db = ctx?.db;

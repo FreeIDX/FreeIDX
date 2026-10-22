@@ -36,7 +36,7 @@ export function EmailSettingPage() {
   const [rows, setRows] = useState<PoolRow[]>([emptyRow()]);
   const loaded = q.data;
   /**
-   * 仅首次装载灌入表单：后台默认 refetchOnWindowFocus，切窗返回重取会拿到新 q.data，
+   * 仅首次装载灌入表单：任何来源的重取（invalidate，以及全局 refetchOnWindowFocus 若恢复开启）都会拿到新 q.data，
    * 若无条件覆盖就会静默清空正在编辑的 SMTP 池（保存后本地 rows 已是提交值，无需回灌）。
    */
   const initedRef = useRef(false);

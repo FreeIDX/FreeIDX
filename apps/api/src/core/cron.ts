@@ -9,6 +9,7 @@ import type { Env } from '../types/env';
 import { D1b } from './db';
 import type { Stmt } from './db';
 import { Cache } from './cache';
+import { CRON_5MIN, CRON_DAILY, CRON_HOURLY } from './cron-schedule';
 import { queueGc } from './queue';
 import { getExtensions } from './extensions';
 import { reconcilePending, sweepStaleOrders } from './payment/orchestrator';
@@ -237,20 +238,20 @@ export async function handleScheduled(
   const deps: CronDeps = { db, cache, files: env.FILES as unknown as CronDeps['files'], now: Math.floor(Date.now() / 1000), env };
   const waitUntil = (p: Promise<unknown>): void => ctx.waitUntil(p);
   switch (controller.cron) {
-    case '*/5 * * * *': {
+    case CRON_5MIN: {
       const r = await cronFiveMin(deps);
       console.log(`[cron:5min] sess_gc<=${r.sessExpiry} onlines=${r.onlines}`);
       break;
     }
-    case '0 3 * * *': {
+    case CRON_DAILY: {
       const r = await cronDaily(deps);
       console.log(
         `[cron:daily] forum_reset=${r.forumReset} calibrated_threads=${r.calibrated.threads} calibrated_posts=${r.calibrated.posts} drift_rows=${r.driftRows} cache_gc=${r.cacheGc}`,
       );
-      await dispatchPluginCrons('0 3 * * *', deps, waitUntil);
+      await dispatchPluginCrons(CRON_DAILY, deps, waitUntil);
       break;
     }
-    case '0 * * * *': {
+    case CRON_HOURLY: {
       // 掉单对账（§15.3 T5-7）：每小时复核近 24h pending 外部单，命中已付补 markPaid+fulfillOrder；卡密除外。
       // 报告仅计数，不含通道/密钥信息（私钥不入日志）。
       try {
@@ -295,6 +296,8 @@ export async function handleScheduled(
       break;
     }
     default:
+      // 走到这里说明 wrangler.toml 新增了触发但 handleScheduled 没接（历史事故：每日档曾因此静默
+      // 失效）。表达式请统一取自 ./cron-schedule，并由 test/cron-schedule.test.ts 门禁。
       console.warn(`[cron] unknown schedule: ${controller.cron}`);
   }
 }

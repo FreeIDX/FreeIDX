@@ -102,7 +102,7 @@ export function ForumListPage() {
     });
 
   /**
-   * 未保存草稿保护：后台默认 refetchOnWindowFocus，切窗返回重取会拿到新 q.data，
+   * 未保存草稿保护：任何来源的重取（invalidate，以及全局 refetchOnWindowFocus 若恢复开启）都会拿到新 q.data，
    * 若无条件覆盖就会静默清空正在编辑的版块表单；保存/删除成功后会复位标记，让服务端数据回灌（含新行 fid）。
    */
   const dirtyRef = useRef(false);

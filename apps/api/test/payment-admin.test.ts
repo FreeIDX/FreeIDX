@@ -8,6 +8,7 @@ import { Code } from '@freeidx/shared';
 import { l0Clear } from '../src/core/cache';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
 import { handleScheduled } from '../src/core/cron';
+import { CRON_HOURLY } from '../src/core/cron-schedule';
 import { issueAdminToken } from '../src/core/auth/admin';
 
 const ADMIN_SECRET = 'admin-jwt-secret';
@@ -240,11 +241,11 @@ describe('掉单对账 cron 分派（handleScheduled → reconcilePending）', (
       ...rules,
     ]);
     const envCron = { DB: db, CACHE: fakeKv(), FILES: {}, SITE_URL: 'http://localhost', SECRETS_MASTER_KEY: '' } as never;
-    const controller = { cron: '0 * * * *' } as unknown as ScheduledController;
+    const controller = { cron: CRON_HOURLY } as unknown as ScheduledController;
     const ctx = { waitUntil: () => {}, passThroughOnException: () => {} } as unknown as ExecutionContext;
     await handleScheduled(controller, envCron, ctx);
     scheduled = controller.cron;
-    expect(scheduled).toBe('0 * * * *');
+    expect(scheduled).toBe(CRON_HOURLY);
     expect(calls.some((c) => /FROM bbs_attach WHERE status = 0/.test(c.sql))).toBe(true);
   });
 });

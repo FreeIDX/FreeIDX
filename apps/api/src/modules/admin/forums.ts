@@ -278,7 +278,8 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         postCount += Number(row.c);
         if (u > 0) stmts.push(db.prepare('UPDATE bbs_user SET posts = posts - ? WHERE uid = ?').bind(Number(row.c), u) as unknown as Stmt);
       }
-      postCount += tids.length; // 首帖
+      // runtime.posts 口径 = isfirst = 0（发主题时只 threads+1、不加 posts；cron 校准亦排除首帖），
+      // 故此处只累加回帖数，首帖不计——否则删版块会把 posts 多减「主题数」，被夹到 0 后统计归零。
       for (const [u, n] of threadAuthor) {
         stmts.push(db.prepare('UPDATE bbs_user SET threads = threads - ? WHERE uid = ?').bind(n, u) as unknown as Stmt);
       }

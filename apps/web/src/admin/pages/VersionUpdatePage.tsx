@@ -1,13 +1,15 @@
 /**
- * 版本更新（/admin/about，系统分组最后一项；菜单文案仍复用 admin_menu_about 键）。
+ * 版本更新（/admin/update，系统分组最后一项；菜单文案仍复用 admin_menu_about 键）。
  *
  * 口径：
  *  - 发布数据托管在 GitHub 仓库 `.github/releases/version.json`，更新日志为仓库内 Markdown，
  *    页面经 raw.githubusercontent.com 直接读取，发版不需要重新部署站点（见 admin/release-index.ts）。
  *  - 当前版本是站点代码版本（1.0.0）；当前提交取构建期注入的 VITE_COMMIT_SHA，
  *    部署流水线在 GitHub Actions 里注入，本地开发未注入时显示 -。
- *  - 版式：顶部说明 + 数据来源、四格指标、按版本倒序的发布卡（徽标/元信息/更新日志）。
+ *  - 版式：顶部说明 + 数据来源、四格指标、按版本倒序的发布卡（徽标/元信息/更新日志）；
+ *    页面标题只由后台顶栏承担（此处不再重复渲染），发布卡默认折叠（点卡头展开元信息与更新日志）。
  */
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAdminLang, useAdminT } from '../t';
 import type { IconName } from '../../components/icons';
@@ -72,9 +74,13 @@ function Metric({ icon, label, value, mono }: { icon: IconName; label: string; v
 function ReleaseCard({ entry, previousTag }: { entry: ReleaseEntry; previousTag: string | null }) {
   const t = useAdminT();
   const lang = useAdminLang();
+  /* 版本详情默认折叠：卡头常驻（版本号/徽标/外链），点卡头展开元信息与更新说明；
+     折叠期间不下发更新日志请求，展开后才按需拉取（缓存跨折叠复用）。 */
+  const [open, setOpen] = useState(false);
   const notes = useQuery({
     queryKey: ['admin', 'release-notes', entry.tagName, lang],
     queryFn: ({ signal }) => fetchReleaseChangelog(entry, lang, signal),
+    enabled: open,
     staleTime: Infinity,
     retry: false,
   });
@@ -88,13 +94,24 @@ function ReleaseCard({ entry, previousTag }: { entry: ReleaseEntry; previousTag:
 
   return (
     <article className={cx(cardCls, 'overflow-hidden')}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-5 py-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className={cx('flex flex-wrap items-center justify-between gap-3 px-5 py-4', open && 'border-b border-line-soft')}>
+        {/* 卡头左侧即折叠开关：版本号/徽标随卡头常驻，点它展开下方元信息与更新说明 */}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          title={open ? t('side_nav_collapse') : t('side_nav_expand')}
+          className="group flex min-w-0 cursor-pointer flex-wrap items-center gap-2 border-0 bg-transparent p-0 text-left"
+        >
+          <Icon
+            name={open ? 'chevron_down' : 'chevron_right'}
+            className="size-4 shrink-0 text-muted-2 transition-colors group-hover:text-ink"
+          />
           <Icon name="tag" className="size-4 text-brand" />
-          <h3 className="m-0 font-mono text-[1.1rem] leading-tight font-semibold">{entry.tagName}</h3>
+          <span className="font-mono text-[1.1rem] leading-tight font-semibold">{entry.tagName}</span>
           <Badge tone={status.tone}>{status.text}</Badge>
           {isCurrent && <Badge tone="primary">{t('admin_version_current')}</Badge>}
-        </div>
+        </button>
         <div className="flex flex-wrap items-center gap-2">
           {previousTag && (
             <a
@@ -114,28 +131,30 @@ function ReleaseCard({ entry, previousTag }: { entry: ReleaseEntry; previousTag:
         </div>
       </div>
 
-      <div className={cardBodyCls}>
-        <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-2">
-          <span>{t('admin_version_published_at')}: {formatTime(entry.publishedAt, lang)}</span>
-          {entry.authorLogin && <span>{t('admin_version_author')}: {entry.authorLogin}</span>}
-          {entry.targetCommitish && (
-            <span>
-              {t('admin_version_commit')}: <code className="font-mono">{shortCommit(entry.targetCommitish)}</code>
-            </span>
-          )}
-        </p>
+      {open && (
+        <div className={cardBodyCls}>
+          <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-2">
+            <span>{t('admin_version_published_at')}: {formatTime(entry.publishedAt, lang)}</span>
+            {entry.authorLogin && <span>{t('admin_version_author')}: {entry.authorLogin}</span>}
+            {entry.targetCommitish && (
+              <span>
+                {t('admin_version_commit')}: <code className="font-mono">{shortCommit(entry.targetCommitish)}</code>
+              </span>
+            )}
+          </p>
 
-        <div className="mt-3 border-t border-line-soft pt-3">
-          <h4 className="m-0 mb-2 text-sm font-medium">{t('admin_version_notes')}</h4>
-          {notes.isPending ? (
-            <p className="m-0 text-sm text-muted">{t('loading', '加载中…')}</p>
-          ) : notes.data ? (
-            <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-ink-soft">{notes.data}</pre>
-          ) : (
-            <p className="m-0 text-sm text-muted">{t('no_data', '暂无数据')}</p>
-          )}
+          <div className="mt-3 border-t border-line-soft pt-3">
+            <h4 className="m-0 mb-2 text-sm font-medium">{t('admin_version_notes')}</h4>
+            {notes.isPending ? (
+              <p className="m-0 text-sm text-muted">{t('loading', '加载中…')}</p>
+            ) : notes.data ? (
+              <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-ink-soft">{notes.data}</pre>
+            ) : (
+              <p className="m-0 text-sm text-muted">{t('no_data', '暂无数据')}</p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </article>
   );
 }
@@ -161,11 +180,9 @@ export function VersionUpdatePage() {
     <>
       <PageTitle>{t('admin_menu_about')}</PageTitle>
 
+      {/* 页面标题由后台顶栏承担（同一份菜单文案），此处只留一句说明，避免与顶栏重复 */}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="m-0 text-[1.25rem] leading-tight font-medium">{t('admin_menu_about')}</h2>
-          <p className="m-0 mt-1 text-sm text-muted">{t('admin_version_subtitle')}</p>
-        </div>
+        <p className="m-0 text-sm text-muted">{t('admin_version_subtitle')}</p>
         <a href={`${REPO_URL}/releases`} target="_blank" rel="noreferrer" className={linkBtnCls}>
           <Icon name="external_link" className="size-3.5" />
           {t('admin_version_source')}

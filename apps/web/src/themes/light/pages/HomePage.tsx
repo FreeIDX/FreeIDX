@@ -57,10 +57,10 @@ export function HomePage() {
   /* queryKey/URL 与发现页共用同一描述符（同 URL 同 key → 跨页共享缓存，切页不重复请求） */
   const q = useQuery({ ...siteThreadsQuery(page, digest, orderby), placeholderData: keepPreviousData });
 
-  /** 在线数（走 GET /api/online 的 total） */
+  /** 在线数（GET /api/online?summary=1 只回 total；不带参数会连同 500 行会话列表一起下发） */
   const online = useQuery({
     queryKey: ['online'],
-    queryFn: () => apiGet<{ total: number }>('/api/online'),
+    queryFn: () => apiGet<{ total: number }>('/api/online?summary=1'),
     staleTime: 60_000,
   });
 

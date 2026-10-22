@@ -7,6 +7,7 @@ import { app } from '../src/index';
 import { buildRuntime } from '../src/core/extensions/registry';
 import { seoPlugin } from '../src/extensions/seo';
 import { handleScheduled } from '../src/core/cron';
+import { CRON_DAILY } from '../src/core/cron-schedule';
 import { Cache, l0Clear } from '../src/core/cache';
 import { D1b } from '../src/core/db';
 import { encryptSecret } from '../src/core/crypto';
@@ -223,7 +224,7 @@ describe('IndexNow / 百度推送 cron（run 直测）', () => {
 });
 
 describe('handleScheduled 分发插件 cron（每日档）', () => {
-  it('0 3 档触发 seo 推送任务', async () => {
+  it('每日档（03:01）触发 seo 推送任务', async () => {
     const token = await encryptSecret(JSON.stringify({ indexnowKey: 'K' }), MASTER);
     const kv: Record<string, string | null> = { extensions: null, setting: SETTING, 'ext:seo:config': JSON.stringify({}), 'ext:geo:config': null, 'ext:ads:config': null, 'ext:seo:secret': token, 'cron:last:seo:index_push': null };
     const { db } = fakeD1Sql(baseRules(kv));
@@ -231,7 +232,7 @@ describe('handleScheduled 分发插件 cron（每日档）', () => {
     let indexnowHit = false;
     vi.stubGlobal('fetch', async (url: string) => { if (String(url).includes('api.indexnow.org')) indexnowHit = true; return { ok: true, status: 200 }; });
     const ctx = { waitUntil: (_p: Promise<unknown>) => {} } as ExecutionContext;
-    await handleScheduled({ cron: '0 3 * * *' } as ScheduledController, env as never, ctx);
+    await handleScheduled({ cron: CRON_DAILY } as ScheduledController, env as never, ctx);
     expect(indexnowHit).toBe(true);
   });
 });

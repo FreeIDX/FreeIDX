@@ -34,6 +34,8 @@ bucket_name = "freeidx-files"
 [triggers]
 # §11.1：每 5 分钟档 + 每日凌晨档；§15.3 每小时掉单对账档（T5-7）
 # 每日档错开 03:01：避免与 */5、每小时档在 03:00 并发读改写 runtime（today* 会被旧值覆盖）
+# ⚠️ 表达式唯一事实源是 src/core/cron-schedule.ts：改这里必须同步 HANDLED_CRONS，
+#    否则该档会在 handleScheduled 里落进 default 分支静默失效（test/cron-schedule.test.ts 有门禁）
 crons = ["*/5 * * * *", "0 * * * *", "1 3 * * *"]
 
 [vars]

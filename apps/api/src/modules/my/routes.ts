@@ -191,16 +191,23 @@ interface OnlineRow {
 }
 
 /**
- * GET /api/online（T4-2）：uid>0 会话按 last_date 倒序 ≤500，
- * 经 'online_list' 缓存读穿（命中零 D1），JOIN bbs_user 单次取（预算友好）。
+ * GET /api/online（T4-2）
+ *  - 默认：uid>0 会话按 last_date 倒序 ≤500（list + total），保持既有 API 形状不变；
+ *  - `?summary=1`：只回 total —— 首页/发现页只用到在线人数，此前为拿一个数字要下载并解析
+ *    约 60KB 的 JSON（500 行）。列表与人数各自读穿自己的缓存，两条路径互不影响。
  * total 为 COUNT(*) session（含游客，GC 后即为在线口径）。ip 仅 gid 1/2 可见。
  */
 async function onlineList(c: Ctx): Promise<Response> {
   const db = c.get('db');
   const cache = c.get('cache');
-  const v = await loadViewer(cache, db, c);
-  const showIp = v.gid === 1 || v.gid === 2;
-  const [rows, totalRow] = await Promise.all([
+  const totalP = db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session').first<{ c: number }>();
+  // 只要人数：不查 500 行会话，也不必解析访问者（连 gid 都不需要）
+  if (c.req.query('summary') === '1') {
+    const totalRow = await totalP;
+    return ok(c, 'ok', { data: { total: Number(totalRow?.c ?? 0) } });
+  }
+  // 列表路径：viewer 与两条查询并行（原先 viewer 是串行前置）
+  const [rows, totalRow, v] = await Promise.all([
     remember(cache, 'online_list', async () => {
       const r = await db
         .prepare<OnlineRow>(
@@ -211,8 +218,10 @@ async function onlineList(c: Ctx): Promise<Response> {
         .all();
       return r.results;
     }),
-    db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session').first<{ c: number }>(),
+    totalP,
+    loadViewer(cache, db, c),
   ]);
+  const showIp = v.gid === 1 || v.gid === 2;
   const list = rows.map((o) => ({
     uid: Number(o.uid),
     gid: Number(o.gid),

@@ -100,7 +100,8 @@ function AdminRoutes() {
           <Route path="check/*" element={<CheckPage />} />
           {/* 加V认证四档：待审核 / 已通过 / 手动加V / 收费设置 */}
           <Route path="v/*" element={<AdminVPage />} />
-          <Route path="about" element={<VersionUpdatePage />} />
+          {/* 版本更新（系统分组最后一项）：路径用 update，勿再用 about（前台「关于」语义） */}
+          <Route path="update" element={<VersionUpdatePage />} />
           <Route path="*" element={<ComingSoon label={t('admin_page_not_found')} />} />
         </Route>
       </Routes>
