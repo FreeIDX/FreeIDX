@@ -45,12 +45,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 必须先出前端产物：wrangler.toml 的 [assets].directory = "../web/dist"，
+      # 目录不存在时 `wrangler deploy --dry-run` 会直接报错退出（2026-10-22 CI 红灯原因）
+      - name: Build Pages frontend
+        run: pnpm --filter @freeidx/web build
       - name: Deploy Worker preview
         working-directory: apps/api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --dry-run
-      - name: Build Pages frontend
-        run: pnpm --filter @freeidx/web build
       # prod 发布为手动门禁（§13.4）：wrangler deploy --env prod 由人工触发
