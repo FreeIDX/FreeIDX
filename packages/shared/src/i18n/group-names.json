@@ -28,9 +28,9 @@
       "group_106": "VIP Group",
       "group_2": "Super Moderator Group",
       "group_4": "Moderator Group",
-      "group_5": "Internship Moderator Group",
-      "group_6": "UnVerified Group",
-      "group_7": "Forbidden Group",
+      "group_5": "Trainee moderator group",
+      "group_6": "Unverified group",
+      "group_7": "Banned group",
       "group_hash": "Group #{gid}"
     },
     "es-es": {
@@ -98,7 +98,7 @@
       "group_hash": "그룹 #{gid}"
     },
     "ru-ru": {
-      "group_0": "Группы пользователей",
+      "group_0": "Группа гостей",
       "group_1": "Администраторы",
       "group_101": "Уровень 1",
       "group_102": "Уровень 2",
@@ -114,7 +114,7 @@
       "group_hash": "Группа #{gid}"
     },
     "th-th": {
-      "group_0": "กลุ่มผู้ใช้",
+      "group_0": "กลุ่มผู้เยี่ยมชม",
       "group_1": "กลุ่มแอดมิน",
       "group_101": "กลุ่มผู้ใช้เลเวล 1",
       "group_102": "กลุ่มผู้ใช้เลเวล 2",
@@ -148,7 +148,7 @@
     "zh-tw": {
       "group_0": "遊客組",
       "group_1": "管理員組",
-      "group_101": "壹級用戶組",
+      "group_101": "一級用戶組",
       "group_102": "二級用戶組",
       "group_103": "三級用戶組",
       "group_104": "四級用戶組",

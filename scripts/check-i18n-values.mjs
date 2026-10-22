@@ -29,9 +29,19 @@ const TW_SIMP = {
   设: '設', 内: '內', 发: '發', 变: '變', 运: '運', 图: '圖', 页: '頁', 单: '單', 号: '號',
   级: '級', 统: '統', 际: '際', 优: '優', 农: '農', 业: '業', 击: '擊', 艺: '藝', 节: '節',
   实: '實', 尘: '塵', 盘: '盤', 审: '審', 态: '態', 证: '證', 补: '補', 装: '裝', 复: '復',
-  择: '擇', 启: '啟', 签: '簽',
+  择: '擇', 启: '啟', 签: '簽', 张: '張', 间: '間', 长: '長', 与: '與', 对: '對', 视: '視',
+  询: '詢', 称: '稱', 来: '來', 输: '輸', 废: '廢', 彻: '徹', 进: '進', 务: '務',
+  删: '刪', 请: '請', 权: '權', 时: '時', 壹: '一',
 };
 const TW_SIMP_SET = new Set(Object.keys(TW_SIMP));
+
+// 日语里不会出现的简体字（用于发现「中文词条未翻译」。已排除中日同形的 区/参/却/体/内/号 等）
+const JA_SIMP =
+  '设发变运图页单级统际优农业击艺节实盘审态证补装复择启签书车门马鸟鱼龙师华风飞习乐买卖务结给红纪经绝绿罗职联脑脸苏词试诗话诚认讲许论访评识诉诊译课调谈请诸读让训议讯记护报拥挥损换据摇权观欢难边过还进远选适达这个们么说时开关长应样种它为对从众网线组织严丽乱争亚产亲仅价伤伟传伞俭债偿储儿党兴养兽写军冲决况减凤凭凯刘则刚创删别剂剑剧劝办动劳势医协卫厂历压厌县双叙叠叶叹呜吗响哑哟唤啥啦喷嘴嘱嚷榜于顶贴坛络软户员账详';
+const JA_SIMP_SET = new Set([...JA_SIMP]);
+
+// 非中日韩语言里不应出现的汉字（用于发现「中文残留」）
+const HANZI = /[\u3400-\u9fff]/;
 
 const strip = (s) => s.replace(/\{[\w.]+\}/g, '');
 const hasWord = (s) => /[A-Za-zÀ-ɏЀ-ӿ฀-๿぀-ヿ一-鿿가-힯]{2,}/.test(strip(s));
@@ -88,6 +98,11 @@ for (const loc of locales) {
         if (simp.length) push('TW_SIMP', loc, key, `${v}〔${simp.join(' ')}〕`);
         continue;
       }
+      if (loc === 'ja-jp') {
+        const cn = [...new Set([...v].filter((c) => JA_SIMP_SET.has(c)))];
+        if (cn.length) push('JA_CN_CHAR', loc, key, `${v}〔${cn.join('')}〕`);
+      }
+      if (!PUNCT_OK.has(loc) && HANZI.test(v) && !isTermOnly(v, loc)) push('ZH_LEAK', loc, key, v);
       if (v === String(zh[ns][k]) && hasWord(v) && !isTermOnly(v, loc)) push('ZH_COPY', loc, key, v);
       if (loc !== 'en-us' && v === String(dicts['en-us'][ns]?.[k]) && latinSentence(v) && !isTermOnly(v, loc)) push('EN_COPY', loc, key, v);
       if (!PUNCT_OK.has(loc) && (CN_PUNCT.test(v) || FULLWIDTH.test(v))) push('CJK_PUNCT', loc, key, v);
@@ -137,6 +152,8 @@ for (const m of body.matchAll(/^\s*'([A-Za-z0-9_.]+)':\s*M\(/gm)) {
     const loc = LO[j], v = args[j], key = `api.${m[1]}`;
     if (!v.trim()) push('EMPTY', loc, key, v);
     if (loc === 'zh-tw') { if ([...v].some((c) => TW_SIMP_SET.has(c))) push('TW_SIMP', loc, key, v); continue; }
+    if (loc === 'ja-jp' && [...v].some((c) => JA_SIMP_SET.has(c))) push('JA_CN_CHAR', loc, key, v);
+    if (!PUNCT_OK.has(loc) && HANZI.test(v) && !isTermOnly(v, loc)) push('ZH_LEAK', loc, key, v);
     if (v === args[0] && hasWord(v) && !isTermOnly(v, loc)) push('ZH_COPY', loc, key, v);
     if (j > 2 && v === args[2] && latinSentence(v) && !isTermOnly(v, loc)) push('EN_COPY', loc, key, v);
     if (!PUNCT_OK.has(loc) && (CN_PUNCT.test(v) || FULLWIDTH.test(v))) push('CJK_PUNCT', loc, key, v);
