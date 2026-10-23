@@ -186,6 +186,15 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(d.setting.mailOn).toBe(false);
   });
 
+  it('GET /api/bootstrap：版块绑定语言下发，且 locale 形式归一化为内容语言（0024）', async () => {
+    const rules = baseRules({ forum: [{ ...FORUM_OPEN, lang: 'ja-jp' }] });
+    const { env } = envFor(rules);
+    const body = await json(await app.request('/api/bootstrap', {}, env as never));
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { forumlist: { fid: number; lang?: string }[] };
+    expect(d.forumlist[0]!.lang).toBe('ja');
+  });
+
   it('GET /api/users/1 + /threads：公开列零敏感字段、我的主题走权限过滤', async () => {
     const { env } = envFor(baseRules());
     const body = await json(await app.request('/api/users/1', {}, env as never));

@@ -223,6 +223,8 @@ export function Field({
   htmlFor,
   hint,
   hintInline,
+  hintAfter,
+  labelClass = 'sm:w-2/12',
   controlClass = 'sm:w-10/12',
   children,
 }: {
@@ -231,34 +233,45 @@ export function Field({
   hint?: string;
   /** hint 与控件同行（右对齐），适合单选组等矮控件 */
   hintInline?: boolean;
+  /** hint 排在控件右侧（而非下方），配合定宽控件使用 */
+  hintAfter?: boolean;
+  /** 标签栏宽（默认 2/12；定宽场景传如 `sm:w-[85px]`） */
+  labelClass?: string;
   controlClass?: string;
   children: ReactNode;
 }) {
   return (
     <div className="mb-4 flex flex-col sm:flex-row sm:items-start gap-2">
-      <label htmlFor={htmlFor} className="sm:w-2/12 font-medium leading-6">
+      <label htmlFor={htmlFor} className={cx('font-medium leading-6 sm:shrink-0', labelClass)}>
         {label}：
       </label>
-      <div className={cx('w-full', controlClass)}>
-        {hintInline ? (
-          <div className="flex flex-wrap items-center gap-x-[30px] gap-y-1">
-            {children}
-            {hint && <p className="text-xs text-muted-2">{hint}</p>}
-          </div>
-        ) : (
-          <>
-            {children}
-            {hint && <p className="mt-2 text-xs text-muted-2">{hint}</p>}
-          </>
-        )}
-      </div>
+      {hintAfter ? (
+        <div className="flex w-full min-w-0 flex-col gap-x-3 gap-y-1 sm:flex-1 sm:flex-row sm:items-start">
+          <div className={cx('w-full min-w-0', controlClass)}>{children}</div>
+          {hint && <p className="text-xs leading-6 text-muted-2 sm:flex-1">{hint}</p>}
+        </div>
+      ) : (
+        <div className={cx('w-full', controlClass)}>
+          {hintInline ? (
+            <div className="flex flex-wrap items-center gap-x-[30px] gap-y-1">
+              {children}
+              {hint && <p className="text-xs text-muted-2">{hint}</p>}
+            </div>
+          ) : (
+            <>
+              {children}
+              {hint && <p className="mt-2 text-xs text-muted-2">{hint}</p>}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /** 模式 C 的收尾行：确定满宽 + 返回次按钮（空 label 占位对齐，此处用左内距等价实现） */
-export function SubmitRow({ children }: { children: ReactNode }) {
-  return <div className="sm:pl-[16.666%] sm:w-10/12">{children}</div>;
+export function SubmitRow({ children, indentClass = 'sm:pl-[16.666%] sm:w-10/12' }: { children: ReactNode; indentClass?: string }) {
+  return <div className={indentClass}>{children}</div>;
 }
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {

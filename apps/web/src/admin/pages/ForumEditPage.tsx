@@ -3,7 +3,7 @@
  *  - 字段顺序：名称 / 排序(窄栏) / 简介 / 公告 / 版主 / 用户权限(accesson + 矩阵)
  *    （brief、announcement 都是 100%×80px textarea）；
  *  - 卡体第一行是卡内小标题「编辑 - 名称」，标题词取 i18n `forum_edit`（即「编辑」）；
- *  - 本版排序/SEO 两项是本项目扩展键，统一放到权限矩阵之后、提交按钮之前（§7 记账）；
+ *  - 本版排序/绑定内容语言/SEO 是本项目扩展键，统一放到权限矩阵之后、提交按钮之前（§7 记账）；
  *    图标为**上传图片**（选图即传 PUT /:fid/icon 存 R2；未上传回退内置默认图），
  *    早期版本的「图标编号」输入已废弃，bbs_forum.icon 编号列仅作兼容保留；
  *  - 版主口径差异：接口直接收 UID（服务端负责与用户名的互转），故这里就按 UID 说明；
@@ -223,19 +223,6 @@ export function ForumEditPage() {
           <Input value={form.moduids ?? ''} onChange={(e) => set('moduids', e.target.value)} placeholder="3,17" />
         </Field>
 
-        {/* 内容语言绑定（0024）：空 = 不限制（发帖自动识别 + 可手动选择）；非空 = 新主题强制该语言。
-            文案复用前台已有的 content_lang_* 词条，避免为一处设置新增 10 个语言包的重复翻译。 */}
-        <Field label={t('content_lang_label')}>
-          <Select value={form.lang ?? ''} onChange={(e) => set('lang', e.target.value)}>
-            <option value="">{t('content_lang_auto')}</option>
-            {CONTENT_LANGS.map((l) => (
-              <option key={l} value={l}>
-                {CONTENT_LANG_NATIVE_NAMES[l]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
         <Field label={t('user_privilege', '用户权限')}>
           <p className="mb-[1rem]">
             <Checkbox checked={form.accesson === 1} onChange={(v) => set('accesson', v ? 1 : 0)} label={t('enable', '启用')} />
@@ -259,6 +246,18 @@ export function ForumEditPage() {
           <Select value={String(form.orderby ?? 0)} onChange={(e) => set('orderby', e.target.value === '1' ? 1 : 0)}>
             <option value="0">{t('forum_orderby_top', '按顶贴时间')}</option>
             <option value="1">{t('forum_orderby_create', '按发帖时间')}</option>
+          </Select>
+        </Field>
+        {/* 内容语言绑定（0024）：空 = 不限制（发帖自动识别 + 可手动选择）；非空 = 新主题强制该语言。
+            文案复用前台已有的 content_lang_* 词条，避免为一处设置新增 10 个语言包的重复翻译。 */}
+        <Field label={t('content_lang_label')}>
+          <Select value={form.lang ?? ''} onChange={(e) => set('lang', e.target.value)}>
+            <option value="">{t('content_lang_auto')}</option>
+            {CONTENT_LANGS.map((l) => (
+              <option key={l} value={l}>
+                {CONTENT_LANG_NATIVE_NAMES[l]}
+              </option>
+            ))}
           </Select>
         </Field>
         <Field

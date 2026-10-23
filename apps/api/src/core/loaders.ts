@@ -2,7 +2,7 @@
  * 数据装载器（T1-4 基础）：forumlist/grouplist/setting 走三层缓存，
  * viewer 走 session 轨（JWT 自动登录在 M2 T2-2 补齐；此处已支持登录用户的权限过滤）。
  */
-import { RunLevel, type NavItem, type SiteSetting } from '@freeidx/shared';
+import { RunLevel, normalizeContentLang, type NavItem, type SiteSetting } from '@freeidx/shared';
 import type { D1b } from './db';
 import { FORUM_COLS, USER_SESSION_COLS } from './db/columns';
 import type { Cache } from './cache';
@@ -64,7 +64,9 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
       f.icon_time = Number(f.icon_time ?? 0);
       f.icon_url = f.icon_file ? `/files/${f.icon_file}?v=${f.icon_time}` : '';
       f.parent_fid = Number(f.parent_fid ?? 0);
-      f.lang = String(f.lang ?? '');
+      /* 绑定语言容错：旧缓存没有该列（undefined）或库里被手工写成 `ja-jp`/`zh-CN` 时，
+         统一收敛到 CONTENT_LANGS，避免前台按原生名查表落空、写帖落一个筛选永远匹配不上的值 */
+      f.lang = normalizeContentLang(f.lang);
       out[f.fid] = { ...f, accesson: Number(f.accesson), accesslist: {} };
     }
     for (const a of access.results) {
