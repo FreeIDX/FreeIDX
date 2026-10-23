@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES, type ContentLang } from '@freeidx/shared';
+import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES, FORUM_LANG_UNRESTRICTED, type ContentLang } from '@freeidx/shared';
 import { createForum, getForums, updateForum, uploadForumIcon, deleteForumIcon } from '../api';
 import type { AccessInput, ForumInput, GroupFullRow } from '../types';
 import { useAdminT } from '../t';
@@ -251,7 +251,8 @@ export function ForumEditPage() {
             <option value="1">{t('forum_orderby_create', '按发帖时间')}</option>
           </Select>
         </Field>
-        {/* 内容语言绑定（0024）：留空 = 顶级版块不限制 / 子版块继承父版块；非空 = 本版块新主题强制该语言 */}
+        {/* 内容语言绑定（0024）：留空 = 顶级版块不限制 / 子版块继承父版块；
+            「全部语言」= 显式不限制（仅子版块出现，用于解除继承）；具体语言 = 本版块新主题强制该语言 */}
         <Field label={t('content_lang_label')} hint={t('forum_content_lang_hint')}>
           <Select value={form.lang ?? ''} onChange={(e) => set('lang', e.target.value)}>
             <option value="">
@@ -259,6 +260,7 @@ export function ForumEditPage() {
                 ? `${t('forum_content_lang_inherit')}${parentLangName ? ` · ${parentLangName}` : ''}`
                 : t('content_lang_auto')}
             </option>
+            {form.parent_fid ? <option value={FORUM_LANG_UNRESTRICTED}>{t('content_lang_all')}</option> : null}
             {CONTENT_LANGS.map((l) => (
               <option key={l} value={l}>
                 {CONTENT_LANG_NATIVE_NAMES[l]}

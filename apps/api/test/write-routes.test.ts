@@ -179,6 +179,21 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     expect(ins?.params.at(-1)).toBe('ja');
   });
 
+  it('POST 主题：子版块哨兵 none → 解除继承，按用户选择落库', async () => {
+    const rules = baseRules();
+    const fl = rules.find((x) => /FROM bbs_forum ORDER BY/.test(x.test.source));
+    if (fl) fl.rows = [{ ...FORUM1, lang: 'ja' }, { ...FORUM2, parent_fid: 1, lang: 'none' }];
+    const r = makeEnv(rules);
+    const res = await app.request(
+      '/api/threads',
+      { method: 'POST', headers: authed(r), body: JSON.stringify({ fid: 2, subject: '中文标题', message: '<p>中文正文</p>', doctype: 0, lang: 'en' }) },
+      r.env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const ins = r.calls.find((c) => /INSERT INTO bbs_thread/.test(c.sql));
+    expect(ins?.params.at(-1)).toBe('en');
+  });
+
   it('POST 主题：subject 超长 / 空正文 → 校验错误', async () => {
     const r = makeEnv(baseRules());
     const res = await app.request('/api/threads', { method: 'POST', headers: authed(r), body: JSON.stringify({ fid: 1, subject: '标'.repeat(129), message: 'x', doctype: 0 }) }, r.env as never);

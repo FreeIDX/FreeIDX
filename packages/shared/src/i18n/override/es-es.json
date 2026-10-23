@@ -845,7 +845,7 @@
   "ext_value": "Valor",
   "forum_announcement_hint": "Barra de anuncio fijado al entrar a este foro",
   "forum_brief_hint": "Una línea bajo el título de la página del foro en el frontend",
-  "forum_content_lang_hint": "Vacío en un foro de primer nivel significa sin restricción (detección automática al publicar); vacío en un subforo significa heredar del foro principal; el idioma elegido se impone a los temas nuevos de este foro",
+  "forum_content_lang_hint": "Vacío en un foro de primer nivel significa sin restricción (detección automática al publicar); vacío en un subforo significa heredar del foro principal, y Todos los idiomas anula la herencia; el idioma elegido se impone a los temas nuevos de este foro",
   "forum_content_lang_inherit": "Heredar del foro principal",
   "forum_create_success": "Creado correctamente",
   "forum_icon_alt": "Icono del foro",

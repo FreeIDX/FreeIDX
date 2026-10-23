@@ -48,7 +48,8 @@ export interface ForumNode {
   announcement?: string;
   /** 上级版块 fid，0/缺省 = 一级版块（0018_forum_parent，仅两级） */
   parentFid?: number;
-  /** 生效内容语言（0024，已含子版块对父版块的继承）：空/缺省 = 不限制；非空 = 本版块新主题强制该语言（发帖页锁定语言选择） */
+  /** 生效内容语言（0024，已含父版块继承与「显式不限制」哨兵解析）：空/缺省 = 不限制；
+   *  非空 = 本版块新主题强制该语言（发帖页锁定语言选择）。哨兵值不会出现在此字段。 */
   lang?: ContentLang | '';
   /** 二级导航（并入 bootstrap） */
   children?: ForumNode[];

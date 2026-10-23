@@ -262,6 +262,30 @@ describe('版块绑定内容语言（0024_forum_lang）', () => {
     expect(upd?.params?.at(-2)).toBe('ja');
   });
 
+  it('PUT：子版块可写入哨兵 none（显式不限制，解除对父版块的继承）', async () => {
+    const { env, calls } = envOf(rules());
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ name: '子版', parent_fid: 5, lang: 'none' }) },
+      env,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    expect(upd?.params?.at(-2)).toBe('none');
+  });
+
+  it('PUT：顶级版块的哨兵归一回空串（顶级「空」与「不限制」等价）', async () => {
+    const { env, calls } = envOf(rules());
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ name: '综合区', parent_fid: 0, lang: 'none' }) },
+      env,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    expect(upd?.params?.at(-2)).toBe('');
+  });
+
   it('PUT：非法 / 空 lang → 落空串（= 不限制）', async () => {
     const { env, calls } = envOf(rules());
     const res = await app.request(

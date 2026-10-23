@@ -2,7 +2,14 @@
  * 数据装载器（T1-4 基础）：forumlist/grouplist/setting 走三层缓存，
  * viewer 走 session 轨（JWT 自动登录在 M2 T2-2 补齐；此处已支持登录用户的权限过滤）。
  */
-import { RunLevel, normalizeContentLang, type ContentLang, type NavItem, type SiteSetting } from '@freeidx/shared';
+import {
+  FORUM_LANG_UNRESTRICTED,
+  RunLevel,
+  normalizeForumLang,
+  type ContentLang,
+  type NavItem,
+  type SiteSetting,
+} from '@freeidx/shared';
 import type { D1b } from './db';
 import { FORUM_COLS, USER_SESSION_COLS } from './db/columns';
 import type { Cache } from './cache';
@@ -34,7 +41,7 @@ export interface ForumRow extends ForumForAccess {
   icon_url: string;
   /** 上级版块 fid，0 = 一级版块（0018_forum_parent，仅两级） */
   parent_fid: number;
-  /** 绑定内容语言（0024，原始值：空串 = 未绑定（子版块继承父版块）；非空 = 本版块新主题强制该语言）
+  /** 绑定内容语言（0024，原始值：'' = 未绑定（子版块继承父版块）；'none' = 显式不限制（仅子版块）；其余 = 强制该语言）
    *  生效值请用 forumLangOf()，不要直接读本字段 */
   lang: string;
 }
@@ -67,7 +74,9 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
       f.parent_fid = Number(f.parent_fid ?? 0);
       /* 绑定语言容错：旧缓存没有该列（undefined）或库里被手工写成 `ja-jp`/`zh-CN` 时，
          统一收敛到 CONTENT_LANGS，避免前台按原生名查表落空、写帖落一个筛选永远匹配不上的值 */
-      f.lang = normalizeContentLang(f.lang);
+      f.lang = normalizeForumLang(f.lang);
+      /* 哨兵只对子版块有意义：顶级版块「空串」与「显式不限制」等价，归一回空串保持单一写法 */
+      if (!f.parent_fid && f.lang === FORUM_LANG_UNRESTRICTED) f.lang = '';
       out[f.fid] = { ...f, accesson: Number(f.accesson), accesslist: {} };
     }
     for (const a of access.results) {
@@ -87,7 +96,8 @@ export interface ForumLangNode {
 /**
  * 版块「生效」的内容语言（0024，含继承）：
  * 自身绑定优先；未绑定则沿 parent_fid 逐级继承（结构上只有两级，深度上限兼防脏数据成环）；
- * 一路为空 = 不限制（发帖走自动检测 + 用户自选）。
+ * 绑定值为哨兵 FORUM_LANG_UNRESTRICTED 时立刻中断继承（= 显式不限制）；
+ * 一路为空同样是不限制（发帖走自动检测 + 用户自选）。
  * 读写两侧共用本函数，保证「前台锁定的语言」与「服务端强制的语言」永远同一口径。
  */
 export function forumLangOf(forumlist: Record<number, unknown>, fid: number): ContentLang | '' {
@@ -97,8 +107,10 @@ export function forumLangOf(forumlist: Record<number, unknown>, fid: number): Co
   };
   let cur = node(fid);
   for (let depth = 0; cur && depth < 8; depth++) {
-    const own = normalizeContentLang(cur.lang);
-    if (own) return own;
+    const own = normalizeForumLang(cur.lang);
+    /* 显式不限制：中断继承，且不参与自动检测的「强制」语义 */
+    if (own === FORUM_LANG_UNRESTRICTED) return '';
+    if (own) return own as ContentLang;
     const parent = Number(cur.parent_fid ?? 0);
     cur = parent > 0 ? node(parent) : undefined;
   }

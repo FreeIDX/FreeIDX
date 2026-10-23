@@ -845,7 +845,7 @@
   "ext_value": "值",
   "forum_announcement_hint": "進入本板塊的置頂公告條",
   "forum_brief_hint": "前台板塊頁標題下方一行",
-  "forum_content_lang_hint": "頂級版塊留空 = 不限制（發文自動辨識）；子版塊留空 = 繼承父版塊；選擇具體語言則本版塊新主題強制使用該語言",
+  "forum_content_lang_hint": "頂級版塊留空 = 不限制（發文自動辨識）；子版塊留空 = 繼承父版塊，選「全部語言」= 不繼承；選擇具體語言則本版塊新主題強制使用該語言",
   "forum_content_lang_inherit": "繼承父版塊",
   "forum_create_success": "建立成功",
   "forum_icon_alt": "板塊圖示",

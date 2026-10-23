@@ -845,7 +845,7 @@
   "ext_value": "값",
   "forum_announcement_hint": "이 포럼 진입 시 상단 공지 표시줄",
   "forum_brief_hint": "프론트 포럼 페이지 제목 아래 한 줄",
-  "forum_content_lang_hint": "최상위 포럼에서 비워 두면 제한 없음(글 작성 시 자동 감지), 하위 포럼에서 비워 두면 상위 포럼 언어를 상속합니다. 언어를 선택하면 이 포럼의 새 주제는 해당 언어로 고정됩니다",
+  "forum_content_lang_hint": "최상위 포럼에서 비워 두면 제한 없음(글 작성 시 자동 감지), 하위 포럼에서 비워 두면 상위 포럼 언어를 상속합니다(모든 언어를 선택하면 상속하지 않음). 언어를 선택하면 이 포럼의 새 주제는 해당 언어로 고정됩니다",
   "forum_content_lang_inherit": "상위 포럼 언어 상속",
   "forum_create_success": "생성 성공",
   "forum_icon_alt": "포럼 아이콘",

@@ -48,6 +48,27 @@ export function contentLangOfLocale(locale: string): ContentLang | '' {
   return normalizeContentLang(locale);
 }
 
+/**
+ * 版块绑定语言的哨兵值：显式「不限制」（0024）。
+ *
+ * 与空串的区别只在**子版块**上有意义：
+ *   空串   = 未绑定 → 子版块继承父版块的绑定；顶级版块即不限制；
+ *   'none' = 显式解除继承 → 本版块不限制，忽略父版块的绑定。
+ * 顶级版块空串与哨兵等价，故服务端会把顶级版块的哨兵归一回空串（不保留两种写法）。
+ */
+export const FORUM_LANG_UNRESTRICTED = 'none';
+
+/**
+ * 归一化版块绑定值：哨兵原样保留（大小写/空白容错），其余按内容语言归一化。
+ * `''` 表示未绑定，`ContentLang` 表示强制，`FORUM_LANG_UNRESTRICTED` 表示显式不限制。
+ */
+export function normalizeForumLang(v: unknown): string {
+  const s = String(v ?? '')
+    .trim()
+    .toLowerCase();
+  return s === FORUM_LANG_UNRESTRICTED ? FORUM_LANG_UNRESTRICTED : normalizeContentLang(s);
+}
+
 /** 去标签取纯文本（检测前必做：HTML 标签名/属性里的拉丁字母会污染计数） */
 function plainText(html: string): string {
   return html

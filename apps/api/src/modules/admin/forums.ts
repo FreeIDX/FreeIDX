@@ -14,7 +14,7 @@
  * 全部路由挂在 adminGuard（app.use('/api/admin/*')）之后。
  */
 import { Hono } from 'hono';
-import { Code, GroupId, normalizeContentLang } from '@freeidx/shared';
+import { Code, FORUM_LANG_UNRESTRICTED, GroupId, normalizeForumLang } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import { loadForumlist, loadGrouplist } from '../../core/loaders';
@@ -91,9 +91,15 @@ function normParentFid(v: unknown): number {
   return Number.isFinite(Number(v)) ? Math.max(0, Math.trunc(Number(v))) : 0;
 }
 
-/** 归一化绑定内容语言（0024）：空串/非法值 → ''（= 未绑定：顶级不限制、子版块继承父版块）；合法值收敛到 CONTENT_LANGS */
-function normForumLang(v: unknown): string {
-  return normalizeContentLang(v);
+/**
+ * 归一化绑定内容语言（0024）：
+ *   ''      = 未绑定（子版块继承父版块，顶级版块不限制）
+ *   'none'  = 显式不限制；只对子版块保留，顶级版块两写法等价 → 归一回空串
+ *   其余     = 收敛到 CONTENT_LANGS（非法值同样落 ''）
+ */
+function normForumLang(v: unknown, parentFid: number): string {
+  const lang = normalizeForumLang(v);
+  return lang === FORUM_LANG_UNRESTRICTED && parentFid === 0 ? '' : lang;
 }
 
 /** 校验上级版块：0=一级（合法）；>0 必须存在且自身为一级版块（仅支持两级） */
@@ -132,7 +138,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     if (!name) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumNameRequired'));
     const parentFid = normParentFid(b.parent_fid);
     await assertValidParent(db, t, parentFid);
-    const lang = normForumLang(b.lang);
+    const lang = normForumLang(b.lang, parentFid);
     const ts = now();
     const r = await db
       .prepare<{ fid: number }>(
@@ -195,7 +201,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         String(b.seo_title ?? ''),
         String(b.seo_keywords ?? ''),
         parentFid,
-        normForumLang(b.lang),
+        normForumLang(b.lang, parentFid),
         fid,
       )
       .run();
