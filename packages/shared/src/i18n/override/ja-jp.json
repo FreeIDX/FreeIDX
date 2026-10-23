@@ -169,6 +169,7 @@
   "forum_digest": "この掲示板のおすすめ",
   "forum_hot": "掲示板の人気",
   "forum_label": "掲示板",
+  "forum_lang_notice": "このフォーラムのスレッドは{lang}で投稿してください",
   "forum_moderators": "モデレーター",
   "forum_nav": "フォーラムナビゲーション",
   "forum_top_threads": "固定スレッド",

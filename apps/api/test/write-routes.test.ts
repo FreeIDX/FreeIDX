@@ -261,6 +261,21 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     expect(r.calls.some((c) => /DELETE FROM bbs_cache/.test(c.sql) && String(c.params[0]) === 'forumlist')).toBe(true);
   });
 
+  it('编辑 isfirst：绑定版块 → 存量主题的 lang 对齐到版块绑定值（0024 强一致）', async () => {
+    const rules = baseRules();
+    const pr = rules.find((x) => /SELECT pid,tid,uid,isfirst FROM bbs_post WHERE pid/.test(x.test.source));
+    if (pr) pr.first = (p: readonly unknown[]) => ({ pid: Number(p[0]), tid: 9, uid: 1, isfirst: 1 });
+    const tr = rules.find((x) => /FROM bbs_thread WHERE tid = \?/.test(x.test.source));
+    if (tr) tr.first = () => threadRow({ lang: 'zh' });
+    const fl = rules.find((x) => /FROM bbs_forum ORDER BY/.test(x.test.source));
+    if (fl) fl.rows = [{ ...FORUM1, lang: 'ja' }, FORUM2];
+    const r = makeEnv(rules);
+    const res = await app.request('/api/posts/100', { method: 'PUT', headers: authed(r), body: JSON.stringify({ message: '编辑正文', doctype: 0 }) }, r.env as never);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = r.calls.find((c) => /UPDATE bbs_thread SET lang = \?/.test(c.sql));
+    expect(upd?.params).toEqual(['ja', 9]);
+  });
+
   it('编辑：非版主且主题已关闭 → 拒绝', async () => {
     const rules = baseRules();
     rules.find((x) => /FROM bbs_thread WHERE tid/.test(x.test.source))!.first = () => threadRow({ closed: 1 });

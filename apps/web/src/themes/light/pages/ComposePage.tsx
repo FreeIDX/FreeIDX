@@ -7,6 +7,7 @@ import { Composer, type ComposerSubmit } from '../../../components/Composer';
 import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
 import { Icon } from '../../../components/icons';
 import { useAuth } from '../../../store/auth';
+import { useContentLangMode } from '../../../store/contentLang';
 import { useLight } from '../../../store/theme';
 import { useAuthModal } from '../../../store/authModal';
 import { useT } from '../../../lib/i18n';
@@ -29,6 +30,8 @@ export function ComposePage() {
   const refresh = useAuth((s) => s.refresh);
   const light = useLight();
   const tags = light.tags;
+  /* 站点「内容语言」开关：0=关闭 → 整个语言行不渲染（与升级前一致）；>0=开启 → 显示/锁定 */
+  const langMode = useContentLangMode();
 
   // 冷加载 /new 时 forumlist 尚未就绪，useState 初值会永远停在 0 ⇒ 目标版块改为派生，用户手选才覆盖
   const [pickedFid, setPickedFid] = useState(0);
@@ -203,39 +206,41 @@ export function ComposePage() {
             </div>
           )}
 
-          {/* 内容语言：版块绑定了语言（0024）则锁定为该语言（服务端同样强制）；
-              未绑定则默认自动识别（标题+正文，和服务端同一检测函数），可手动覆盖。
-              仅用于语言筛选，不影响正文与界面语言。 */}
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zh-line pt-3 text-sm">
-            <span className="text-ink-soft">{t('content_lang_label')}</span>
-            {boundLang ? (
-              <select
-                className={cx(selectCls, 'h-[33px] w-auto px-2')}
-                value={boundLang}
-                disabled
-                aria-label={t('content_lang_label')}
-              >
-                <option value={boundLang}>{CONTENT_LANG_NATIVE_NAMES[boundLang]}</option>
-              </select>
-            ) : (
-              <select
-                className={cx(selectCls, 'h-[33px] w-auto px-2')}
-                value={langSel}
-                onChange={(e) => setLangSel(e.target.value)}
-                aria-label={t('content_lang_label')}
-              >
-                <option value="">
-                  {t('content_lang_auto')}
-                  {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
-                </option>
-                {CONTENT_LANGS.map((l) => (
-                  <option key={l} value={l}>
-                    {CONTENT_LANG_NATIVE_NAMES[l]}
+          {/* 内容语言：仅站点开关开启时渲染（关闭 = 与升级前完全一致，服务端仍按绑定/检测写 lang）。
+              开启时：版块绑定（0024，含父版块继承）→ 锁定为该语言（服务端同样强制）；
+              未绑定 → 默认自动识别（标题+正文，和服务端同一检测函数），可手动覆盖。 */}
+          {langMode > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zh-line pt-3 text-sm">
+              <span className="text-ink-soft">{t('content_lang_label')}</span>
+              {boundLang ? (
+                <select
+                  className={cx(selectCls, 'h-[33px] w-auto px-2')}
+                  value={boundLang}
+                  disabled
+                  aria-label={t('content_lang_label')}
+                >
+                  <option value={boundLang}>{CONTENT_LANG_NATIVE_NAMES[boundLang]}</option>
+                </select>
+              ) : (
+                <select
+                  className={cx(selectCls, 'h-[33px] w-auto px-2')}
+                  value={langSel}
+                  onChange={(e) => setLangSel(e.target.value)}
+                  aria-label={t('content_lang_label')}
+                >
+                  <option value="">
+                    {t('content_lang_auto')}
+                    {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
                   </option>
-                ))}
-              </select>
-            )}
-          </div>
+                  {CONTENT_LANGS.map((l) => (
+                    <option key={l} value={l}>
+                      {CONTENT_LANG_NATIVE_NAMES[l]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           {/* 收费设置（仅 allowsell 组渲染；「购买 :」+ 是/否 radio，选「是」时现数字与币种） */}
           {canSell && (

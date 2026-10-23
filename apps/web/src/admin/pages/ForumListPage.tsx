@@ -1,6 +1,7 @@
 /**
  * 版块列表（树形内联编辑）：一级版块 → 其子版块（二级）缩进展示，一级版块可收缩/展开。
- * 列 = 名称(树列，含收缩箭头) / 版块ID / 父版块(行内下拉，可即时挂到一级版块下) / 图标缩略图 / 上传图标 / 排序 / 编辑 / 删除；
+ * 列 = 名称(树列，含收缩箭头) / 版块ID / 父版块(行内下拉，可即时挂到一级版块下) / 内容语言(只读摘要，改在编辑页) /
+ *      图标缩略图 / 上传图标 / 排序 / 编辑 / 删除；
  * `<table class="adm-table" style="min-width:960px">`，页面无二级 Tab（版块菜单的 tab 是空表）。
  * 实现差异（§7 记账）：
  *  - **图标两列**：缩略图 48px + 行内 file input（选图立即上传
@@ -16,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
+import { CONTENT_LANG_NATIVE_NAMES, FORUM_LANG_UNRESTRICTED, type ContentLang } from '@freeidx/shared';
 import { deleteForum, getForums, updateForum, createForum, uploadForumIcon } from '../api';
 import type { AdminForumRow, ForumInput } from '../types';
 import { useAdminT } from '../t';
@@ -178,6 +180,16 @@ export function ForumListPage() {
   const kidsOf = (fid: number) => rows.filter((f) => f.parent_fid === fid);
   /** 可选父版块 = 一级版块（仅两级），排除自身 */
   const parentOptions = (self: AdminForumRow) => rows.filter((f) => isTop(f) && f.fid !== self.fid);
+  /** 绑定语言摘要（只读）：具体语言 / 全部语言（显式不限制）/ 继承父版块(·语言) / 自动识别 */
+  const langLabel = (f: AdminForumRow): string => {
+    if (f.lang === FORUM_LANG_UNRESTRICTED) return t('content_lang_all');
+    if (f.lang) return CONTENT_LANG_NATIVE_NAMES[f.lang as ContentLang] ?? f.lang;
+    const parent = f.parent_fid ? rows.find((p) => p.fid === f.parent_fid) : undefined;
+    if (!parent) return t('content_lang_auto');
+    const inherited =
+      parent.lang && parent.lang !== FORUM_LANG_UNRESTRICTED ? (CONTENT_LANG_NATIVE_NAMES[parent.lang as ContentLang] ?? '') : '';
+    return `${t('forum_content_lang_inherit')}${inherited ? ` · ${inherited}` : ''}`;
+  };
   /** 新增行 = 不在服务端返回集合内（区分 POST/PUT，且未保存前禁用图标上传） */
   const isNewRow = (r: AdminForumRow) => !original.some((o) => o.fid === r.fid);
   const patch = (fid: number, p: Partial<AdminForumRow>) => {
@@ -233,6 +245,7 @@ export function ForumListPage() {
                 <th scope="col" className="whitespace-nowrap text-left font-medium">{t('forum_name', '名称')}</th>
                 <th scope="col" className="w-[90px] whitespace-nowrap font-medium">{t('forum_id', '版块 ID')}</th>
                 <th scope="col" className="w-[150px] whitespace-nowrap font-medium">{t('forum_parent', '父版块')}</th>
+                <th scope="col" className="w-[130px] whitespace-nowrap font-medium">{t('content_lang_label')}</th>
                 <th scope="col" className="w-[72px] whitespace-nowrap font-medium">{t('forum_icon', '图标')}</th>
                 <th scope="col" className="w-[170px] whitespace-nowrap font-medium">{t('admin_upload_icon', '上传图标')}</th>
                 <th scope="col" className="w-[100px] whitespace-nowrap font-medium">{t('forum_rank', '排序')}</th>
@@ -282,6 +295,8 @@ export function ForumListPage() {
                         ))}
                       </Select>
                     </td>
+                    {/* 内容语言摘要（只读）：绑定值在编辑页修改，此处用于发现「某个版块被锁成日语」这类配置 */}
+                    <td className="whitespace-nowrap text-xs text-muted-2">{langLabel(r)}</td>
                     <td>
                       {r.icon_url ? (
                         <img src={r.icon_url} alt={r.name} className="mx-auto size-12 rounded object-contain" />

@@ -169,6 +169,7 @@
   "forum_digest": "하이라이트",
   "forum_hot": "게시판 인기",
   "forum_label": "포럼",
+  "forum_lang_notice": "이 포럼의 주제는 {lang}로 작성해야 합니다",
   "forum_moderators": "운영자",
   "forum_nav": "포럼 내비게이션",
   "forum_top_threads": "상단 고정",

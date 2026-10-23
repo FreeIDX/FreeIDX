@@ -169,6 +169,7 @@
   "forum_digest": "Featured",
   "forum_hot": "Hot forums",
   "forum_label": "Forum",
+  "forum_lang_notice": "Threads in this forum must be written in {lang}",
   "forum_moderators": "Moderators",
   "forum_nav": "Forum navigation",
   "forum_top_threads": "Pinned threads",

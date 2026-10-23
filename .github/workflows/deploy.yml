@@ -128,6 +128,33 @@ jobs:
         working-directory: apps/api
         run: npx wrangler d1 execute freeidx --remote --file=./seed/seed.sql
 
+      # 迁移门禁（2025-10 起）：Worker 的 SELECT 直接引用迁移新增的列（如 0024 的 bbs_forum.lang），
+      # 迁移没应用就发版会让 GET /api/bootstrap 与版块列表直接 500。apply_migrations 默认关闭，
+      # 所以这里在部署前做一次硬检查：远程库仍有未应用的迁移 → 中止发布，而不是等线上报错。
+      - name: 迁移门禁（代码不得先于 schema 上线）
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          if ! npx wrangler d1 execute freeidx --remote --json --command "SELECT name FROM d1_migrations" > /tmp/d1-applied.json; then
+            echo "::error::读取远程 d1_migrations 失败（库可能尚未初始化）：请用 workflow_dispatch 勾选 apply_migrations 先应用迁移"
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require('node:fs');
+          // wrangler 可能在 JSON 前后打印提示行，截取第一个 [ 到最后一个 ] 再解析
+          const txt = fs.readFileSync('/tmp/d1-applied.json', 'utf8');
+          const raw = JSON.parse(txt.slice(txt.indexOf('['), txt.lastIndexOf(']') + 1));
+          const rows = (Array.isArray(raw) ? raw : [raw]).flatMap((r) => r?.results ?? []);
+          const applied = new Set(rows.map((r) => r.name));
+          const local = fs.readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
+          const missing = local.filter((f) => !applied.has(f));
+          if (missing.length) {
+            console.error('::error::以下迁移尚未应用到远程库：' + missing.join(', ') + '；请用 workflow_dispatch 勾选 apply_migrations 重新发布');
+            process.exit(1);
+          }
+          console.log('迁移门禁通过：' + local.length + ' 个迁移均已应用');
+          NODE
+
       - name: 构建前端
         run: pnpm --filter @freeidx/web build
         env:

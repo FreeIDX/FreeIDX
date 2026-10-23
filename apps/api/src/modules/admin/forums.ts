@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import { Code, FORUM_LANG_UNRESTRICTED, GroupId, normalizeForumLang } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
-import { loadForumlist, loadGrouplist } from '../../core/loaders';
+import { forumLangOf, loadForumlist, loadGrouplist } from '../../core/loaders';
 import { ipToLong } from '../../core/auth/session';
 import { postMessageFmt } from '../../core/fmt';
 import { invalidateThreadSeo } from '../seo/generate';
@@ -482,6 +482,12 @@ export function adminForumRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_forum SET threads = threads - 1 WHERE fid = ?').bind(fid) as unknown as Stmt,
           db.prepare('UPDATE bbs_thread_top SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt,
         );
+        /* 目标版块绑定语言（含父版块继承）：移动即对齐，与发帖强制 / 前台编辑首帖同一口径；
+           移出绑定版块保持原值（不反向猜测，避免改掉主题自己的语言标记） */
+        const boundLang = forumLangOf(await loadForumlist(cache, db), newFid);
+        if (boundLang) {
+          stmts.push(db.prepare('UPDATE bbs_thread SET lang = ? WHERE tid = ?').bind(boundLang, tid) as unknown as Stmt);
+        }
         moved = true;
       }
     }

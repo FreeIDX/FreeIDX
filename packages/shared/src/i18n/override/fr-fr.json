@@ -169,6 +169,7 @@
   "forum_digest": "En vedette",
   "forum_hot": "Forum populaire",
   "forum_label": "Forum",
+  "forum_lang_notice": "Les sujets de ce forum doivent être rédigés en {lang}",
   "forum_moderators": "Modérateurs",
   "forum_nav": "Navigation des forums",
   "forum_top_threads": "Épinglés",

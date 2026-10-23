@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Code, GroupId } from '@freeidx/shared';
+import { CONTENT_LANG_NATIVE_NAMES, Code, GroupId, type ContentLang } from '@freeidx/shared';
 import { useAuth } from '../../../store/auth';
 import { useLight } from '../../../store/theme';
 import { ApiError, apiGet, modThreads } from '../../../lib/api';
@@ -11,7 +11,7 @@ import { NotFoundPage } from './NotFoundPage';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
 import { ContentLangBar } from '../../../components/ContentLangBar';
-import { useContentLangFilter } from '../../../store/contentLang';
+import { useContentLangFilter, useContentLangMode } from '../../../store/contentLang';
 import { Alert, Card, CardTabs, CardTitle, CreateButton, HomeSideNav, Modal, SidePanel, TagBadge, TwoCol, cx } from '../../../components/ui';
 import { RankForumHotCard } from '../../../components/rank';
 import { Avatar } from '../../../components/Avatar';
@@ -102,6 +102,8 @@ export function ForumPage() {
     const qs = sp.toString();
     return `/forum/${fid}${qs ? `?${qs}` : ''}`;
   };
+  /* 站点「内容语言」开关：0=关闭 → 语言条与绑定提示都不渲染（与升级前一致） */
+  const langMode = useContentLangMode();
   const node = forumlist.find((f) => f.fid === fid);
   const forum = { ...node, ...q.data?.forum };
   const name = forum.name ?? '';
@@ -203,6 +205,12 @@ export function ForumPage() {
           </>
         }
       >
+        {/* 绑定语言提示（0024）：站点开启语言筛选、且本版（含继承父版块）锁定到具体语言时提示；
+            站点关闭时整个语言功能不可见，提示随之隐藏 */}
+        {langMode > 0 && forum.lang ? (
+          <Alert className="mb-[.4rem]">{t('forum_lang_notice', { lang: CONTENT_LANG_NATIVE_NAMES[forum.lang as ContentLang] })}</Alert>
+        ) : null}
+
         {/* 版块信息卡（forum-card-body，移动端也显示） */}
         <div className="zh-card mb-[.4rem]">
           <div className="flex items-start gap-3 p-5">

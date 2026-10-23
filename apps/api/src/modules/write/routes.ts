@@ -549,9 +549,12 @@ async function updatePost(c: Ctx): Promise<Response> {
     if (arr.fid !== undefined) {
       batchStmts.push(core.db.prepare('UPDATE bbs_thread SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt);
     }
-    /* 内容语言：显式提交优先；已有值保持（不因编辑正文静默改写用户当初的选择）；
-       仅当存量帖 lang 为空时按新标题+正文补判（编辑顺带完成一次回填）。 */
+    /* 内容语言：版块有效语言（自身绑定 / 继承父版块）优先——绑定版块内的主题语言必须与版块一致，
+       故编辑首帖时顺带把绑定前创建的存量主题对齐（含移动后的目标版块）；
+       未绑定时：显式提交优先，已有值保持（不因编辑正文静默改写用户当初的选择），
+       仅当 lang 为空时按新标题+正文补判（编辑顺带完成一次回填）。 */
     const nextLang =
+      forumLangOf(ctx.forumlist, newFid) ||
       normalizeContentLang((b as { lang?: unknown }).lang) ||
       (thread.lang ? String(thread.lang) : detectContentLang(`${subject} ${message}`));
     if (nextLang && nextLang !== thread.lang) {

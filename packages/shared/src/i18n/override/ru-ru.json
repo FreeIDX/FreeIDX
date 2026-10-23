@@ -169,6 +169,7 @@
   "forum_digest": "Лучшее в этом разделе",
   "forum_hot": "Популярное в разделе",
   "forum_label": "Форум",
+  "forum_lang_notice": "Темы в этом разделе должны быть на языке {lang}",
   "forum_moderators": "Модераторы",
   "forum_nav": "Навигация по форумам",
   "forum_top_threads": "Закреплённые",

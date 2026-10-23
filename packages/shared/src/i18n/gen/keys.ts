@@ -200,6 +200,7 @@ export type FrontKey =
   | 'forum_digest'
   | 'forum_hot'
   | 'forum_label'
+  | 'forum_lang_notice'
   | 'forum_moderators'
   | 'forum_nav'
   | 'forum_top_threads'

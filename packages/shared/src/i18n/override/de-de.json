@@ -169,6 +169,7 @@
   "forum_digest": "Highlights",
   "forum_hot": "Beliebte Foren",
   "forum_label": "Forum",
+  "forum_lang_notice": "Themen in diesem Forum müssen in {lang} verfasst sein",
   "forum_moderators": "Moderatoren",
   "forum_nav": "Foren-Navigation",
   "forum_top_threads": "Angepinnt",

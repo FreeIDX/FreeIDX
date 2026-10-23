@@ -35,6 +35,7 @@ function rules(): SqlRule[] {
     { test: /SELECT pid,doctype FROM bbs_post WHERE tid = \? AND isfirst = 1/, first: { pid: 900, doctype: 0 } },
     { test: /INSERT INTO bbs_modlog/, rows: [] },
     { test: /UPDATE bbs_thread SET/, rows: [] },
+    { test: /UPDATE bbs_thread_top SET/, rows: [] },
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN/, rows: () => [{ uid: 7, c: 3 }] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
     { test: /SELECT filename FROM bbs_attach/, rows: [] },
@@ -389,6 +390,19 @@ describe('主题管理列表（T3-5）', () => {
       env as never,
     );
     expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
+  });
+
+  it('PUT 编辑：移动主题进绑定版块 → 主题语言对齐（0024 强一致）', async () => {
+    const rs = rules();
+    // 目标版块 fid=5 绑定 ja；移动前主题在 fid=8
+    const fl = rs.find((x) => /SELECT .* FROM bbs_forum ORDER BY/.test(x.test.source));
+    if (fl) fl.rows = [{ fid: 5, name: '日语区', accesson: 0, rank: 1, threads: 0, lang: 'ja', parent_fid: 0 }];
+    const { db, calls } = fakeD1Sql(rs);
+    const env = { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: {} } as never;
+    const res = await app.request('/api/admin/threads/101', { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ fid: 5 }) }, env);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_thread SET lang = \?/.test(c.sql));
+    expect(upd?.params).toEqual(['ja', 101]);
   });
 
   it('PUT 编辑：81~128 字存量标题可保存（历史 80 上限已统一为 128）', async () => {
