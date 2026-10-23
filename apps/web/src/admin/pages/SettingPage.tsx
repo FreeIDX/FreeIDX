@@ -189,16 +189,16 @@ export function SettingPage() {
             )}
           </div>
         </Field>
-        <Field label={t('setting_favicon', '站点图标（Favicon）')} hint={t('setting_favicon_hint', '显示在浏览器标签页上；建议 64×64 以上正方形 PNG 或 ICO 图')} hintInline>
+        <Field label={t('setting_favicon', '站点图标')} hint={t('setting_favicon_hint', '显示在浏览器标签页上；建议 64×64 以上正方形 PNG 或 ICO 图')} hintInline>
           <div className="flex flex-wrap items-center gap-3">
             {faviconUrl ? (
-              <img src={faviconUrl} alt={t('setting_favicon', '站点图标（Favicon）')} className="size-10 rounded object-contain" />
+              <img src={faviconUrl} alt={t('setting_favicon', '站点图标')} className="size-10 rounded object-contain" />
             ) : (
               <span className="text-sm text-muted-2">{t('forum_icon_default', '内置默认图')}</span>
             )}
             <label
               className="inline-flex cursor-pointer items-center rounded bg-muted px-2 py-1 text-xs text-ink transition-colors hover:bg-line"
-              aria-label={t('setting_favicon', '站点图标（Favicon）')}
+              aria-label={t('setting_favicon', '站点图标')}
             >
               {t('choose_file', '选择文件')}
               <input
@@ -228,26 +228,26 @@ export function SettingPage() {
             {t('sitebrief_tips', '注：支持 HTML 标签，换行请使用 <br>').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}
           </p>
         </Field>
-        <Field label={t('runlevel', '站点访问限制')} hint={t('runlevel_hint', '选择「所有人可读写」以外的级别时，权限不足的访客将被限制访问')} hintInline>
+        <Field label={t('runlevel', '站点访问')} hint={t('runlevel_hint', '选择「所有人可读写」以外的级别时，权限不足的访客将被限制访问')} hintInline>
           <RadioGroup name="runlevel" value={form.runlevel ?? RunLevel.NORMAL} options={runlevelOptions} onChange={(v) => set('runlevel', Number(v))} />
         </Field>
-        <Field label={t('user_create_on', '开启用户注册')}>
+        <Field label={t('user_create_on', '开启注册')}>
           <RadioGroup name="user_create_on" value={form.user_create_on ?? 1} options={yesNo} onChange={(v) => set('user_create_on', Number(v))} />
         </Field>
-        <Field label={t('user_create_email_on', '开启注册邮箱验证')}>
+        <Field label={t('user_create_email_on', '邮箱验证')}>
           <RadioGroup name="user_create_email_on" value={form.user_create_email_on ?? 0} options={yesNo} onChange={(v) => set('user_create_email_on', Number(v))} />
         </Field>
-        <Field label={t('user_resetpw_on', '开启找回密码')}>
+        <Field label={t('user_resetpw_on', '找回密码')}>
           <RadioGroup name="user_resetpw_on" value={form.user_resetpw_on ?? 1} options={yesNo} onChange={(v) => set('user_resetpw_on', Number(v))} />
         </Field>
         {/* 设备访问三开关：控制手机/平板/电视端能否打开前台（后台 /admin 不受限） */}
-        <Field label={t('setting_device_phone', '手机端访问')} hint={t('setting_device_phone_hint', '关闭后，手机设备访问前台时将显示受限提示页')} hintInline>
+        <Field label={t('setting_device_phone', '手机访问')} hint={t('setting_device_phone_hint', '关闭后，手机设备访问前台时将显示受限提示页')} hintInline>
           <RadioGroup name="device_phone_on" value={form.device_phone_on ?? 1} options={yesNo} onChange={(v) => set('device_phone_on', Number(v))} />
         </Field>
-        <Field label={t('setting_device_tablet', '平板端访问')} hint={t('setting_device_tablet_hint', '关闭后，平板设备访问前台时将显示受限提示页')} hintInline>
+        <Field label={t('setting_device_tablet', '平板访问')} hint={t('setting_device_tablet_hint', '关闭后，平板设备访问前台时将显示受限提示页')} hintInline>
           <RadioGroup name="device_tablet_on" value={form.device_tablet_on ?? 1} options={yesNo} onChange={(v) => set('device_tablet_on', Number(v))} />
         </Field>
-        <Field label={t('setting_device_tv', '电视端访问')} hint={t('setting_device_tv_hint', '关闭后，电视设备访问前台时将显示受限提示页')} hintInline>
+        <Field label={t('setting_device_tv', '电视访问')} hint={t('setting_device_tv_hint', '关闭后，电视设备访问前台时将显示受限提示页')} hintInline>
           <RadioGroup name="device_tv_on" value={form.device_tv_on ?? 1} options={yesNo} onChange={(v) => set('device_tv_on', Number(v))} />
         </Field>
         <Field label={t('setting_front_lang', '前台语言')} htmlFor="s-lang" hint={t('lang_hint', '界面上缺少翻译的词条会自动使用简体中文')}>
@@ -294,7 +294,7 @@ export function SettingPage() {
             onChange={(v) => set('forum_orderby', Number(v))}
           />
         </Field>
-        <Field label={t('setting_view_count', '浏览数统计')} hint={t('setting_view_count_hint', '关闭后不再统计主题浏览次数，可减少数据库写入')} hintInline>
+        <Field label={t('setting_view_count', '浏览统计')} hint={t('setting_view_count_hint', '关闭后不再统计主题浏览次数，可减少数据库写入')} hintInline>
           <RadioGroup
             name="update_views_on"
             value={form.update_views_on ?? 1}
