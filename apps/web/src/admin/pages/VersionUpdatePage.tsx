@@ -181,7 +181,7 @@ export function VersionUpdatePage() {
       <PageTitle>{t('admin_menu_about')}</PageTitle>
 
       {/* 页面标题由后台顶栏承担（同一份菜单文案），此处只留一句说明，避免与顶栏重复 */}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div className="-mt-1 mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="m-0 text-sm text-muted">{t('admin_version_subtitle')}</p>
         <a href={`${REPO_URL}/releases`} target="_blank" rel="noreferrer" className={linkBtnCls}>
           <Icon name="external_link" className="size-3.5" />
