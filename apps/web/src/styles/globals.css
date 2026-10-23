@@ -96,7 +96,7 @@
   --breakpoint-md: 768px;
   --breakpoint-lg: 992px;
   --breakpoint-xl: 1200px;
-  /* 电视/大屏断点（1920+）：配合根字号缩放做 TV 自适应 */
+  /* 电视/大屏断点（1920+）：仅用于放宽版心宽度，不放大字号 */
   --breakpoint-3xl: 1920px;
   /* 卡片软阴影：业务自定义，非 Bootstrap 默认 */
   --shadow-card: 2px 2px 3px rgba(173, 181, 189, 0.25);
@@ -610,26 +610,15 @@
   color: #0084ff;
 }
 
-/* 根字号 14px（业务覆盖 Tailwind 默认的 16px）：
+/* 根字号固定 14px（业务覆盖 Tailwind 默认的 16px）：
  * 改这一处即可让整套 Tailwind rem 间距/字号与设计口径对齐。
+ * 注意：这里不跟随窗口宽度改根字号，否则全套 rem 字号会随窗口放大而变大（前端和后台都受影响）；
+ * 大屏只放宽版心（Layout 的 3xl: 变体），字号保持恒定。
  */
 html {
   font-size: 14px;
   /* 始终预留滚动条槽位：有/无滚动条的页面（如首页 vs 版块页）版心居中位置一致，避免切页时整页左右跳动 */
   scrollbar-gutter: stable;
-}
-
-/* 电视/大屏（TV）自适应：≥1920 逐级放大根字号（全套 rem 字号/间距随之缩放），4K（≥2560）再放大一档。
- * 版心宽度由 Layout 的 3xl: 变体同步放宽，电视上不会出现「小字居中一条」的观感。 */
-@media (min-width: 1920px) {
-  html {
-    font-size: 16px;
-  }
-}
-@media (min-width: 2560px) {
-  html {
-    font-size: 20px;
-  }
 }
 
 /* 后台窄屏（<md）自适应：卡片体横向滚动，宽表格/权限矩阵不再撑破版心 */
