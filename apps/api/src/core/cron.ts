@@ -76,6 +76,47 @@ export async function cronFiveMin(deps: CronDeps): Promise<CronFiveMinResult> {
   return { sessExpiry, onlines };
 }
 
+export interface CalibrateResult {
+  /** 本次校准实际改写的行数（= 检出漂移量） */
+  driftRows: number;
+  threads: number;
+  posts: number;
+}
+
+/**
+ * 计数校准（唯一实现）：forum.threads / thread.posts / user.threads|posts 是增量维护的反规范化列，
+ * 删除/迁移异常中断会造成漂移。cronDaily 与后台「运行维护 · 立即校准」共用本函数，避免两套口径。
+ */
+export async function calibrateCounters(db: D1b): Promise<CalibrateResult> {
+  const calibratedRes = await db.batch([
+    db.prepare(
+      'UPDATE bbs_forum SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid)',
+    ) as unknown as Stmt,
+    db.prepare(
+      'UPDATE bbs_thread SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0)',
+    ) as unknown as Stmt,
+    db.prepare(
+      'UPDATE bbs_user SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid)',
+    ) as unknown as Stmt,
+    db.prepare(
+      'UPDATE bbs_user SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0)',
+    ) as unknown as Stmt,
+    // lastusername 自愈（§20.2 结构性修复的兜底）：历史脏数据（=发帖时楼主名）与改名回写遗漏由此
+    // 每日纠正——正常 0 行写不耗额度，与计数校准同口径。lastuid 指向不存在用户时子查询为 NULL，
+    // 三值逻辑下 WHERE 不命中该行（不写、不清空），安全。
+    db.prepare(
+      'UPDATE bbs_thread SET lastusername = (SELECT username FROM bbs_user WHERE uid = bbs_thread.lastuid) WHERE lastusername <> (SELECT username FROM bbs_user WHERE uid = bbs_thread.lastuid)',
+    ) as unknown as Stmt,
+  ]);
+  const driftRows = calibratedRes.reduce((n, r) => n + Number((r as D1Result | undefined)?.meta?.changes ?? 0), 0);
+  const totals = await db
+    .prepare<{ threads: number; posts: number }>(
+      'SELECT (SELECT COUNT(*) FROM bbs_thread) AS threads, (SELECT COUNT(*) FROM bbs_post WHERE isfirst = 0) AS posts',
+    )
+    .first<{ threads: number; posts: number }>();
+  return { driftRows, threads: Number(totals?.threads ?? 0), posts: Number(totals?.posts ?? 0) };
+}
+
 export async function cronDaily(deps: CronDeps): Promise<CronDailyResult> {
   const { db, cache, now } = deps;
   // 计数校准：forum.threads / thread.posts / user.threads|posts 是增量维护的反规范化列，
@@ -92,33 +133,9 @@ export async function cronDaily(deps: CronDeps): Promise<CronDailyResult> {
   const res: CronDailyResult = { forumReset: false, calibrated: { threads: 0, posts: 0 }, driftRows: 0, cacheGc: 0 };
   let calibrated: { threads: number; posts: number } | undefined;
   try {
-    const calibratedRes = await db.batch([
-      db.prepare(
-        'UPDATE bbs_forum SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.fid = bbs_forum.fid)',
-      ) as unknown as Stmt,
-      db.prepare(
-        'UPDATE bbs_thread SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.tid = bbs_thread.tid AND bbs_post.isfirst = 0)',
-      ) as unknown as Stmt,
-      db.prepare(
-        'UPDATE bbs_user SET threads = (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid) WHERE threads <> (SELECT COUNT(*) FROM bbs_thread WHERE bbs_thread.uid = bbs_user.uid)',
-      ) as unknown as Stmt,
-      db.prepare(
-        'UPDATE bbs_user SET posts = (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0) WHERE posts <> (SELECT COUNT(*) FROM bbs_post WHERE bbs_post.uid = bbs_user.uid AND bbs_post.isfirst = 0)',
-      ) as unknown as Stmt,
-      // lastusername 自愈（§20.2 结构性修复的兜底）：历史脏数据（=发帖时楼主名）与改名回写遗漏由此
-      // 每日纠正——正常 0 行写不耗额度，与计数校准同口径。lastuid 指向不存在用户时子查询为 NULL，
-      // 三值逻辑下 WHERE 不命中该行（不写、不清空），安全。
-      db.prepare(
-        'UPDATE bbs_thread SET lastusername = (SELECT username FROM bbs_user WHERE uid = bbs_thread.lastuid) WHERE lastusername <> (SELECT username FROM bbs_user WHERE uid = bbs_thread.lastuid)',
-      ) as unknown as Stmt,
-    ]);
-    res.driftRows = calibratedRes.reduce((n, r) => n + Number((r as D1Result | undefined)?.meta?.changes ?? 0), 0);
-    const totals = await db
-      .prepare<{ threads: number; posts: number }>(
-        'SELECT (SELECT COUNT(*) FROM bbs_thread) AS threads, (SELECT COUNT(*) FROM bbs_post WHERE isfirst = 0) AS posts',
-      )
-      .first<{ threads: number; posts: number }>();
-    calibrated = { threads: Number(totals?.threads ?? 0), posts: Number(totals?.posts ?? 0) };
+    const cal = await calibrateCounters(db);
+    res.driftRows = cal.driftRows;
+    calibrated = { threads: cal.threads, posts: cal.posts };
     res.calibrated = calibrated;
   } catch (err) {
     console.warn('[cron:daily] calibrate failed:', err instanceof Error ? err.message : err);

@@ -36,6 +36,8 @@ const GroupEditPage = lazy(() => import('./admin/pages/GroupEditPage').then((m) 
 const UserListPage = lazy(() => import('./admin/pages/UserListPage').then((m) => ({ default: m.UserListPage })));
 const UserEditPage = lazy(() => import('./admin/pages/UserEditPage').then((m) => ({ default: m.UserEditPage })));
 const OtherPage = lazy(() => import('./admin/pages/OtherPage').then((m) => ({ default: m.OtherPage })));
+const DbMaintenancePage = lazy(() => import('./admin/pages/DbMaintenancePage').then((m) => ({ default: m.DbMaintenancePage })));
+const R2MaintenancePage = lazy(() => import('./admin/pages/R2MaintenancePage').then((m) => ({ default: m.R2MaintenancePage })));
 const ModlogPage = lazy(() => import('./admin/pages/ModlogPage').then((m) => ({ default: m.ModlogPage })));
 const ExtensionPage = lazy(() => import('./admin/pages/ExtensionPage').then((m) => ({ default: m.ExtensionPage })));
 const ThemePage = lazy(() => import('./admin/pages/ThemePage').then((m) => ({ default: m.ThemePage })));
@@ -84,6 +86,9 @@ function AdminRoutes() {
           <Route path="users/new" element={<UserEditPage />} />
           <Route path="users/:uid/edit" element={<UserEditPage />} />
           <Route path="other" element={<OtherPage />} />
+          {/* 运行维护：数据库孤儿清理 / R2 未使用对象清理（第二批 tab，与「清理缓存」同菜单） */}
+          <Route path="maintenance/db" element={<DbMaintenancePage />} />
+          <Route path="maintenance/r2" element={<R2MaintenancePage />} />
           <Route path="modlogs" element={<ModlogPage />} />
           {/* 主题管理（系统分组，位于基础设置与插件中心之间） */}
           <Route path="themes" element={<ThemePage />} />

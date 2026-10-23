@@ -98,11 +98,24 @@ export const tmpKey = (uid: number, ext: string): string => `tmp/${uid}_${randTo
 /** 正式附件 R2 key：attach/{YYYYmm}/{rand}.{ext} */
 export const attachKey = (ym: string, ext: string): string => `attach/${ym}/${randToken(20)}.${ext}`;
 
+/** R2 list 的单页结果（只投影维护页需要的字段：key / 上传时间） */
+export interface FilesListPage {
+  objects: { key: string; size?: number; uploaded?: Date | string }[];
+  truncated?: boolean;
+  cursor?: string;
+}
+
 /** R2 桶访问的最小面（真实 R2Bucket 结构兼容；测试替身同形） */
 interface FilesBucket {
   put: (key: string, value: ArrayBufferView | string, options?: { httpMetadata?: { contentType?: string } }) => Promise<unknown>;
   get: (key: string) => Promise<{ body: ReadableStream | Uint8Array | null; httpMetadata?: { contentType?: string } } | null>;
-  delete: (key: string) => Promise<unknown>;
+  /** 单个 key 或批量（R2 单次最多 1000 个 key，见 Workers API reference） */
+  delete: (key: string | string[]) => Promise<unknown>;
+  /**
+   * 分页枚举（后台「R2 存储维护」用）。真实 R2Bucket.list 兼容；
+   * 测试替身可省略 —— 维护模块会显式判空并回落「存储不支持枚举」。
+   */
+  list?: (options: { prefix?: string; cursor?: string; limit?: number }) => Promise<FilesListPage>;
 }
 
 export const filesBucket = (env: Env): FilesBucket => env.FILES as unknown as FilesBucket;

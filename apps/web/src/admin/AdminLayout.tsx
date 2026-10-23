@@ -82,7 +82,7 @@ const MENU: MenuGroup[] = [
       /* 「主题管理」：内置完整主题的启用/切换（主题清单由前端构建期自动发现，见 lib/theme/registry） */
       { key: 'theme', to: '/admin/themes', label: { textKey: 'admin_menu_theme', fallback: 'Theme Management' }, icon: 'image', prefixes: ['/admin/themes'] },
       { key: 'plugin', to: '/admin/extensions', label: { textKey: 'admin_menu_plugin', fallback: 'Plugin Center' }, icon: 'plug', prefixes: ['/admin/extensions'] },
-      { key: 'other', to: '/admin/other', label: { textKey: 'admin_menu_other', fallback: 'Maintenance' }, icon: 'wrench', prefixes: ['/admin/other', '/admin/modlogs'] },
+      { key: 'other', to: '/admin/other', label: { textKey: 'admin_menu_other', fallback: 'Maintenance' }, icon: 'wrench', prefixes: ['/admin/other', '/admin/maintenance', '/admin/modlogs'] },
       /* 「版本更新」菜单项：发布索引托管在仓库 .github/releases，页内直读 GitHub raw */
       { key: 'update', to: '/admin/update', label: { textKey: 'admin_menu_about', fallback: 'Version Updates' }, icon: 'tag', prefixes: ['/admin/update'] },
     ],

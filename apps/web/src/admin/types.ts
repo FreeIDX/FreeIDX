@@ -271,6 +271,90 @@ export interface RuntimeData {
 /** GET /api/admin/setting 返回 kv 'setting' 的原样 JSON（snake_case，含扩展自建的键） */
 export type AdminSettingMap = Record<string, unknown>;
 
+/* ------------------------------------------------------------------ *
+ * 运行维护 · 数据库维护 / R2 存储维护（T3-11）
+ * 所有清理都是分片的：一次请求只推进有限批次，done=false 时由前端继续调用。
+ * ------------------------------------------------------------------ */
+
+/** 本请求三预算实测（与 runtime 面板同口径，只投影维护页要展示的字段） */
+export interface MaintBudget {
+  d1_queries: number;
+  subrequests: number;
+  rows_read_estimate: number;
+  cpu_ms_estimate: number;
+  limits_hard_d1_queries: number;
+  limits_ci_d1_queries_max: number;
+  limits_ci_subrequests_max: number;
+}
+
+/** 体检行：risk 1=社交/倒排孤儿、2=涉及 R2 对象的附件 */
+export interface MaintDbTaskStat {
+  id: string;
+  risk: 1 | 2;
+  /** 命中数（上限 probeCap，超出时 capped=true 显示为 N+） */
+  count: number;
+  capped: boolean;
+}
+
+export interface MaintOverview {
+  tasks: MaintDbTaskStat[];
+  generated: number;
+  probeCap: number;
+  cached: boolean;
+  budget?: MaintBudget;
+}
+
+export interface MaintDbRunResult {
+  task: string;
+  dryRun: boolean;
+  deleted: number;
+  batches: number;
+  done: boolean;
+  remaining: number;
+  capped: boolean;
+  /** 仅 attach_orphan：R2 对象删除失败而保留待重试的行数 */
+  objectFailed?: number;
+  samples?: Record<string, unknown>[];
+  budget?: MaintBudget;
+}
+
+export interface MaintCronResult {
+  job: string;
+  affected: number;
+  detail: Record<string, unknown>;
+  budget?: MaintBudget;
+}
+
+/** R2 扫描/删除任务状态（服务端存 bbs_cache，7 天 TTL） */
+export interface MaintR2State {
+  prefix: string;
+  mode: 'scan' | 'delete';
+  cursor: string;
+  scanned: number;
+  hits: number;
+  deleted: number;
+  kept: number;
+  skipped: number;
+  /** 已判定待删但尚未删完的 key（数组，前端只看长度） */
+  pending: string[];
+  done: boolean;
+  minAgeHours: number;
+  /** 是否仍走 R2 批量删除；false = 已降级为逐 key（服务端持久化该决定） */
+  bulk: boolean;
+  /** 每步实际可删的对象数（批量 200 / 降级后 20） */
+  deleteBatch: number;
+  updated: number;
+}
+
+export interface MaintR2Status {
+  prefixes: string[];
+  pendingDeletePerStep: number;
+  pageSize: number;
+  minAgeHours: number;
+  states: (MaintR2State | null)[];
+  budget?: MaintBudget;
+}
+
 export interface AdminSettingInput {
   sitename?: string;
   brief?: string;

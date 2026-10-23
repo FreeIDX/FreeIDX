@@ -31,6 +31,11 @@ import type {
   ForumInput,
   GroupFullRow,
   GroupUpsertItem,
+  MaintCronResult,
+  MaintDbRunResult,
+  MaintOverview,
+  MaintR2State,
+  MaintR2Status,
   ModlogRow,
   PageData,
   RuntimeData,
@@ -191,6 +196,30 @@ export const getModlogs = (q: { uid?: number; page?: number; size?: number }) =>
 export const getRuntime = () => apiGet<RuntimeData>('/api/admin/runtime');
 /** 只清 forumlist/grouplist/setting/runtime 四个键（user:{uid} 与 ext:*:config 不动；thread_top_list 缓存键已随直查 bbs_thread_top 方案移除） */
 export const clearCache = () => apiSend<{ cleared: number }>('POST', '/api/admin/cache/clear');
+
+/* ------------------------------------------------------------------ *
+ * 运行维护（T3-11）：数据库孤儿清理 + R2 未使用对象清理
+ * 全部为分片执行：done=false 时前端继续调用（服务端单请求最多推进有限批次）。
+ * ------------------------------------------------------------------ */
+
+/** 数据库体检：默认读 1 小时缓存；refresh=true 强制全表重扫（成本高，手动触发） */
+export const getMaintOverview = (refresh = false) =>
+  apiGet<MaintOverview>(`/api/admin/maintenance/db/overview${refresh ? '?refresh=1' : ''}`);
+/** 分批清理：dryRun=true 只取样本不写；batches 上限 8（服务端截断） */
+export const runMaintDbTask = (task: string, opts: { batches?: number; dryRun?: boolean } = {}) =>
+  apiSend<MaintDbRunResult>('POST', '/api/admin/maintenance/db/run', { task, ...opts });
+/** 立即执行一次 cron 子任务（session/calibrate/cache_gc/email_code/queue/attach_tmp） */
+export const runMaintCronJob = (job: string) => apiSend<MaintCronResult>('POST', '/api/admin/maintenance/cron/run', { job });
+
+export const getMaintR2Status = () => apiGet<MaintR2Status>('/api/admin/maintenance/r2/status');
+/** 开始/重置某前缀的任务；mode='delete' 必须带 confirm 且已有完成的扫描报告 */
+export const startMaintR2 = (body: { prefix: string; mode: 'scan' | 'delete'; confirm?: boolean; minAgeHours?: number }) =>
+  apiSend<{ state: MaintR2State }>('POST', '/api/admin/maintenance/r2/start', body);
+/** 推进一步：scan 模式每轮最多 5 页；delete 模式每轮最多删 20 个对象 */
+export const stepMaintR2 = (prefix: string, pages = 5) =>
+  apiSend<{ state: MaintR2State }>('POST', '/api/admin/maintenance/r2/step', { prefix, pages });
+/** 丢弃进度（删除模式中止后也可用它回到未开始） */
+export const resetMaintR2 = (prefix: string) => apiSend<{ prefix: string }>('POST', '/api/admin/maintenance/r2/reset', { prefix });
 
 /**
  * 后台二次验证重签 admin_at。路径挂在 `/api/auth/*` 而非 `/api/admin/*`——

@@ -33,6 +33,10 @@ export const PLUGIN_TABS: TabItem[] = [
 
 export const OTHER_TABS: TabItem[] = [
   { k: 'cache', to: '/admin/other', textKey: 'admin_other_cache', fallback: 'Clear Cache' },
+  /* 数据库维护：孤儿行/失效行分批清理（只报告账目类数据，不删） */
+  { k: 'db', to: '/admin/maintenance/db', textKey: 'admin_maint_db', fallback: 'Database' },
+  /* R2 存储维护：白名单前缀内的未引用对象扫描与删除 */
+  { k: 'r2', to: '/admin/maintenance/r2', textKey: 'admin_maint_r2', fallback: 'Object Storage' },
   /* 版务日志是本项目新增（独立 mod_log 表），挂在「其他」菜单下 */
   { k: 'modlog', to: '/admin/modlogs', textKey: 'admin_mod_logs', fallback: 'Moderation Logs' },
 ];

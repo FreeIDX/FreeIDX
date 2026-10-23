@@ -44,6 +44,7 @@ import { adminRoutes } from './modules/admin/routes';
 import { adminForumRoutes } from './modules/admin/forums';
 import { adminUserRoutes } from './modules/admin/users';
 import { adminRuntimeRoutes } from './modules/admin/runtime';
+import { adminMaintenanceRoutes } from './modules/admin/maintenance';
 import { adminExtensionsRoutes } from './modules/admin/extensions';
 import { adminCheckRoutes } from './modules/admin/check';
 import { adminEmailRoutes } from './modules/admin/email';
@@ -204,6 +205,8 @@ app.route('/', adminForumRoutes());
 app.route('/', adminUserRoutes());
 // M3 后台（T3-7）：modlog 面板、runtime 统计面板（三预算实测）、缓存一键清空
 app.route('/', adminRuntimeRoutes());
+// M3 后台（T3-11）：运行维护 —— 数据库孤儿/失效清理（分批）+ R2 未使用对象扫描与删除
+app.route('/', adminMaintenanceRoutes());
 // M3 后台（T3-9）：扩展启停/配置 + ads 广告位 CRUD（§17.5）
 app.route('/', adminExtensionsRoutes());
 // 邮箱设置（§11.3）：EmailProvider 的后台配置端点（SMTP 的 Workers 等价物）
