@@ -271,6 +271,12 @@ export interface SiteSetting {
   userCreateOn: boolean;
   userCreateEmailOn: boolean;
   userResetpwOn: boolean;
+  /**
+   * 邮件通道是否可用（SMTP 池非空）。由 bootstrap 现算后随 setting 下发，缺省视为可用：
+   * 后台只把 `user_create_email_on` 打开却没配 SMTP 池时，后端实际按「验证关闭」降级（§11.3），
+   * 前端据此同步隐藏验证码输入框，避免出现「必填验证码但发码永远失败」的死路。
+   */
+  mailOn?: boolean;
   forumOrderby: 0 | 1; // 0 顶贴时间 1 发帖时间
   updateViewsOn: boolean;
   uploadMaxSize: number;

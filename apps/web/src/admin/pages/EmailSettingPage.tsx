@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getEmailSetting, putEmailSetting } from '../api';
-import type { SmtpAccountInput } from '../types';
+import type { EmailSettingView, SmtpAccountInput } from '../types';
 import { useAdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { SETTING_TABS } from '../tabs';
@@ -28,6 +28,20 @@ interface PoolRow {
 
 const emptyRow = (): PoolRow => ({ from: '', host: '', port: '465', user: '', limit: '0', pass: '', hasPass: false });
 
+/** 服务端回包 → 表单行（密码永不下发：只留 hasPass 决定占位文案） */
+const rowsOf = (v: EmailSettingView): PoolRow[] =>
+  v.pool.length
+    ? v.pool.map((a) => ({
+        from: a.from,
+        host: a.host,
+        port: String(a.port),
+        user: a.user,
+        limit: String(a.dailyLimit ?? 0),
+        pass: '',
+        hasPass: a.hasPass,
+      }))
+    : [emptyRow()];
+
 const th = 'px-2 py-2 text-left font-medium text-muted';
 
 export function EmailSettingPage() {
@@ -43,34 +57,31 @@ export function EmailSettingPage() {
   useEffect(() => {
     if (initedRef.current || !loaded) return;
     initedRef.current = true;
-    setRows(
-      loaded.pool.length
-        ? loaded.pool.map((a) => ({
-            from: a.from,
-            host: a.host,
-            port: String(a.port),
-            user: a.user,
-            limit: String(a.dailyLimit ?? 0),
-            pass: '',
-            hasPass: a.hasPass,
-          }))
-        : [emptyRow()],
-    );
+    setRows(rowsOf(loaded));
   }, [loaded]);
 
   const save = useAdminAction(
     () => {
-      const pool: SmtpAccountInput[] = rows.map((r) => ({
-        from: r.from.trim(),
-        host: r.host.trim(),
-        port: Number(r.port),
-        user: r.user.trim(),
-        dailyLimit: Math.floor(Number(r.limit)) || 0,
-        pass: r.pass.trim() || undefined,
-      }));
+      // 全空行（点了「增加一行」没填）直接丢弃：否则端口 0 会把整池保存打回「第 N 行端口非法」。
+      // 全部为空 ⇒ 提交空池 ⇒ 发信降级（注册验证码/找回密码邮件停发，其余功能不受影响）。
+      const pool: SmtpAccountInput[] = rows
+        .filter((r) => r.from.trim() || r.host.trim() || r.user.trim() || r.pass.trim())
+        .map((r) => ({
+          from: r.from.trim(),
+          host: r.host.trim(),
+          port: Number(r.port),
+          user: r.user.trim(),
+          dailyLimit: Math.floor(Number(r.limit)) || 0,
+          pass: r.pass.trim() || undefined,
+        }));
       return putEmailSetting(pool);
     },
-    { ok: t('admin_email_save_ok', '保存成功，发信配置即时生效'), invalidate: [['admin', 'email-setting']] },
+    {
+      ok: t('admin_email_save_ok', '保存成功，发信配置即时生效'),
+      invalidate: [['admin', 'email-setting']],
+      // 用回包重置表单：清掉已验证保存的明文密码、把 hasPass 刷成最新（否则占位仍显示「授权码/密码」）
+      onData: (d) => setRows(rowsOf(d)),
+    },
   );
 
   if (q.isError) return <ErrorState error={q.error} />;
@@ -143,10 +154,11 @@ export function EmailSettingPage() {
                     />
                   </td>
                   <td className="px-2 py-2 text-center">
+                    {/* 允许删到空：空池 = 发信降级（注册验证码/找回密码邮件停发），是文档化的关闭方式；
+                        此前限制「至少保留一行」会让后台永远关不掉邮件功能。 */}
                     <button
                       type="button"
                       className="text-sm text-brand hover:underline disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={rows.length <= 1}
                       onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
                     >
                       {t('delete', '删除')}

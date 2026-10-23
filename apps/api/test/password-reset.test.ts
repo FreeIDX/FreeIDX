@@ -25,6 +25,7 @@ function rules(overrides: SqlRule[] = []): SqlRule[] {
     { test: /DELETE FROM bbs_cache/, rows: [] },
     { test: /SELECT uid FROM bbs_user WHERE email = \?/, first: { uid: 1 } },
     { test: /SELECT create_date FROM bbs_email_code/, first: null },
+    { test: /COUNT\(\*\) AS c FROM bbs_email_code/, first: { c: 0 } },
     { test: /UPDATE bbs_email_code SET used = 1 WHERE email/, rows: [] },
     { test: /INSERT INTO bbs_email_code/, rows: [] },
     { test: /UPDATE bbs_user SET password/, rows: [] },
@@ -80,6 +81,21 @@ describe('POST /api/auth/password-reset/request', () => {
     expect((await jsonOf(res)).code).toBe(Code.OK);
     expect(calls.some((c) => /INSERT INTO bbs_email_code/.test(c.sql))).toBe(true);
     expect(calls.some((c) => /UPDATE bbs_email_code SET used = 1 WHERE email/.test(c.sql))).toBe(true);
+  });
+
+  it('60s 内重复请求：仍回同构成功且不再发放 token（不暴露邮箱是否注册）', async () => {
+    const last = Math.floor(Date.now() / 1000) - 5;
+    const { env, calls } = makeEnv([{ test: /SELECT create_date FROM bbs_email_code/, first: { create_date: last } }]);
+    const res = await app.request('/api/auth/password-reset/request', post('/x', { email: 'a@b.c' }), env);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    expect(calls.some((c) => /INSERT INTO bbs_email_code/.test(c.sql))).toBe(false);
+  });
+
+  it('日上限 10 封：仍回同构成功、不落 token（找回密码不得成为不限量发信入口）', async () => {
+    const { env, calls } = makeEnv([{ test: /COUNT\(\*\) AS c FROM bbs_email_code/, first: { c: 10 } }]);
+    const res = await app.request('/api/auth/password-reset/request', post('/x', { email: 'a@b.c' }), env);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    expect(calls.some((c) => /INSERT INTO bbs_email_code/.test(c.sql))).toBe(false);
   });
 
   it('未注册邮箱：同构成功、不发信、不落 token（防枚举）', async () => {

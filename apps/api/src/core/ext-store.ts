@@ -53,3 +53,24 @@ export async function saveExtSecret(db: D1b, id: string, secret: Record<string, 
   const token = await encryptSecret(JSON.stringify(secret), masterKey);
   await db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind(extSecretKey(id), token).run();
 }
+
+/**
+ * 原子写「明文配置 + 私密配置」（D1 batch = 单事务，任一失败整批回滚）。
+ * 邮箱池的密码数组与 pool 行是**按下标对齐**的两份数据：两次独立 REPLACE 之间失败会留下
+ * 「新池 + 旧密码」的错配（保存看似成功、之后发信全部 535 且难以定位），故必须同批提交。
+ */
+export async function saveExtConfigAndSecret(
+  db: D1b,
+  cache: Cache,
+  id: string,
+  config: Record<string, unknown>,
+  secret: Record<string, unknown>,
+  masterKey: string,
+): Promise<void> {
+  const token = await encryptSecret(JSON.stringify(secret), masterKey);
+  await db.batch([
+    db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind(extSecretKey(id), token),
+    db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind(extConfigKey(id), JSON.stringify(config)),
+  ]);
+  await cache.del(extConfigKey(id));
+}

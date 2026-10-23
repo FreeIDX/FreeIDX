@@ -178,10 +178,12 @@ describe('只读接口集成（T1-4 DoD）', () => {
     const { env } = envFor(baseRules());
     const body = await json(await app.request('/api/bootstrap', {}, env as never));
     expect(body.code).toBe(Code.OK);
-    const d = body.data as { forumlist: { fid: number; name: string }[]; me: unknown; setting: { sitename: string } };
+    const d = body.data as { forumlist: { fid: number; name: string }[]; me: unknown; setting: { sitename: string; mailOn?: boolean } };
     expect(d.forumlist[0]!.name).toBe('默认版块');
     expect(d.me).toBeNull();
     expect(d.setting.sitename).toBe('FreeIDX');
+    // 未配置 SMTP 池 ⇒ mailOn=false：前端据此隐藏验证码框（后端此时按「验证关闭」降级）
+    expect(d.setting.mailOn).toBe(false);
   });
 
   it('GET /api/users/1 + /threads：公开列零敏感字段、我的主题走权限过滤', async () => {

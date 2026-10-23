@@ -19,6 +19,7 @@ const common: SqlRule[] = [
   { test: /SELECT v FROM bbs_cache/, first: null },
   { test: /REPLACE INTO bbs_cache/, rows: [] },
   { test: /DELETE FROM bbs_cache/, rows: [] },
+  { test: /DELETE FROM bbs_email_code WHERE expiry/, rows: [] },
 ];
 
 describe('cron 每 5 分钟档（§11.1：sess_gc + 在线数刷新）', () => {
@@ -96,6 +97,9 @@ describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC
     expect(d.calls.some((c) => /DELETE FROM bbs_queue WHERE expiry > 0/.test(c.sql))).toBe(true);
     // 临时附件 GC 已挪到每小时档（子请求预算约束），每日档不得再触碰 bbs_attach
     expect(d.calls.some((c) => /bbs_attach/.test(c.sql))).toBe(false);
+    // email_code 过期行 GC：验证码/重置 token 表此前只增不减，每日档按 expiry 物理清理
+    const emailGc = d.calls.find((c) => /DELETE FROM bbs_email_code WHERE expiry > 0 AND expiry < \?/.test(c.sql));
+    expect(emailGc?.params[0]).toBe(NOW - 86400);
   });
 
   it('检出漂移 → driftRows 汇总各语句实际改写行数', async () => {

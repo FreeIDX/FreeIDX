@@ -122,7 +122,9 @@ export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
   const [sending, setSending] = useState(false);
   const timer = useRef<number | null>(null);
 
-  const emailOn = Boolean(setting?.userCreateEmailOn);
+  // 验证码框按「实际生效」口径渲染：后台开关打开但没有 SMTP 池时，后端按验证关闭降级（§11.3），
+  // 此时仍显示验证码输入框会给出「必填但发码永远失败」的死路。mailOn 缺省（旧缓存/未下发）视为可用。
+  const emailOn = Boolean(setting?.userCreateEmailOn) && setting?.mailOn !== false;
   const createOn = setting?.userCreateOn !== false;
 
   /** 倒计时由发码成功启动一次 interval（不再依赖 cooldown，避免每秒重建定时器） */

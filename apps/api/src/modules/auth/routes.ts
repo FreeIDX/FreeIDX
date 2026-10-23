@@ -130,22 +130,16 @@ export function authRoutes(): Hono<ReadEnv> {
     const ferr = isEmail(email, t);
     if (ferr) throw new AppError(Code.FORM_INVALID_EMAIL, ferr);
 
-    const scene = b.scene ?? '';
-    if (scene === 'user_create') {
-      // 注册场景校验序
-      if (!setting.userCreateOn) throw new AppError(Code.NOT_LOGIN, t('auth.registerDisabled'));
-      if (!setting.userCreateEmailOn) throw new AppError(Code.NOT_LOGIN, t('auth.emailVerifyDisabled'));
-      if (!provider) throw new AppError(Code.NOT_LOGIN, t('auth.mailUnconfigured'));
-      const dup = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
-      if (dup) throw new AppError(Code.FORM_EMAIL_EXISTS, t('auth.emailExists'));
-    } else if (scene === 'user_resetpw') {
-      const u = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
-      if (!u) throw new AppError(Code.FORM_INVALID_EMAIL, t('auth.emailNotRegistered'));
-      if (!setting.userResetpwOn) throw new AppError(Code.NOT_LOGIN, t('auth.resetDisabled'));
-      if (!provider) throw new AppError(Code.NOT_LOGIN, t('auth.mailUnconfigured'));
-    } else {
-      throw new AppError(Code.VALIDATION_ERROR, t('auth.sceneInvalid'));
-    }
+    // 仅注册场景（6 位数字码）。找回密码走独立的一次性 token 链接（/password-reset/request），
+    // 不再复用本接口：两者若共用一个 scene，(a) 6 位码会被 /password-reset/confirm 当作 token 接受，
+    // (b) 频控互相挤占，(c) 本接口对未注册邮箱明说不存在，等于给找回密码的防枚举开了个侧门。
+    const scene = 'user_create';
+    if (b.scene !== scene) throw new AppError(Code.VALIDATION_ERROR, t('auth.sceneInvalid'));
+    if (!setting.userCreateOn) throw new AppError(Code.NOT_LOGIN, t('auth.registerDisabled'));
+    if (!setting.userCreateEmailOn) throw new AppError(Code.NOT_LOGIN, t('auth.emailVerifyDisabled'));
+    if (!provider) throw new AppError(Code.NOT_LOGIN, t('auth.mailUnconfigured'));
+    const dup = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
+    if (dup) throw new AppError(Code.FORM_EMAIL_EXISTS, t('auth.emailExists'));
 
     // 频控：同 email+scene 60s 一次、每日上限（email_code 表口径，跨 isolate 一致）
     const ts = now();
@@ -180,7 +174,9 @@ export function authRoutes(): Hono<ReadEnv> {
       return false;
     });
     const ex = safeExecCtx(c);
-    if (ex) ex.waitUntil?.(work);
+    // 必须有 waitUntil 才算旁路成功：只有 ctx 没有 waitUntil 时挂上去的 promise 无人托管，
+    // isolate 一回收就丢信（此时退化为请求内等待）
+    if (ex?.waitUntil) ex.waitUntil(work);
     else await work;
     return ok(c, t('auth.sendDone'));
   });
@@ -203,6 +199,14 @@ export function authRoutes(): Hono<ReadEnv> {
     if (!email) throw new AppError(Code.FORM_INVALID_EMAIL, t('auth.emailRequired'));
     if (!username) throw new AppError(Code.FORM_INVALID_USERNAME, t('auth.usernameRequired'));
     if (!b.password) throw new AppError(Code.FORM_PASSWORD_MISMATCH, t('auth.passwordRequired'));
+    // 格式校验先于验证码校验：反序时「邮箱写成 a@b」只会得到"请先获取验证码"，
+    // 用户被引去发码（发码接口同样校验格式才报错），多绕一圈。
+    const ferr = isEmail(email, t);
+    if (ferr) throw new AppError(Code.FORM_INVALID_EMAIL, ferr);
+    const uerr = isUsername(username, t);
+    if (uerr) throw new AppError(Code.FORM_INVALID_USERNAME, uerr);
+    const prer = isPassword(b.password, t);
+    if (prer) throw new AppError(Code.FORM_PASSWORD_MISMATCH, prer);
 
     let rowId = 0;
     if (emailOn) {
@@ -218,16 +222,10 @@ export function authRoutes(): Hono<ReadEnv> {
       rowId = Number(row.id);
     }
 
-    const ferr = isEmail(email, t);
-    if (ferr) throw new AppError(Code.FORM_INVALID_EMAIL, ferr);
     const dupEmail = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
     if (dupEmail) throw new AppError(Code.FORM_EMAIL_EXISTS, t('auth.emailExists'));
-    const uerr = isUsername(username, t);
-    if (uerr) throw new AppError(Code.FORM_INVALID_USERNAME, uerr);
     const dupName = await db.prepare('SELECT uid FROM bbs_user WHERE username = ?').bind(username).first<{ uid: number }>();
     if (dupName) throw new AppError(Code.FORM_USERNAME_EXISTS, t('auth.usernameExists'));
-    const prer = isPassword(b.password, t);
-    if (prer) throw new AppError(Code.FORM_PASSWORD_MISMATCH, prer);
 
     const ts = now();
     const ip = ipLongOf(c);
@@ -285,10 +283,12 @@ export function authRoutes(): Hono<ReadEnv> {
     };
 
     // 账号分发：is_email → by_email（不存在=邮箱不存在）否则 by_username
+    // 邮箱一律按小写查：注册/后台建号/找回密码入库前都已归一为小写，
+    // 若拿原样入参去查，用户手打 `A@B.com` 会查不到自己的账号（"邮箱不存在"）却能用 `a@b.com` 登录。
     const byEmail = /^[\w\-.]+@[\w\-.]+(\.\w+)+$/i.test(account);
     const user = await db
       .prepare<UserSessionRow>(`SELECT ${USER_SESSION_COLS} FROM bbs_user WHERE ${byEmail ? 'email' : 'username'} = ?`)
-      .bind(account)
+      .bind(byEmail ? account.toLowerCase() : account)
       .first<UserSessionRow>();
     if (!user) {
       await bumpFail();
@@ -396,15 +396,24 @@ export function authRoutes(): Hono<ReadEnv> {
     if (!u) return ok(c, t('auth.resetMailSent'));
 
     const ts = now();
+    // 频控命中同样回成功（不报 -7）：未注册邮箱永远成功、已注册却在 60s 内报错，
+    // 等于把「该邮箱是否注册」用错误码送出去，与上面的防枚举口径自相矛盾；
+    // 同时日上限与发码接口对齐，避免找回密码成为不限量的发信入口（单邮箱每天最多 10 封）。
     const last = await db
       .prepare<{ create_date: number }>(
         'SELECT create_date FROM bbs_email_code WHERE email = ? AND scene = ? ORDER BY id DESC LIMIT 1',
       )
       .bind(email, RESET_SCENE)
       .first<{ create_date: number }>();
-    if (last && ts - Number(last.create_date) < SEND_MIN_INTERVAL) {
-      throw new AppError(Code.RATE_LIMITED, t('auth.sendTooFrequent'));
-    }
+    if (last && ts - Number(last.create_date) < SEND_MIN_INTERVAL) return ok(c, t('auth.resetMailSent'));
+    const dayStart = Math.floor(ts / 86400) * 86400;
+    const cnt = await db
+      .prepare<{ c: number }>(
+        'SELECT COUNT(*) AS c FROM bbs_email_code WHERE email = ? AND scene = ? AND create_date >= ?',
+      )
+      .bind(email, RESET_SCENE, dayStart)
+      .first<{ c: number }>();
+    if (Number(cnt?.c ?? 0) >= SEND_DAILY_CAP) return ok(c, t('auth.resetMailSent'));
     const token = randomTokenHex();
     // 单活一次性：旧未用 token 作废
     await db
@@ -428,7 +437,7 @@ export function authRoutes(): Hono<ReadEnv> {
       )
       .catch(() => false);
     const ex = safeExecCtx(c);
-    if (ex) ex.waitUntil?.(work);
+    if (ex?.waitUntil) ex.waitUntil(work);
     else await work;
     return ok(c, t('auth.resetMailSent'));
   });

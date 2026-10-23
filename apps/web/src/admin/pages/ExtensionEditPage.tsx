@@ -1,6 +1,6 @@
 /**
  * 扩展详情 / 配置（/admin/extensions/:id，§4.10）。
- * 结构：卡体内一条媒体行（54×54 图标 + mr-3、`<h4>` 名称+版本、brief 段）
+ * 结构：卡体内一条媒体行（54×54 图标砖，取自 ./ext-icon 与列表卡同源、`<h4>` 名称+版本、brief 段）
  * → `<hr>` → 双列元信息栅格 → `<hr>` → 提示条 → 居中按钮行；卡**外**另有 [返回]（次要按钮，width:210px）。
  *
  * 配置区已**表单化**（尽量不让管理员写 JSON）：
@@ -24,6 +24,7 @@ import { useAdminLang, useAdminT, type AdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { apiErrorMessage } from '../../lib/errors';
 import { extName } from './ExtensionPage';
+import { ExtIcon } from './ext-icon';
 import { AdSlotGrid } from './AdSlotGrid';
 import { extText, type ExtField } from '@freeidx/shared';
 import { PLUGIN_TABS } from '../tabs';
@@ -277,9 +278,8 @@ export function ExtensionEditPage() {
         <>
           <Card>
             <div className="flex items-start">
-              <span className="mr-[1rem] inline-grid size-[54px] shrink-0 place-items-center rounded bg-line-soft text-[1.4rem] font-medium text-muted">
-                {d.manifest.id.slice(0, 1).toUpperCase()}
-              </span>
+              {/* 与插件中心列表卡同源（./ext-icon）：同一插件列表/详情图色一致 */}
+              <ExtIcon id={d.manifest.id} size="detail" className="mr-[1rem]" />
               <div className="min-w-0 flex-1">
                 <h4 className="mb-[.5rem] text-[1.5rem] font-medium leading-[1.2]">
                   {extName(d.manifest.name, lang, d.manifest.id)} v{d.manifest.version}

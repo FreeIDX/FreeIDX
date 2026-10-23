@@ -15,7 +15,12 @@ export interface Flash {
 
 export function useAdminAction<TData>(
   fn: () => Promise<TData>,
-  opts: { ok?: string | ((d: TData) => string); invalidate?: readonly (readonly unknown[])[] } = {},
+  opts: {
+    ok?: string | ((d: TData) => string);
+    invalidate?: readonly (readonly unknown[])[];
+    /** 保存后用服务端回包刷新本地表单（如「邮箱设置」按回包重置 hasPass / 清空明文密码框） */
+    onData?: (d: TData) => void;
+  } = {},
 ) {
   const qc = useQueryClient();
   const t = useAdminT();
@@ -24,6 +29,7 @@ export function useAdminAction<TData>(
     mutationFn: () => fn(),
     onSuccess: (d) => {
       for (const key of opts.invalidate ?? []) void qc.invalidateQueries({ queryKey: key });
+      opts.onData?.(d);
       setFlash({ tone: 'ok', text: typeof opts.ok === 'function' ? opts.ok(d) : (opts.ok ?? t('operation_success')) });
     },
     onError: (e) => setFlash({ tone: 'warn', text: apiErrorMessage(e) }),

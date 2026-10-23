@@ -6,7 +6,7 @@
  * 本项目扩展是**代码内置**（ADMIN_CATALOG），没有下载/安装/升级/卸载端点，manifest 也没有
  * icon_url/brief/author 字段，所以价格列与 下载/购买/安装/升级/卸载 五个按钮整体不做（§7 记账），
  * 只保留 设置 + 启用/禁用（设置=主色按钮、禁用/启用=次要按钮）；
- * 图标位按插件语义取真实 SVG 图形（EXT_ICONS）。本地插件列表渲染为**小卡片网格**（2~3 列自适应），
+ * 图标位按插件语义取真实 SVG 图形（见 ./ext-icon，与详情页同源）。本地插件列表渲染为**小卡片网格**（2~3 列自适应），
  * 卡内：图标砖 + 名称/版本/目录 + 简介（来自插件自声明 schema 随列表 API 下发）+ 安装与启用状态徽章。
  * 名称是多语言 map（manifest.name），按后台语言（setting.adminLang）取词。
  */
@@ -19,27 +19,13 @@ import type { ExtensionRow } from '../types';
 import { useAdminLang, useAdminT } from '../t';
 import type { Flash } from '../use-action';
 import { PLUGIN_TABS } from '../tabs';
-import { Icon, type IconName } from '../../components/icons';
 import { Alert, Button, ErrorState, TabBar } from '../ui';
+import { ExtIcon } from './ext-icon';
 
 /** manifest.name 取词：当前语言 → zh-cn → 任一可用 → 目录名 */
 export function extName(name: Record<string, string>, lang: string, id: string): string {
   return name[lang] ?? name['zh-cn'] ?? Object.values(name)[0] ?? id;
 }
-
-/** 插件 id → 卡片图标与配色（真实语义图标，取代原「目录名首字母」占位砖） */
-const EXT_ICONS: Record<string, { icon: IconName; tint: string }> = {
-  seo: { icon: 'trending_up', tint: 'bg-brand/10 text-brand' }, // 收录/排名增长
-  geo: { icon: 'bot', tint: 'bg-info/10 text-info' }, // AI 爬虫 / 生成式引擎
-  ads: { icon: 'megaphone', tint: 'bg-price/10 text-price' }, // 广告投放
-  card: { icon: 'ticket', tint: 'bg-success/10 text-success' }, // 卡密兑换券
-  stripe: { icon: 'credit_card', tint: 'bg-[#635bff]/10 text-[#635bff]' }, // Stripe 品牌紫
-  paypal: { icon: 'wallet', tint: 'bg-[#009cde]/10 text-[#009cde]' }, // PayPal 品牌蓝
-};
-
-const EXT_ICON_FALLBACK: { icon: IconName; tint: string } = { icon: 'plug', tint: 'bg-line-soft text-muted' };
-
-const extIcon = (id: string) => EXT_ICONS[id] ?? EXT_ICON_FALLBACK;
 
 export function ExtensionPage() {
   const t = useAdminT();
@@ -75,9 +61,10 @@ export function ExtensionPage() {
             <div className="flex items-start gap-3">
               <Link
                 to={`/admin/extensions/${r.id}`}
-                className={`grid size-11 shrink-0 place-items-center rounded ${extIcon(r.id).tint} no-underline hover:brightness-95`}
+                aria-label={extName(r.name, lang, r.id)}
+                className="shrink-0 rounded-[10px] no-underline hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
               >
-                <Icon name={extIcon(r.id).icon} className="size-6" />
+                <ExtIcon id={r.id} />
               </Link>
               <div className="min-w-0 flex-1">
                 <Link to={`/admin/extensions/${r.id}`} className="font-bold text-brand hover:underline">

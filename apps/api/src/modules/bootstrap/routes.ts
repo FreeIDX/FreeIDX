@@ -8,6 +8,7 @@ import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
 import { loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
 import { remember } from '../../core/cache';
+import { getEmailProvider } from '../../core/email';
 import { getExtensions } from '../../core/extensions';
 import { loadThemeId } from '../../core/theme';
 import { ok } from '../../middleware/envelope';
@@ -18,11 +19,15 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
 
   app.get('/api/bootstrap', async (c) => {
     const { db, cache } = core(c);
-    const [forumlist, grouplist, viewer, setting] = await Promise.all([
+    const [forumlist, grouplist, viewer, setting, mailOn] = await Promise.all([
       loadForumlist(cache, db),
       loadGrouplist(cache, db),
       loadViewer(cache, db, c),
       loadSetting(cache, db),
+      // 邮件通道实际可用性：后台「注册邮箱验证」只是开关，能否发信取决于 SMTP 池是否存在（§11.3 无池即降级）。
+      // 前台必须按「实际生效」口径渲染验证码框，否则会给出必填验证码、发码却永远失败的死路。
+      // 60s 读穿缓存：本接口是热点，不能每次 bootstrap 都去解密一次 secret。
+      remember(cache, 'email:on', async () => (await getEmailProvider(c.env, db, cache)) !== null),
     ]);
     const visible = forumListAccessFilter(forumlist, viewer.gid, grouplist);
     const nodes = Object.values(visible)
@@ -118,7 +123,8 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
     const theme = await loadThemeId(cache, db);
 
     return ok(c, 'ok', {
-      data: { version: '0.1.0', setting, forumlist: nodes, grouplist: groups, me, runtime, ext, theme },
+      // mailOn 现算后覆盖：setting 本身是缓存对象，不得就地改写（L0/L1 共享）
+      data: { version: '0.1.0', setting: { ...setting, mailOn }, forumlist: nodes, grouplist: groups, me, runtime, ext, theme },
     });
   });
 

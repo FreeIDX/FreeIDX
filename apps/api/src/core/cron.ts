@@ -47,6 +47,8 @@ interface CronDailyResult {
   driftRows: number;
   /** bbs_cache 过期行物理 GC 删除的行数 */
   cacheGc: number;
+  /** bbs_email_code 过期行（验证码/重置 token）物理 GC 删除的行数 */
+  emailCodeGc?: number;
 }
 
 async function onlineHoldTime(db: D1b): Promise<number> {
@@ -156,6 +158,16 @@ export async function cronDaily(deps: CronDeps): Promise<CronDailyResult> {
     console.warn('[cron:daily] cache-gc failed:', err instanceof Error ? err.message : err);
   }
 
+  // bbs_email_code 过期行物理 GC：每次发码 / 找回密码都插一行，代码里没有任何删除路径，
+  // 长跑下表只增不减（发码接口的频控 COUNT 还要扫这张表）。频控只看当天行，
+  // 过期满 24h 的行不再影响任何判定，可安全物理删除。
+  try {
+    const emailGcRes = await db.prepare('DELETE FROM bbs_email_code WHERE expiry > 0 AND expiry < ?').bind(now - DAY).run();
+    res.emailCodeGc = Number(emailGcRes.meta?.changes ?? 0);
+  } catch (err) {
+    console.warn('[cron:daily] email-code-gc failed:', err instanceof Error ? err.message : err);
+  }
+
   return res;
 }
 
@@ -246,7 +258,7 @@ export async function handleScheduled(
     case CRON_DAILY: {
       const r = await cronDaily(deps);
       console.log(
-        `[cron:daily] forum_reset=${r.forumReset} calibrated_threads=${r.calibrated.threads} calibrated_posts=${r.calibrated.posts} drift_rows=${r.driftRows} cache_gc=${r.cacheGc}`,
+        `[cron:daily] forum_reset=${r.forumReset} calibrated_threads=${r.calibrated.threads} calibrated_posts=${r.calibrated.posts} drift_rows=${r.driftRows} cache_gc=${r.cacheGc} email_code_gc=${r.emailCodeGc ?? 0}`,
       );
       await dispatchPluginCrons(CRON_DAILY, deps, waitUntil);
       break;
