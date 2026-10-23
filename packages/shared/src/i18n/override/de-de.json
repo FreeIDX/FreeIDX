@@ -612,7 +612,6 @@
   "admin_version_open_release": "Release öffnen",
   "admin_version_load_failed": "Versionsdaten konnten nicht geladen werden",
   "admin_version_up_to_date": "Aktuell",
-  "admin_version_ahead": "{n} Commits voraus",
   "admin_version_newer": "Neuere Version verfügbar: {v}",
   "admin_version_build": "Buildnummer {n}",
   "admin_menu_content": "Inhalt",

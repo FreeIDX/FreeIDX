@@ -613,7 +613,6 @@
   "admin_version_open_release": "Release を開く",
   "admin_version_load_failed": "バージョンデータの読み込みに失敗しました",
   "admin_version_up_to_date": "最新です",
-  "admin_version_ahead": "{n} コミット先行",
   "admin_version_newer": "新バージョン {v} が利用可能",
   "admin_version_build": "ビルド {n}",
   "admin_menu_content": "コンテンツ",

@@ -612,7 +612,6 @@
   "admin_version_open_release": "Release 열기",
   "admin_version_load_failed": "버전 데이터를 불러오지 못했습니다",
   "admin_version_up_to_date": "최신 버전입니다",
-  "admin_version_ahead": "{n}개 커밋 앞서 있음",
   "admin_version_newer": "새 버전 {v} 사용 가능",
   "admin_version_build": "빌드 {n}",
   "admin_menu_content": "콘텐츠",

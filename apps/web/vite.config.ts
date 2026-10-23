@@ -25,20 +25,17 @@ function git(args: string[]): string | null {
  * 构建期版本信息（三件事解耦，避免「当前版本」显示错位）：
  *  - `__GIT_TAG__`：最近可达的发布 Tag（`git describe --tags --abbrev=0`），如 v1.0.2。
  *    「当前版本」以它为准——不管构建点在 Tag 前还是后，都能归到正确的发布版本；
- *    领先提交数由 `__GIT_AHEAD__` 单独表达，不再伪装成版本号（此前 `1.0.1+17` 的 +17
- *    是提交总数，Tag 之后任何一次部署都会因为哈希对不上而永远显示这个怪值）。
+ *    不再把提交数伪装成版本号（此前 `1.0.1+17` 的 +17 是提交总数，Tag 之后任何一次
+ *    部署都会因为哈希对不上而永远显示这个怪值）。
  *  - `__APP_VERSION__`：纯发布版本号（无 +build 元数据）。优先取最近 Tag 的版本，
  *    无 git 元数据（源码包/浅克隆找不到 Tag）时退化为 apps/web/package.json 的 version。
  *  - `__BUILD_NUM__`：提交总数（构建号），仅用于后台「当前提交」的附注，不参与版本比较。
  *
  * 注意：`git describe` 需要全量历史，deploy.yml 与 ci.yml 均已 fetch-depth: 0。
  */
-function resolveTagInfo(): { tag: string | null; ahead: number | null } {
+function resolveTag(): string | null {
   const tag = git(['describe', '--tags', '--abbrev=0']);
-  if (!tag || !/^v/.test(tag)) return { tag: null, ahead: null };
-  const count = git(['rev-list', '--count', `${tag}..HEAD`]);
-  const ahead = count && Number(count) >= 0 ? Number(count) : null;
-  return { tag, ahead };
+  return tag && /^v/.test(tag) ? tag : null;
 }
 
 function resolveAppVersion(recentTag: string | null): string {
@@ -62,7 +59,7 @@ function resolveAppVersion(recentTag: string | null): string {
   return tagVersion || base;
 }
 
-const { tag: gitTag, ahead: gitAhead } = resolveTagInfo();
+const gitTag = resolveTag();
 const appVersion = resolveAppVersion(gitTag);
 const commitCount = git(['rev-list', '--count', 'HEAD']);
 const buildNum = commitCount && Number(commitCount) > 0 ? Number(commitCount) : null;
@@ -94,7 +91,6 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(appVersion),
     __COMMIT_SHA__: JSON.stringify(commitSha),
     __GIT_TAG__: JSON.stringify(gitTag),
-    __GIT_AHEAD__: JSON.stringify(gitAhead),
     __BUILD_NUM__: JSON.stringify(buildNum),
   },
   // 词典按「命名空间 × 语言」分包（前台 bbs / 后台 admin 各自成 chunk，见 packages/shared/src/i18n/bundles.ts）

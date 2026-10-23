@@ -613,7 +613,6 @@
   "admin_version_open_release": "Открыть Release",
   "admin_version_load_failed": "Не удалось загрузить данные о версиях",
   "admin_version_up_to_date": "Актуальная версия",
-  "admin_version_ahead": "Опережает релиз на {n} коммитов",
   "admin_version_newer": "Доступна новая версия {v}",
   "admin_version_build": "Сборка {n}",
   "admin_menu_content": "Контент",

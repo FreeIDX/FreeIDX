@@ -918,7 +918,6 @@ export type AdminKey =
   | 'admin_user_search_note'
   | 'admin_user_shield_legend'
   | 'admin_users_list'
-  | 'admin_version_ahead'
   | 'admin_version_author'
   | 'admin_version_build'
   | 'admin_version_commit'

@@ -280,7 +280,7 @@ export function SettingPage() {
           </Select>
         </SettingField>
         {/* 后台语言与前台站点语言相互独立（admin_lang；未配置时跟随上面的站点语言） */}
-        <SettingField label={t('setting_admin_lang', '后台语言')} htmlFor="s-admin-lang" hint={t('setting_admin_lang_hint', '管理后台界面语言，与前台站点语言相互独立')} hintInline>
+        <SettingField label={t('setting_admin_lang', '后台语言')} htmlFor="s-admin-lang" hint={t('setting_admin_lang_hint', '管理后台界面语言，与前台站点语言相互独立')}>
           <Select id="s-admin-lang" value={form.admin_lang ?? 'en-us'} onChange={(e) => set('admin_lang', e.target.value)}>
             {AVAILABLE_LOCALES.map((l) => (
               <option key={l} value={l}>

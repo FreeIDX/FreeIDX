@@ -612,7 +612,6 @@
   "admin_version_open_release": "เปิด Release",
   "admin_version_load_failed": "โหลดข้อมูลเวอร์ชันไม่สำเร็จ",
   "admin_version_up_to_date": "เป็นเวอร์ชันล่าสุด",
-  "admin_version_ahead": "นำหน้า {n} คอมมิต",
   "admin_version_newer": "มีเวอร์ชันใหม่ {v}",
   "admin_version_build": "บิลด์ {n}",
   "admin_menu_content": "เนื้อหา",

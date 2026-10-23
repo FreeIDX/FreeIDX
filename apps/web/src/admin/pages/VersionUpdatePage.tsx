@@ -5,8 +5,8 @@
  *  - 发布数据托管在 GitHub 仓库 `.github/releases/version.json`，更新日志为仓库内 Markdown，
  *    页面经 raw.githubusercontent.com 直接读取，发版不需要重新部署站点（见 admin/release-index.ts）。
  *  - 当前版本取构建期注入的最近发布 Tag __GIT_TAG__（vite.config.ts 用 git describe 计算），
- *    构建点无论在 Tag 之前还是之后都能归到正确发布；领先提交数（__GIT_AHEAD__）与
- *    构建号（__BUILD_NUM__）单独展示，绝不拼进版本号（此前 `1.0.1+17` 的 +17 是提交总数）。
+ *    构建点无论在 Tag 之前还是之后都能归到正确发布；构建号（__BUILD_NUM__）单独展示，
+ *    绝不拼进版本号（此前 `1.0.1+17` 的 +17 是提交总数）。
  *  - 当前提交取构建期注入的 VITE_COMMIT_SHA，部署流水线在 GitHub Actions 里注入，
  *    本地开发未注入时显示 -；无 git 元数据的构建（源码包/浅克隆）无 Tag 时回落包版本。
  *  - 版式：顶部说明 + 数据来源、四格指标、按版本倒序的发布卡（徽标/元信息/更新日志）；
@@ -35,15 +35,11 @@ declare const __APP_VERSION__: string;
 declare const __COMMIT_SHA__: string;
 /** 构建期注入：最近可达发布 Tag（如 v1.0.2）；无 git 元数据时为空 */
 declare const __GIT_TAG__: string | null;
-/** 构建期注入：当前构建领先最近 Tag 的提交数；无 Tag 时为空 */
-declare const __GIT_AHEAD__: number | null;
 /** 构建期注入：git 提交总数（构建号），仅用于「当前提交」附注；无 git 元数据时为空 */
 declare const __BUILD_NUM__: number | null;
 
 /** 最近发布 Tag（构建期已算好），如 v1.0.2 */
 const CURRENT_TAG = __GIT_TAG__ || null;
-/** 当前构建领先最近 Tag 的提交数 */
-const CURRENT_AHEAD = __GIT_AHEAD__ ?? null;
 /** 当前构建号（提交总数） */
 const CURRENT_BUILD = __BUILD_NUM__ ?? null;
 /** 当前构建的提交号 */
@@ -85,7 +81,7 @@ function Metric({
   label: string;
   value: string;
   mono?: boolean;
-  /** 指标下的小字附注（如领先提交数、更新状态） */
+  /** 指标下的小字附注（如更新状态） */
   hint?: string | null;
   /** 附注语义色：success=正常/最新，warning=有新版本，缺省为灰 */
   hintTone?: 'success' | 'warning';
@@ -224,22 +220,16 @@ export function VersionUpdatePage() {
       ? (releases.find((r) => isSameCommit(r.targetCommitish, CURRENT_COMMIT)) ?? null)
       : null;
 
-  // 更新状态提示。注意时序竞态：push 后自动部署往往发生在打 Tag 之前，构建期
-  // git describe 只能找到旧 Tag；而发版会立即更新 version.json（无需部署）。
-  // 于是「领先 N 提交」的构建可能已经包含最新发布的提交——运行时无法判断祖先关系，
-  // 因此这种开发版构建只中性展示领先数，不断言「有新版本」；只有构建恰好落在发布点
-  // （领先数为 0）时，「落后于最新发布」的判断才可靠，才亮警示色。
+  // 更新状态提示：以构建期最近 Tag（无 Tag 时回落包版本）与最新正式发布对比。
+  // 不再展示「领先 N 个提交」——构建发生在 Tag 之后属正常情况，不向用户暴露开发期细节。
   const currentRef = CURRENT_TAG ?? CURRENT_VERSION;
-  const isDevBuild = CURRENT_AHEAD !== null && CURRENT_AHEAD > 0;
   const upToDate = latest ? compareVersion(latest.tagName, currentRef) <= 0 : null;
   const currentHint =
     upToDate === null
       ? null
-      : isDevBuild
-        ? t('admin_version_ahead', undefined, { n: CURRENT_AHEAD })
-        : upToDate
-          ? t('admin_version_up_to_date')
-          : t('admin_version_newer', undefined, { v: latest?.tagName ?? '' });
+      : upToDate
+        ? t('admin_version_up_to_date')
+        : t('admin_version_newer', undefined, { v: latest?.tagName ?? '' });
 
   return (
     <>
@@ -263,7 +253,7 @@ export function VersionUpdatePage() {
             value={CURRENT_TAG ?? runningRelease?.tagName ?? `v${CURRENT_VERSION}`}
             mono
             hint={currentHint}
-            hintTone={isDevBuild ? undefined : upToDate === false ? 'warning' : 'success'}
+            hintTone={upToDate === false ? 'warning' : 'success'}
           />
           <Metric icon="rocket" label={t('admin_version_latest')} value={latest?.tagName ?? '-'} mono />
           {/* 提交与构建号分列：版本号不再携带 +N 构建元数据，构建号只作为提交的附注 */}

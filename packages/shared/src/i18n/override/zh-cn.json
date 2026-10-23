@@ -612,7 +612,6 @@
   "admin_version_open_release": "打开 Release",
   "admin_version_load_failed": "版本数据加载失败",
   "admin_version_up_to_date": "已是最新",
-  "admin_version_ahead": "领先 {n} 个提交",
   "admin_version_newer": "有新版本 {v}",
   "admin_version_build": "构建号 {n}",
   "admin_menu_content": "内容",
