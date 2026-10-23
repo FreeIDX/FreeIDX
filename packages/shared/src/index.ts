@@ -1,5 +1,6 @@
 export * from './codes';
 export * from './constants';
+export * from './content-lang';
 export * from './permissions';
 export * from './api-types';
 export * from './extensions';

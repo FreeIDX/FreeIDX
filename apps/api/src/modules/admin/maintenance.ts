@@ -21,7 +21,7 @@
  * 审计走 `bbs_modlog`（action='maint.db' / 'maint.r2'）。
  */
 import { Hono } from 'hono';
-import { Code } from '@freeidx/shared';
+import { Code, detectContentLang } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { BUDGET } from '../../core/db/budget';
 import type { D1b } from '../../core/db';
@@ -39,6 +39,8 @@ const MAINT_MAX_BATCHES = 8;
 const PROBE_CAP = 500;
 /** 体检结果缓存时长（秒）：体检本身是全表扫描，页面默认不自动跑，命中缓存零 D1 */
 const OVERVIEW_TTL = 3600;
+/** 内容语言回填单批条数：20 条 = 3 次 D1 查询（JOIN 取文本 + CASE 批量更新 + COUNT 剩余） */
+const LANG_BACKFILL_BATCH = 20;
 
 /**
  * 孤儿删除任务表。risk 1 = 社交/倒排类（无 R2 副作用）；risk 2 = 附件（需先删对象）。
@@ -462,6 +464,66 @@ export function adminMaintenanceRoutes(): Hono<ReadEnv> {
     if (deleted > 0) await audit(db, await adminUidOf(c), 'maint.db', task, JSON.stringify({ deleted, objectFailed, remaining: count }));
     return ok(c, t('common.saved'), {
       data: { task, dryRun: false, deleted, batches, done: done || count === 0, remaining: count, capped, objectFailed, budget: budgetOf(db) },
+    });
+  });
+
+  /* -------------------- 内容语言回填（存量帖） -------------------- */
+  /**
+   * 回填口径与发帖时完全一致（同一个 detectContentLang）：
+   *  - 只处理 lang = '' 的存量帖，新帖由写入链路直接定稿，不进队列；
+   *  - 单批 20 条：1 条 JOIN 查询取标题+首帖正文，1 条 CASE 批量 UPDATE，1 条 COUNT 剩余，
+   *    单请求 3 条 D1 查询，远低于免费层预算；
+   *  - 判不出语言的（纯图片/符号）落 'other' 而不是留空，保证队列可收敛，不会无限循环。
+   */
+  app.get('/api/admin/maintenance/content-lang/status', async (c) => {
+    const { db } = core(c);
+    const row = await db
+      .prepare<{ c: number }>("SELECT COUNT(*) AS c FROM bbs_thread WHERE lang = ''")
+      .first<{ c: number }>();
+    return ok(c, 'ok', { data: { remaining: Number(row?.c ?? 0) } });
+  });
+
+  app.post('/api/admin/maintenance/content-lang/backfill', async (c) => {
+    const { db } = core(c);
+    const t = c.get('t');
+    const body = await readJsonObject(c);
+    const limit = Math.min(50, Math.max(1, intParam(String(body.limit ?? ''), LANG_BACKFILL_BATCH)));
+
+    const rows = await db
+      .prepare<{ tid: number; subject: string; message: string }>(
+        `SELECT t.tid, t.subject, p.message FROM bbs_thread t JOIN bbs_post p ON p.pid = t.firstpid
+         WHERE t.lang = '' ORDER BY t.tid LIMIT ?`,
+      )
+      .bind(limit)
+      .all();
+
+    const scanned = rows.results.length;
+    const updates = rows.results.map((r) => ({
+      tid: Number(r.tid),
+      lang: detectContentLang(`${r.subject ?? ''} ${r.message ?? ''}`) || 'other',
+    }));
+
+    if (updates.length) {
+      /* 单语句批量更新：CASE tid WHEN ? THEN ? … 参数顺序 = (tid,lang)* + tid IN (…) */
+      const cases = updates.map(() => 'WHEN ? THEN ?').join(' ');
+      const ids = updates.map((u) => u.tid);
+      const sql = `UPDATE bbs_thread SET lang = CASE tid ${cases} END WHERE tid IN (${ids.map(() => '?').join(',')})`;
+      await db
+        .prepare(sql)
+        .bind(...updates.flatMap((u) => [u.tid, u.lang]), ...ids)
+        .run();
+    }
+
+    const left = await db
+      .prepare<{ c: number }>("SELECT COUNT(*) AS c FROM bbs_thread WHERE lang = ''")
+      .first<{ c: number }>();
+    const remaining = Number(left?.c ?? 0);
+    const done = remaining === 0;
+    if (updates.length) {
+      await audit(db, await adminUidOf(c), 'maint.db', 'content_lang_backfill', JSON.stringify({ scanned, updated: updates.length, remaining }));
+    }
+    return ok(c, t('common.saved'), {
+      data: { scanned, updated: updates.length, remaining, done, batch: limit, budget: budgetOf(db) },
     });
   });
 

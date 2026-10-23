@@ -9,7 +9,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { Code, PageSize, type AttachItem, type FavoriterItem, type PostItem, type PostReplyItem, type SearchUserHit, type ThreadListItem, type ThreadDetail } from '@freeidx/shared';
+import { Code, PageSize, normalizeContentLang, type AttachItem, type FavoriterItem, type PostItem, type PostReplyItem, type SearchUserHit, type ThreadListItem, type ThreadDetail } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
@@ -68,6 +68,8 @@ interface ThreadRow {
   image_urls?: string;
   /** 列表摘要（thread_summary_word，首帖纯文本 ≤300 字，可空串） */
   summary?: string;
+  /** 内容语言（zh/en/ja/ko/ru/th/de/fr/es/other；空串 = 未指定，不参与语言过滤） */
+  lang?: string;
 }
 
 interface ThreadDetailRow extends ThreadRow {
@@ -172,6 +174,8 @@ function toThreadItem(r: ThreadRow): ThreadListItem {
     ...(r.image_urls ? { imageUrls: String(r.image_urls) } : {}),
     /** 列表摘要（首帖纯文本；空串不下发） */
     ...(r.summary ? { summary: String(r.summary) } : {}),
+    /** 内容语言（空串不下发，前端据此零残留） */
+    ...(r.lang ? { lang: String(r.lang) } : {}),
   };
 }
 
@@ -184,13 +188,16 @@ function readableFids(ctx: AccessCtx, forumlist: Record<number, { fid: number }>
 
 async function queryThreadPage(
   db: D1b,
-  opts: { fids: number[]; col: 'tid' | 'lastpid'; digest: boolean; before?: number; size: number; page?: number; tag?: string },
+  opts: { fids: number[]; col: 'tid' | 'lastpid'; digest: boolean; before?: number; size: number; page?: number; tag?: string; lang?: string },
 ): Promise<ThreadRow[]> {
   if (!opts.fids.length) return [];
   const ph = opts.fids.map(() => '?').join(',');
   /* 标签筛选：反规范化列精确匹配，',tag,' 子串命中（tags 为空串时天然不命中） */
   const tagCond = opts.tag ? ` AND instr(','||tags||',', ?) > 0` : '';
   const tagParams = opts.tag ? [`,${opts.tag},`] : [];
+  /* 内容语言筛选：等值命中（lang 为空串的存量帖不参与任何语言过滤，需先回填） */
+  const langCond = opts.lang ? ' AND lang = ?' : '';
+  const langParams = opts.lang ? [opts.lang] : [];
   // 编号分页器（?page=N）走浅层 OFFSET，与主题详情同一语义；游标 before_ 优先（无限滚动）。
   if (opts.before == null && (opts.page ?? 1) > 1) {
     const off = shallowOffset(opts.page!, opts.size);
@@ -198,8 +205,9 @@ async function queryThreadPage(
       `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE fid IN (${ph}) ` +
       (opts.digest ? 'AND digest > 0 ' : '') +
       tagCond +
+      langCond +
       ` ORDER BY ${opts.col} DESC ${off.sql}`;
-    const r = await db.prepare<ThreadRow>(sql).bind(...opts.fids, ...tagParams, ...off.params).all();
+    const r = await db.prepare<ThreadRow>(sql).bind(...opts.fids, ...tagParams, ...langParams, ...off.params).all();
     return r.results;
   }
   const cur = cursorCond({ column: opts.col, size: opts.size, before: opts.before, desc: true });
@@ -207,22 +215,25 @@ async function queryThreadPage(
     `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE fid IN (${ph}) ${cur.where}` +
     (opts.digest ? ' AND digest > 0' : '') +
     tagCond +
+    langCond +
     ` ${cur.order} LIMIT ?`;
   const r = await db
     .prepare<ThreadRow>(sql)
-    .bind(...opts.fids, ...cur.params, ...tagParams, opts.size)
+    .bind(...opts.fids, ...cur.params, ...tagParams, ...langParams, opts.size)
     .all();
   return r.results;
 }
 
-/** 置顶合并（§D.2）：首页并全局置顶 top=3；版块页并版块置顶 top∈1..2 */
-async function queryTopThreads(db: D1b, fid: number, readable: Set<number>): Promise<ThreadRow[]> {
+/** 置顶合并（§D.2）：首页并全局置顶 top=3；版块页并版块置顶 top∈1..2；语言筛选时置顶帖同样受语言约束 */
+async function queryTopThreads(db: D1b, fid: number, readable: Set<number>, lang?: string): Promise<ThreadRow[]> {
   const cond = fid === 0 ? 'tt.top = 3' : 'tt.fid = ? AND tt.top BETWEEN 1 AND 2';
-  const params = fid === 0 ? [] : [fid];
+  const params: Array<number | string> = fid === 0 ? [] : [fid];
+  const langCond = lang ? ' AND t.lang = ?' : '';
+  if (lang) params.push(lang);
   const r = await db
     .prepare<ThreadRow>(
       `SELECT ${THREAD_LIST_COLS_T} FROM bbs_thread_top tt JOIN ${T} t ON t.tid = tt.tid
-       WHERE ${cond} ORDER BY tt.top DESC, t.tid DESC LIMIT 30`,
+       WHERE ${cond}${langCond} ORDER BY tt.top DESC, t.tid DESC LIMIT 30`,
     )
     .bind(...params)
     .all();
@@ -252,16 +263,18 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
     const readable = readableFids(ctx, forumlist);
     /* 标签筛选：?tag=标签名 —— 仅按名精确匹配，长度与字符做基础归一 */
     const tag = (c.req.query('tag') ?? '').trim().slice(0, 12) || undefined;
+    /* 内容语言筛选：站点开关未开启时忽略参数（存量行为零变化）；?lang=all / 非法值 = 不过滤 */
+    const lang = Number(setting.contentLang) > 0 ? normalizeContentLang(c.req.query('lang')) || undefined : undefined;
 
     const tasks: Promise<ThreadRow[]>[] = [];
     if (fid > 0) {
       if (!forumlist[fid]) throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
       if (!readable.includes(fid)) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
-      tasks.push(queryThreadPage(db, { fids: [fid], col, digest, before, size, page, tag }));
+      tasks.push(queryThreadPage(db, { fids: [fid], col, digest, before, size, page, tag, lang }));
     } else {
-      tasks.push(queryThreadPage(db, { fids: readable, col, digest, before, size, page, tag }));
+      tasks.push(queryThreadPage(db, { fids: readable, col, digest, before, size, page, tag, lang }));
     }
-    if (page === 1 && !digest) tasks.push(queryTopThreads(db, fid, new Set(readable)));
+    if (page === 1 && !digest) tasks.push(queryTopThreads(db, fid, new Set(readable), lang));
     const results = await Promise.all(tasks);
     const normal = results[0] ?? [];
     const tops = results[1] ?? [];
@@ -345,13 +358,16 @@ export function threadRoutes(): Hono<ReadEnv> {
     const page = Math.max(1, intParam(c.req.query('page'), 1));
     const size = PageSize.USER_THREAD_LIST;
 
-    const [forumlist, grouplist, viewer] = await Promise.all([
+    const [forumlist, grouplist, viewer, setting] = await Promise.all([
       loadForumlist(cache, db),
       loadGrouplist(cache, db),
       loadViewer(cache, db, c),
+      loadSetting(cache, db),
     ]);
     const ctx = makeAccessCtx(viewer, forumlist, grouplist);
     const readable = readableFids(ctx, forumlist);
+    /* 内容语言筛选：与列表同一口径（站点未开启时忽略参数；all/非法值 = 不过滤） */
+    const lang = Number(setting.contentLang) > 0 ? normalizeContentLang(c.req.query('lang')) || undefined : undefined;
     const empty = { keyword: q, range, list: [] as ThreadListItem[], users: [] as SearchUserHit[], page, size, total: 0, totalPage: 1 };
     if (!q) return ok(c, 'ok', { data: empty });
     const like = likeOf(q);
@@ -404,10 +420,12 @@ export function threadRoutes(): Hono<ReadEnv> {
       }
     }
     const match = conds.length ? `(${conds.join(' AND ')})` : '1=0';
-    const where = `WHERE ${match} AND fid IN (${readable.map(() => '?').join(',')})`;
+    const langCond = lang ? ' AND lang = ?' : '';
+    const langParams = lang ? [lang] : [];
+    const where = `WHERE ${match} AND fid IN (${readable.map(() => '?').join(',')})${langCond}`;
     const cnt = await db
       .prepare<{ c: number }>(`SELECT COUNT(*) AS c FROM ${T} ${where}`)
-      .bind(...matchParams, ...readable)
+      .bind(...matchParams, ...readable, ...langParams)
       .first<{ c: number }>();
     const total = Number(cnt?.c ?? 0);
     const off = shallowOffset(page, size);
@@ -420,7 +438,7 @@ export function threadRoutes(): Hono<ReadEnv> {
       .prepare<ThreadRow & { snippet_raw?: string | null }>(
         `SELECT ${THREAD_LIST_COLS}${snippetSql} FROM ${T} ${where} ORDER BY tid DESC ${off.sql}`,
       )
-      .bind(...(snippetSql ? [termLikes[0]] : []), ...matchParams, ...readable, ...off.params)
+      .bind(...(snippetSql ? [termLikes[0]] : []), ...matchParams, ...readable, ...langParams, ...off.params)
       .all();
 
     // 作者 V 头衔 + 预设头像按页批量一次补查（随行下发，仅激活者带字段）

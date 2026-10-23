@@ -10,6 +10,8 @@ import { useT } from '../../../lib/i18n';
 import { NotFoundPage } from './NotFoundPage';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
+import { ContentLangBar } from '../../../components/ContentLangBar';
+import { useContentLangFilter } from '../../../store/contentLang';
 import { Alert, Card, CardTabs, CardTitle, CreateButton, HomeSideNav, Modal, SidePanel, TagBadge, TwoCol, cx } from '../../../components/ui';
 import { RankForumHotCard } from '../../../components/rank';
 import { Avatar } from '../../../components/Avatar';
@@ -71,11 +73,13 @@ export function ForumPage() {
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchErr, setBatchErr] = useState('');
 
+  /* 内容语言筛选（空串 = 全部；显式拼进 URL 以保证边缘缓存按语言隔离） */
+  const contentLang = useContentLangFilter();
   const q = useQuery({
-    queryKey: ['threads', fid, page, digest, orderby, curTag],
+    queryKey: ['threads', fid, page, digest, orderby, curTag, contentLang],
     queryFn: () =>
       apiGet<ForumPageData>(
-        `/api/forums/${fid}/threads?page=${page}${digest ? '&digest=1' : ''}&orderby=${orderby}${curTag ? `&tag=${encodeURIComponent(curTag)}` : ''}`,
+        `/api/forums/${fid}/threads?page=${page}${digest ? '&digest=1' : ''}&orderby=${orderby}${curTag ? `&tag=${encodeURIComponent(curTag)}` : ''}${contentLang ? `&lang=${encodeURIComponent(contentLang)}` : ''}`,
       ),
     placeholderData: keepPreviousData,
   });
@@ -262,6 +266,9 @@ export function ForumPage() {
             </div>
           )}
         </div>
+
+        {/* 内容语言筛选条（后台开启后显示；仅在前台筛选，不影响版块结构与权限） */}
+        <ContentLangBar wrap="card" />
 
         {/* 标签筛选行（idx_tag，版块页顶部）：全部 + 各标签，切标签回第 1 页并保留其他筛选 */}
         {tags.length > 0 && (

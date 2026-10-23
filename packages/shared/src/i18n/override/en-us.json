@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "All languages",
+  "content_lang_auto": "Auto-detect",
+  "content_lang_label": "Content language",
   "about_forum": "About",
   "account_not_approved": "Your account was not approved! You cannot post or reply!",
   "account_under_review": "An administrator is reviewing your account! You cannot post or reply during the review period. Please wait patiently.",
@@ -516,6 +519,17 @@
   "points_log_label": "Credits log"
  },
  "admin": {
+  "admin_maint_lang_all_done": "All existing topics are backfilled. You can now enable filtering in Basic settings → Content languages.",
+  "admin_maint_lang_done": "Backfilled {n} this round, {left} remaining",
+  "admin_maint_lang_help": "Backfill the content language of existing topics from the title and the first post (same detector as when posting). Runs in small batches; click repeatedly until no topics remain. New posts are classified at creation and need no backfill.",
+  "admin_maint_lang_left": "{left} topics still need backfilling — click \"Backfill a batch\" again",
+  "admin_maint_lang_run": "Backfill a batch",
+  "admin_maint_lang_title": "Content language backfill",
+  "content_lang_mode_all": "On (all languages by default)",
+  "content_lang_mode_off": "Off",
+  "content_lang_mode_ui": "On (follow interface language)",
+  "setting_content_lang": "Content languages",
+  "setting_content_lang_hint": "Filter topic lists by the language of the post content. When off, behavior is unchanged. When on, a language filter bar appears and new posts are auto-detected (editable). Existing posts only participate after their language is backfilled.",
   "admin_modlog_action_update": "Edit thread",
   "admin_thread_content": "Content",
   "admin_thread_edit_title": "Edit Thread",

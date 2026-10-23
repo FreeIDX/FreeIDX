@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "Todos los idiomas",
+  "content_lang_auto": "Detección automática",
+  "content_lang_label": "Idioma del contenido",
   "about_forum": "Acerca de",
   "account_not_approved": "¡Su cuenta no fue aprobada! No puede publicar ni responder!",
   "account_under_review": "Un administrador está revisando su cuenta. No puede publicar ni responder durante la revisión. Por favor espere.",
@@ -516,6 +519,17 @@
   "points_log_label": "Registro de créditos"
  },
  "admin": {
+  "admin_maint_lang_all_done": "Todos los temas existentes están rellenados. Ya puedes activar el filtro en «Ajustes básicos → Idiomas del contenido».",
+  "admin_maint_lang_done": "Rellenados {n} en esta ronda, quedan {left}",
+  "admin_maint_lang_help": "Rellena el idioma del contenido de los temas existentes a partir del título y el primer mensaje (mismo detector que al publicar). Se ejecuta en lotes pequeños; pulsa repetidamente hasta que no queden temas. Los temas nuevos se clasifican al crearse y no requieren relleno.",
+  "admin_maint_lang_left": "Quedan {left} temas — pulsa «Rellenar un lote» de nuevo",
+  "admin_maint_lang_run": "Rellenar un lote",
+  "admin_maint_lang_title": "Relleno de idioma del contenido",
+  "content_lang_mode_all": "Activado (todos los idiomas por defecto)",
+  "content_lang_mode_off": "Desactivado",
+  "content_lang_mode_ui": "Activado (seguir el idioma de la interfaz)",
+  "setting_content_lang": "Idiomas del contenido",
+  "setting_content_lang_hint": "Filtra las listas de temas por el idioma del contenido. Desactivado, el comportamiento no cambia. Activado, aparece una barra de filtro por idioma y los temas nuevos se detectan automáticamente (editable). Los temas existentes solo participan tras completar su idioma.",
   "admin_modlog_action_update": "Editar tema",
   "admin_thread_content": "Contenido",
   "admin_thread_edit_title": "Editar tema",

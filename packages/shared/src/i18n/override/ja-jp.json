@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "すべての言語",
+  "content_lang_auto": "自動判定",
+  "content_lang_label": "コンテンツの言語",
   "about_forum": "フォーラムについて",
   "account_not_approved": "アカウントが承認されませんでした！テーマの投稿や返信はできません！",
   "account_under_review": "管理者があなたのアカウントを審査中です！審査中はテーマの投稿や返信ができません。しばらくお待ちください。",
@@ -517,6 +520,17 @@
   "top": "ピン留め"
  },
  "admin": {
+  "admin_maint_lang_all_done": "既存トピックの補完が完了しました。「基本設定 → コンテンツ言語」で絞り込みを有効にできます。",
+  "admin_maint_lang_done": "今回 {n} 件補完、残り {left} 件",
+  "admin_maint_lang_help": "既存トピックのコンテンツ言語を「タイトル + 最初の投稿」から補完します（投稿時と同じ判定関数）。小分けに実行されるため、残りが 0 になるまで繰り返しクリックしてください。新規投稿は作成時に確定するため補完不要です。",
+  "admin_maint_lang_left": "まだ {left} 件残っています。「バッチを補完」を再度クリックしてください",
+  "admin_maint_lang_run": "バッチを補完",
+  "admin_maint_lang_title": "コンテンツ言語の補完",
+  "content_lang_mode_all": "オン（既定はすべての言語）",
+  "content_lang_mode_off": "オフ",
+  "content_lang_mode_ui": "オン（インターフェース言語に追従）",
+  "setting_content_lang": "コンテンツ言語",
+  "setting_content_lang_hint": "投稿内容の言語でトピック一覧を絞り込みます。オフ時は従来どおりの動作です。オンにすると言語フィルターが表示され、新規投稿の言語は自動判定されます（変更可能）。既存のトピックは言語を補完した後にのみ対象となります。",
   "admin_modlog_action_update": "スレッドを編集",
   "admin_thread_content": "内容",
   "admin_thread_edit_title": "スレッドを編集",

@@ -7,10 +7,12 @@ import { posInt } from '../../../lib/params';
 import { Avatar } from '../../../components/Avatar';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList } from '../../../components/ThreadList';
+import { ContentLangBar } from '../../../components/ContentLangBar';
 import { Card, CardTitle, cx } from '../../../components/ui';
 import { Highlight } from '../../../components/Highlight';
 import { Icon } from '../../../components/icons';
 import { useT } from '../../../lib/i18n';
+import { useContentLangFilter } from '../../../store/contentLang';
 
 type Range = 'thread' | 'all' | 'user';
 
@@ -46,9 +48,14 @@ export function SearchPage() {
   /** 多关键词（空白分隔）取首个用于列表高亮（后端 AND 匹配，摘要已随行下发） */
   const kwFirst = kw.split(/\s+/).filter(Boolean)[0] ?? kw;
 
+  /* 与列表同一内容语言偏好：搜索结果不跨语言串内容（空串 = 全部，站点关闭时后端会忽略） */
+  const contentLang = useContentLangFilter();
   const q = useQuery({
-    queryKey: ['search', kw, range, page],
-    queryFn: () => apiGet<SearchData>(`/api/search?q=${encodeURIComponent(kw)}&range=${range}&page=${page}`),
+    queryKey: ['search', kw, range, page, contentLang],
+    queryFn: () =>
+      apiGet<SearchData>(
+        `/api/search?q=${encodeURIComponent(kw)}&range=${range}&page=${page}${contentLang ? `&lang=${encodeURIComponent(contentLang)}` : ''}`,
+      ),
     placeholderData: keepPreviousData,
     enabled: Boolean(kw),
   });
@@ -105,6 +112,13 @@ export function SearchPage() {
               {r.label}
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* 内容语言筛选条（后台开启后显示；与首页/版块页共用同一偏好） */}
+      {kw && (
+        <div className="mx-auto w-full max-w-[780px]">
+          <ContentLangBar />
         </div>
       )}
 

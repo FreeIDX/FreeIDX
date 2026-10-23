@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "모든 언어",
+  "content_lang_auto": "자동 감지",
+  "content_lang_label": "콘텐츠 언어",
   "about_forum": "게시판 소개",
   "account_not_approved": "계정이 승인되지 않았습니다! 글을 작성하거나 답글을 달 수 없습니다!",
   "account_under_review": "관리자가 회원님의 계정을 심사 중입니다! 심사 중에는 글을 작성하거나 답글을 달 수 없습니다. 잠시만 기다려 주세요.",
@@ -516,6 +519,17 @@
   "points_log_label": "포인트 내역"
  },
  "admin": {
+  "admin_maint_lang_all_done": "기존 주제 보완이 완료되었습니다. 이제 «기본 설정 → 콘텐츠 언어»에서 필터를 켤 수 있습니다.",
+  "admin_maint_lang_done": "이번에 {n}개 보완, {left}개 남음",
+  "admin_maint_lang_help": "기존 주제의 콘텐츠 언어를 제목과 첫 게시물로 보완합니다(게시 시와 동일한 판별 함수). 소량 배치로 실행되며 남은 수가 0이 될 때까지 반복해서 클릭하세요. 새 게시물은 작성 시 확정되므로 보완이 필요 없습니다.",
+  "admin_maint_lang_left": "아직 {left}개 남았습니다. «한 배치 채우기»를 다시 클릭하세요",
+  "admin_maint_lang_run": "한 배치 채우기",
+  "admin_maint_lang_title": "콘텐츠 언어 채우기",
+  "content_lang_mode_all": "켜기 (기본값 모든 언어)",
+  "content_lang_mode_off": "끄기",
+  "content_lang_mode_ui": "켜기 (인터페이스 언어 따름)",
+  "setting_content_lang": "콘텐츠 언어",
+  "setting_content_lang_hint": "게시물 내용 언어로 주제 목록을 필터링합니다. 끄면 기존 동작과 동일합니다. 켜면 언어 필터 바가 표시되고 새 게시물의 언어는 자동 감지됩니다(변경 가능). 기존 주제는 언어를 채운 후에만 대상이 됩니다.",
   "admin_modlog_action_update": "스레드 편집",
   "admin_thread_content": "내용",
   "admin_thread_edit_title": "스레드 편집",

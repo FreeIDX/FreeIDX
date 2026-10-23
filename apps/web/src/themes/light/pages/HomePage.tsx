@@ -8,6 +8,8 @@ import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList } from '../../../components/ThreadList';
 import { AnnouncementBar } from '../../../components/AnnouncementBar';
+import { ContentLangBar } from '../../../components/ContentLangBar';
+import { useContentLangFilter } from '../../../store/contentLang';
 import { CheckinCard } from '../../../components/CheckinCard';
 import {
   Alert,
@@ -55,7 +57,8 @@ export function HomePage() {
   };
 
   /* queryKey/URL 与发现页共用同一描述符（同 URL 同 key → 跨页共享缓存，切页不重复请求） */
-  const q = useQuery({ ...siteThreadsQuery(page, digest, orderby), placeholderData: keepPreviousData });
+  const contentLang = useContentLangFilter();
+  const q = useQuery({ ...siteThreadsQuery(page, digest, orderby, contentLang), placeholderData: keepPreviousData });
 
   /** 在线数（GET /api/online?summary=1 只回 total；不带参数会连同 500 行会话列表一起下发） */
   const online = useQuery({
@@ -106,6 +109,8 @@ export function HomePage() {
           }
           bodyClass="p-0"
         >
+          {/* 内容语言筛选条（后台开启后显示；关闭时组件返回 null，连分隔线都不出现） */}
+          <ContentLangBar wrap="bar" />
           {q.isError && <p className="px-5 py-6 text-center text-sm text-destructive">{(q.error as Error).message}</p>}
           {q.data && <ThreadList data={q.data} baseHref={(p) => (p === 1 ? '/' : `/page/${p}`)} />}
           {q.data && (

@@ -10,7 +10,7 @@
  * 人机验证：发帖/回帖在参数解析后立刻校验 Turnstile token（附录 B 覆盖 登录/注册/发帖/回帖/找回密码/发码），早于任何 D1 读写。
  */
 import { Hono, type Context } from 'hono';
-import { Code, type CreatePostReq, type CreateThreadReq, type EventName, type EventPayload } from '@freeidx/shared';
+import { Code, detectContentLang, normalizeContentLang, type CreatePostReq, type CreateThreadReq, type EventName, type EventPayload } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
@@ -220,11 +220,14 @@ async function createThread(c: Ctx): Promise<Response> {
   const tags = normalizeTags((b as { tags?: unknown }).tags, new Set(lightCfg.tags.map((x) => x.name)));
   const imageUrls = extractImageUrls(message);
   const summary = extractSummary(message);
+  /* 内容语言（写时定稿）：显式选择优先（用户可覆盖检测结果），否则按标题+正文自动检测；
+     两者都判不出时落空串（= 不参与语言过滤，存量数据同口径）。 */
+  const lang = normalizeContentLang((b as { lang?: unknown }).lang) || detectContentLang(`${subject} ${message}`);
   const threadR = await core.db
     .prepare<{ tid: number }>(
-      'INSERT INTO bbs_thread (fid,uid,username,avatar,userip,subject,create_date,last_date,firstpid,lastpid,lastuid,lastusername,content_buy,content_buy_type,tags,image_urls,summary) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING tid',
+      'INSERT INTO bbs_thread (fid,uid,username,avatar,userip,subject,create_date,last_date,firstpid,lastpid,lastuid,lastusername,content_buy,content_buy_type,tags,image_urls,summary,lang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING tid',
     )
-    .bind(fid, viewer.uid, viewer.username, viewer.avatar, ip, subject, ts, ts, pid, pid, viewer.uid, viewer.username, contentBuy, contentBuyType, tags, imageUrls, summary)
+    .bind(fid, viewer.uid, viewer.username, viewer.avatar, ip, subject, ts, ts, pid, pid, viewer.uid, viewer.username, contentBuy, contentBuyType, tags, imageUrls, summary, lang)
     .first<{ tid: number }>();
   const tid = Number(threadR?.tid ?? 0);
   if (!tid) {
@@ -487,11 +490,11 @@ async function updatePost(c: Ctx): Promise<Response> {
   const tid = Number(post.tid);
   const isfirst = Number(post.isfirst) === 1;
   const thread = await core.db
-    .prepare<{ fid: number; closed: number; top: number; subject: string; uid: number }>(
-      'SELECT fid,closed,top,subject,uid FROM bbs_thread WHERE tid = ?',
+    .prepare<{ fid: number; closed: number; top: number; subject: string; uid: number; lang: string }>(
+      'SELECT fid,closed,top,subject,uid,lang FROM bbs_thread WHERE tid = ?',
     )
     .bind(tid)
-    .first<{ fid: number; closed: number; top: number; subject: string; uid: number }>();
+    .first<{ fid: number; closed: number; top: number; subject: string; uid: number; lang: string }>();
   if (!thread) throw new AppError(Code.NOT_FOUND, t('common.threadNotFound'));
   const fid = Number(thread.fid);
   if (!ctx.forumlist[fid]) throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
@@ -541,6 +544,14 @@ async function updatePost(c: Ctx): Promise<Response> {
     }
     if (arr.fid !== undefined) {
       batchStmts.push(core.db.prepare('UPDATE bbs_thread SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt);
+    }
+    /* 内容语言：显式提交优先；已有值保持（不因编辑正文静默改写用户当初的选择）；
+       仅当存量帖 lang 为空时按新标题+正文补判（编辑顺带完成一次回填）。 */
+    const nextLang =
+      normalizeContentLang((b as { lang?: unknown }).lang) ||
+      (thread.lang ? String(thread.lang) : detectContentLang(`${subject} ${message}`));
+    if (nextLang && nextLang !== thread.lang) {
+      batchStmts.push(core.db.prepare('UPDATE bbs_thread SET lang = ? WHERE tid = ?').bind(nextLang, tid) as unknown as Stmt);
     }
     // 收费设置：仅 allowsell 组提交收费字段时生效；
     // 「否」/空数/非法数 → 清 content_buy = 0（清空分支不回落 content_buy_type）。

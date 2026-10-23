@@ -9,13 +9,16 @@ import { apiGet } from './api';
 import type { ThreadPageData } from '../components/ThreadList';
 
 /**
- * 全站主题列表（fid=0）查询描述：page / digest / orderby 三元组同时决定 queryKey 与 URL，
- * 口径与后端 `?page=&digest=&orderby=` 参数一致。首页与发现页共用，缓存自动命中。
+ * 全站主题列表（fid=0）查询描述：page / digest / orderby / lang 四元组同时决定 queryKey 与 URL，
+ * 口径与后端 `?page=&digest=&orderby=&lang=` 参数一致。首页与发现页共用，缓存自动命中。
+ *
+ * lang 必须显式拼进 URL（空串 = 全部语言）：边缘缓存键只认 URL，隐式默认值会导致
+ * 不同语言用户命中同一份缓存副本。
  */
-export function siteThreadsQuery(page: number, digest: 0 | 1, orderby: 'tid' | 'lastpid') {
+export function siteThreadsQuery(page: number, digest: 0 | 1, orderby: 'tid' | 'lastpid', lang = '') {
+  const qs = `page=${page}${digest ? '&digest=1' : ''}&orderby=${orderby}${lang ? `&lang=${encodeURIComponent(lang)}` : ''}`;
   return {
-    queryKey: ['threads', 0, page, digest, orderby] as const,
-    queryFn: () =>
-      apiGet<ThreadPageData>(`/api/threads?page=${page}${digest ? '&digest=1' : ''}&orderby=${orderby}`),
+    queryKey: ['threads', 0, page, digest, orderby, lang] as const,
+    queryFn: () => apiGet<ThreadPageData>(`/api/threads?${qs}`),
   };
 }

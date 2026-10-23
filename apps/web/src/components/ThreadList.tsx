@@ -9,7 +9,7 @@
  */
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
-import type { ForumNode, ThreadListItem } from '@freeidx/shared';
+import { CONTENT_LANG_NATIVE_NAMES, type ContentLang, type ForumNode, type ThreadListItem } from '@freeidx/shared';
 import { fmtDate } from '../lib/api';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
@@ -108,12 +108,21 @@ function TagItems({ th }: { th: ThreadListItem }) {
 
 /** 标签徽章行（列表标题下小徽章行，样式 2/3 用） */
 function TagRow({ th }: { th: ThreadListItem }) {
-  if (!th.tags) return null;
-  const names = th.tags.split(',').filter(Boolean);
-  if (!names.length) return null;
+  const names = th.tags ? th.tags.split(',').filter(Boolean) : [];
+  /* 内容语言徽标（原生名）：与标签并列，空 lang 不占位（存量帖零残留） */
+  const langName = th.lang ? CONTENT_LANG_NATIVE_NAMES[th.lang as ContentLang] : '';
+  if (!names.length && !langName) return null;
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1.5">
-      <TagItems th={th} />
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      {langName && (
+        <span
+          className="inline-flex shrink-0 items-center rounded-full border border-zh-line bg-lt-soft px-2 py-[2px] text-[11px] leading-none text-ink-soft"
+          title={langName}
+        >
+          {langName}
+        </span>
+      )}
+      {names.length > 0 && <TagItems th={th} />}
     </div>
   );
 }

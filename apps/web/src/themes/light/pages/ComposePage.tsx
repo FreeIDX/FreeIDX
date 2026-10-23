@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { CONTENT_LANG_NATIVE_NAMES, CONTENT_LANGS, detectContentLang, type ContentLang } from '@freeidx/shared';
 import { createThread } from '../../../lib/api';
 import { Composer, type ComposerSubmit } from '../../../components/Composer';
 import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
@@ -41,6 +42,10 @@ export function ComposePage() {
   const [sellType, setSellType] = useState(1);
   /* 标签（idx_tag）：多选 ≤4，随 createThread 提交 */
   const [selTags, setSelTags] = useState<string[]>([]);
+  /* 内容语言：'' = 自动识别（按标题+正文），用户可手动覆盖；正文由 Composer onChange 回传 */
+  const [body, setBody] = useState('');
+  const [langSel, setLangSel] = useState('');
+  const detected = detectContentLang(`${subject} ${body}`);
   const [tab, setTab] = useState<'fn' | 'file'>('fn');
   /* 分类弹窗（#staticBackdrop：版块卡横向滚动列表 + 单选） */
   const [fidDlg, setFidDlg] = useState(false);
@@ -58,6 +63,8 @@ export function ComposePage() {
         contentBuyType: sellType,
         turnstileToken: change.turnstileToken,
         tags: selTags,
+        // 内容语言：手动选择优先，否则使用前端预判结果（与服务端检测同源同实现）
+        lang: langSel || detected || undefined,
       }),
     onSuccess: (d) => {
       void qc.invalidateQueries({ queryKey: ['threads'] });
@@ -159,6 +166,7 @@ export function ComposePage() {
               submitLabel={t('thread_create')}
               busy={create.isPending}
               allowSell={canSell && sellOn}
+              onChange={(c) => setBody(c.html)}
               onSubmit={submit}
               placeholder={t('content_placeholder')}
             />
@@ -192,6 +200,28 @@ export function ComposePage() {
               </div>
             </div>
           )}
+
+          {/* 内容语言：默认自动识别（标题+正文，和服务端同一检测函数），可手动覆盖；
+              仅用于语言筛选，不影响正文与界面语言。 */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zh-line pt-3 text-sm">
+            <span className="text-ink-soft">{t('content_lang_label')}</span>
+            <select
+              className={cx(selectCls, 'h-[33px] w-auto px-2')}
+              value={langSel}
+              onChange={(e) => setLangSel(e.target.value)}
+              aria-label={t('content_lang_label')}
+            >
+              <option value="">
+                {t('content_lang_auto')}
+                {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
+              </option>
+              {CONTENT_LANGS.map((l) => (
+                <option key={l} value={l}>
+                  {CONTENT_LANG_NATIVE_NAMES[l]}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* 收费设置（仅 allowsell 组渲染；「购买 :」+ 是/否 radio，选「是」时现数字与币种） */}
           {canSell && (

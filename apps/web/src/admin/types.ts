@@ -325,6 +325,16 @@ export interface MaintCronResult {
   budget?: MaintBudget;
 }
 
+/** 内容语言回填：单批结果（前端循环推进直到 done） */
+export interface MaintLangBackfillResult {
+  scanned: number;
+  updated: number;
+  remaining: number;
+  done: boolean;
+  batch: number;
+  budget?: MaintBudget;
+}
+
 /** R2 扫描/删除任务状态（服务端存 bbs_cache，7 天 TTL） */
 export interface MaintR2State {
   prefix: string;
@@ -368,6 +378,7 @@ export interface AdminSettingInput {
   user_resetpw_on?: number;
   forum_orderby?: number;
   update_views_on?: number;
+  content_lang?: number;
   upload_max_size?: number;
   lang?: string;
   /** 后台界面语言（与前台站点 lang 相互独立；缺省回落 lang） */

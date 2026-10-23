@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "Alle Sprachen",
+  "content_lang_auto": "Automatisch erkennen",
+  "content_lang_label": "Inhaltssprache",
   "about_forum": "Über",
   "account_not_approved": "Ihr Konto wurde nicht genehmigt! Sie können keine Themen erstellen oder antworten!",
   "account_under_review": "Ein Administrator prüft Ihr Konto! Sie können während der Prüfung keine Themen erstellen oder antworten. Bitte warten Sie geduldig.",
@@ -516,6 +519,17 @@
   "points_log_label": "Punkte-Verlauf"
  },
  "admin": {
+  "admin_maint_lang_all_done": "Alle bestehenden Themen sind nachgetragen. Die Filterung kann jetzt unter „Grundeinstellungen → Inhaltssprachen“ aktiviert werden.",
+  "admin_maint_lang_done": "In dieser Runde {n} nachgetragen, {left} verbleibend",
+  "admin_maint_lang_help": "Trägt die Inhaltssprache bestehender Themen anhand von Titel und erstem Beitrag nach (gleicher Erkenner wie beim Veröffentlichen). Läuft in kleinen Stapeln; klicken, bis nichts mehr übrig ist. Neue Beiträge werden beim Erstellen erkannt und müssen nicht nachgetragen werden.",
+  "admin_maint_lang_left": "Noch {left} Themen offen – erneut „Einen Stapel nachtragen“ klicken",
+  "admin_maint_lang_run": "Einen Stapel nachtragen",
+  "admin_maint_lang_title": "Inhaltssprachen nachtragen",
+  "content_lang_mode_all": "Ein (standardmäßig alle Sprachen)",
+  "content_lang_mode_off": "Aus",
+  "content_lang_mode_ui": "Ein (folgt der Oberflächensprache)",
+  "setting_content_lang": "Inhaltssprachen",
+  "setting_content_lang_hint": "Themenlisten nach der Inhaltssprache filtern. Ausgeschaltet bleibt alles unverändert. Eingeschaltet erscheint eine Sprachfilterleiste; neue Beiträge werden automatisch erkannt (änderbar). Bestehende Themen werden erst nach dem Nachtragen der Sprache berücksichtigt.",
   "admin_modlog_action_update": "Thema bearbeiten",
   "admin_thread_content": "Inhalt",
   "admin_thread_edit_title": "Thema bearbeiten",

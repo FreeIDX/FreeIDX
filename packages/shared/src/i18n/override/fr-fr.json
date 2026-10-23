@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "Toutes les langues",
+  "content_lang_auto": "Détection automatique",
+  "content_lang_label": "Langue du contenu",
   "about_forum": "À propos",
   "account_not_approved": "Votre compte n'a pas été approuvé ! Vous ne pouvez pas publier ou répondre !",
   "account_under_review": "Un administrateur examine votre compte ! Vous ne pouvez pas publier ou répondre pendant l'examen. Patientez.",
@@ -516,6 +519,17 @@
   "points_log_label": "Journal des crédits"
  },
  "admin": {
+  "admin_maint_lang_all_done": "Tous les sujets existants sont renseignés. Vous pouvez maintenant activer le filtrage dans « Réglages de base → Langues du contenu ».",
+  "admin_maint_lang_done": "{n} renseignés ce cycle, {left} restants",
+  "admin_maint_lang_help": "Renseigne la langue du contenu des sujets existants à partir du titre et du premier message (même détecteur qu’à la publication). Exécution par petits lots ; cliquez jusqu’à ce qu’il n’en reste plus. Les nouveaux sujets sont classés à la création et n’ont pas besoin d’être renseignés.",
+  "admin_maint_lang_left": "Il reste {left} sujets — cliquez à nouveau sur « Renseigner un lot »",
+  "admin_maint_lang_run": "Renseigner un lot",
+  "admin_maint_lang_title": "Renseignement de la langue du contenu",
+  "content_lang_mode_all": "Activé (toutes les langues par défaut)",
+  "content_lang_mode_off": "Désactivé",
+  "content_lang_mode_ui": "Activé (suivre la langue de l’interface)",
+  "setting_content_lang": "Langues du contenu",
+  "setting_content_lang_hint": "Filtre les listes de sujets selon la langue du contenu. Désactivé, le comportement est inchangé. Activé, une barre de filtre par langue apparaît et la langue des nouveaux sujets est détectée automatiquement (modifiable). Les sujets existants ne participent qu’après renseignement de leur langue.",
   "admin_modlog_action_update": "Modifier le sujet",
   "admin_thread_content": "Contenu",
   "admin_thread_edit_title": "Modifier le sujet",

@@ -19,6 +19,7 @@ import { Icon, type IconName } from '../../../components/icons';
 import { CardTitle, SidePanel } from '../../../components/ui';
 import { RankNo } from '../../../components/rank';
 import { siteThreadsQuery } from '../../../lib/queries';
+import { useContentLangFilter } from '../../../store/contentLang';
 import { NotFoundPage } from './NotFoundPage';
 
 /** 聚合卡（卡头背景图 + .discovery-rank-list 滚动区；行渲染交由调用方） */
@@ -107,10 +108,12 @@ export function DiscoveryPage() {
   const runtime = useAuth((s) => s.runtime);
 
   const discOn = light.enabled && light.discPage;
+  /* 发现页与首页共用同一筛选偏好：切换语言后两边口径一致，不出现「首页英文、发现页全部」 */
+  const contentLang = useContentLangFilter();
   /* 新鲜发布/最新讨论：与首页共用同一 queryKey 与 URL（siteThreadsQuery），切页命中缓存不重复请求；
      四个查询一并挂 enabled —— 此前 hooks 先于 404 早退执行，发现页关闭的站点每次误入仍白打 4 个接口。 */
-  const latest = useQuery({ ...siteThreadsQuery(1, 0, 'tid'), staleTime: 60_000, enabled: discOn });
-  const replied = useQuery({ ...siteThreadsQuery(1, 0, 'lastpid'), staleTime: 60_000, enabled: discOn });
+  const latest = useQuery({ ...siteThreadsQuery(1, 0, 'tid', contentLang), staleTime: 60_000, enabled: discOn });
+  const replied = useQuery({ ...siteThreadsQuery(1, 0, 'lastpid', contentLang), staleTime: 60_000, enabled: discOn });
   const comments = useQuery({
     queryKey: ['discovery', 'comments'],
     queryFn: fetchLatestComments,

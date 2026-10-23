@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import type { AdminKey } from '@freeidx/shared';
-import { getMaintOverview, runMaintCronJob, runMaintDbTask } from '../api';
+import { backfillMaintContentLang, getMaintOverview, runMaintCronJob, runMaintDbTask } from '../api';
 import type { MaintDbRunResult, MaintOverview } from '../types';
 import { useAdminT } from '../t';
 import { apiErrorMessage } from '../../lib/errors';
@@ -33,6 +33,8 @@ export function DbMaintenancePage() {
   const [preview, setPreview] = useState<{ task: string; rows: Record<string, unknown>[] } | null>(null);
   const [confirm, setConfirm] = useState<{ task: string; count: number; capped: boolean } | null>(null);
   const [lastRun, setLastRun] = useState<Record<string, MaintDbRunResult>>({});
+  /** 内容语言回填：最近一次剩余量（null = 本次会话尚未跑过） */
+  const [langRemaining, setLangRemaining] = useState<number | null>(null);
 
   const taskLabel = (id: string): string => t(('admin_maint_task_' + id) as AdminKey, id);
   const riskLabel = (risk: 1 | 2): string =>
@@ -93,6 +95,31 @@ export function DbMaintenancePage() {
       const r = await runMaintCronJob(job);
       setFlash({ tone: 'ok', text: t('admin_maint_cron_done', '已执行，影响 {n} 项', { n: r.affected }) });
       setOverview(await getMaintOverview(true));
+    } catch (e) {
+      setFlash({ tone: 'warn', text: apiErrorMessage(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /* 存量主题内容语言回填：前端循环推进（每轮服务端 20 条 / 3 条查询），最多 10 轮即 200 条 */
+  const doLangBackfill = async (): Promise<void> => {
+    setBusy('lang');
+    setFlash(null);
+    let updated = 0;
+    let left = 0;
+    try {
+      for (let i = 0; i < 10; i++) {
+        const r = await backfillMaintContentLang(20);
+        updated += r.updated;
+        left = r.remaining;
+        if (r.done || r.scanned === 0) break;
+      }
+      setLangRemaining(left);
+      setFlash({
+        tone: 'ok',
+        text: t('admin_maint_lang_done', '本轮已回填 {n} 条，剩余 {left} 条', { n: updated, left }),
+      });
     } catch (e) {
       setFlash({ tone: 'warn', text: apiErrorMessage(e) });
     } finally {
@@ -175,6 +202,31 @@ export function DbMaintenancePage() {
         {!rows.length && (
           <p className="px-4 py-6 text-center text-sm text-muted">
             {t('admin_maint_probe_empty', '点击「开始体检」扫描一次。体检是全表扫描，结果缓存 1 小时。')}
+          </p>
+        )}
+      </Card>
+
+      {/* 内容语言回填：为存量帖补算 lang，回填完成后才建议开启「内容语言分区」 */}
+      <Card
+        title={t('admin_maint_lang_title', '内容语言回填')}
+        tools={
+          <Button size="sm" variant="default" loading={busy === 'lang'} onClick={() => void doLangBackfill()}>
+            <Icon name="refresh" />
+            {t('admin_maint_lang_run', '回填一批')}
+          </Button>
+        }
+      >
+        <p className="mb-2 text-sm text-muted">
+          {t(
+            'admin_maint_lang_help',
+            '为存量主题按「标题 + 首帖正文」补算内容语言（与发帖时同一检测函数）。分小批执行，可重复点击直到剩余为 0。新帖发帖时已自动定稿，无需回填。',
+          )}
+        </p>
+        {langRemaining !== null && (
+          <p className="text-sm">
+            {langRemaining > 0
+              ? t('admin_maint_lang_left', '仍剩 {left} 条未回填，继续点击「回填一批」', { left: langRemaining })
+              : t('admin_maint_lang_all_done', '存量主题已全部回填完成。现在可以到「基本设置 → 内容语言分区」开启过滤。')}
           </p>
         )}
       </Card>

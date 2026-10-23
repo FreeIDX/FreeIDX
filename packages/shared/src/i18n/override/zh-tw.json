@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "全部語言",
+  "content_lang_auto": "自動識別",
+  "content_lang_label": "內容語言",
   "about_forum": "關於版塊",
   "account_not_approved": "您的帳號未審核通過！您無法發表主題、回覆主題！",
   "account_under_review": "管理員正在審核您的帳號！審核期間您將無法發表主題、回覆主題，請您耐心等待！",
@@ -516,6 +519,17 @@
   "points_log_label": "積分流水"
  },
  "admin": {
+  "admin_maint_lang_all_done": "存量主題已全部回填完成。現在可以到「基本設定 → 內容語言分區」開啟過濾。",
+  "admin_maint_lang_done": "本輪已回填 {n} 條，剩餘 {left} 條",
+  "admin_maint_lang_help": "為存量主題按「標題 + 首帖正文」補算內容語言（與發帖時同一檢測函式）。分小批執行，可重複點擊直到剩餘為 0。新帖發帖時已自動定稿，無需回填。",
+  "admin_maint_lang_left": "仍剩 {left} 條未回填，繼續點擊「回填一批」",
+  "admin_maint_lang_run": "回填一批",
+  "admin_maint_lang_title": "內容語言回填",
+  "content_lang_mode_all": "開啟（預設全部語言）",
+  "content_lang_mode_off": "關閉",
+  "content_lang_mode_ui": "開啟（預設跟隨介面語言）",
+  "setting_content_lang": "內容語言分區",
+  "setting_content_lang_hint": "按帖子內容語言過濾主題列表。關閉時行為與升級前完全一致；開啟後前台出現語言篩選條，發帖時自動識別並可手動修改。存量帖需先回填語言後才會參與過濾。",
   "admin_modlog_action_update": "編輯主題",
   "admin_thread_content": "內容",
   "admin_thread_edit_title": "編輯主題",

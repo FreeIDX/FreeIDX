@@ -30,10 +30,12 @@ const EDITABLE: readonly string[] = [
   'device_phone_on', 'device_tablet_on', 'device_tv_on',
   /* 顶部导航栏自定义项（本项目新增「导航栏设置」；validate 特殊处理为 JSON 字符串） */
   'nav',
+  /* 内容语言分区模式（0=关闭 1=开启默认全部 2=开启默认跟随界面语言） */
+  'content_lang',
 ];
 
 /** 非负整数键（积分奖励值，0=关闭） */
-const INT_KEYS = new Set(['credit_thread', 'credit_reply', 'credit_daily_first']);
+const INT_KEYS = new Set(['credit_thread', 'credit_reply', 'credit_daily_first', 'content_lang']);
 const BOOL_KEYS = new Set(['user_create_on', 'user_create_email_on', 'user_resetpw_on', 'update_views_on', 'user_check', 'recycle', 'device_phone_on', 'device_tablet_on', 'device_tv_on']);
 const asBool01 = (v: unknown): number => (v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0);
 

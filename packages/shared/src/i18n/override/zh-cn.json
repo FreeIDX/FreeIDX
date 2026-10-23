@@ -1,5 +1,8 @@
 {
  "bbs": {
+  "content_lang_all": "全部语言",
+  "content_lang_auto": "自动识别",
+  "content_lang_label": "内容语言",
   "about_forum": "关于版块",
   "account_not_approved": "您的账号未审核通过！您无法发表主题、回复主题！",
   "account_under_review": "管理员正在审核您的账号！审核期间您将无法发表主题、回复主题，请您耐心等待！",
@@ -516,6 +519,17 @@
   "points_log_label": "积分流水"
  },
  "admin": {
+  "admin_maint_lang_all_done": "存量主题已全部回填完成。现在可以到「基本设置 → 内容语言分区」开启过滤。",
+  "admin_maint_lang_done": "本轮已回填 {n} 条，剩余 {left} 条",
+  "admin_maint_lang_help": "为存量主题按「标题 + 首帖正文」补算内容语言（与发帖时同一检测函数）。分小批执行，可重复点击直到剩余为 0。新帖发帖时已自动定稿，无需回填。",
+  "admin_maint_lang_left": "仍剩 {left} 条未回填，继续点击「回填一批」",
+  "admin_maint_lang_run": "回填一批",
+  "admin_maint_lang_title": "内容语言回填",
+  "content_lang_mode_all": "开启（默认全部语言）",
+  "content_lang_mode_off": "关闭",
+  "content_lang_mode_ui": "开启（默认跟随界面语言）",
+  "setting_content_lang": "内容语言分区",
+  "setting_content_lang_hint": "按帖子内容语言过滤主题列表。关闭时行为与升级前完全一致；开启后前台出现语言筛选条，发帖时自动识别并可手动修改。存量帖需先回填语言后才会参与过滤。",
   "admin_modlog_action_update": "编辑主题",
   "admin_thread_content": "内容",
   "admin_thread_edit_title": "编辑主题",

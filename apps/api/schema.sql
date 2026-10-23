@@ -11,7 +11,7 @@
 --   pnpm --filter @freeidx/api db:apply && pnpm --filter @freeidx/api db:schema:dump
 -- 并把 migrations/ 与 schema.sql 一起提交。
 --
--- 对象统计：32 表 / 70 索引
+-- 对象统计：32 表 / 72 索引
 
 -- ===== 表（32）=====
 CREATE TABLE bbs_ad_slot (
@@ -331,7 +331,8 @@ CREATE TABLE bbs_thread (
   content_buy_type INTEGER NOT NULL DEFAULT 1,
   tags TEXT NOT NULL DEFAULT '',
   image_urls TEXT NOT NULL DEFAULT '',
-  summary TEXT NOT NULL DEFAULT ''
+  summary TEXT NOT NULL DEFAULT '',
+  lang TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE bbs_thread_top (
@@ -408,7 +409,7 @@ CREATE TABLE bbs_vip_plan (
   gid INTEGER NOT NULL DEFAULT 0
 );
 
--- ===== 索引（70）=====
+-- ===== 索引（72）=====
 CREATE INDEX bbs_ad_slot_position ON bbs_ad_slot (position, enabled, sort);
 
 CREATE INDEX bbs_announcement_isshow ON bbs_announcement (isshow, aid);
@@ -510,6 +511,10 @@ CREATE INDEX bbs_thread_fid_lastpid ON bbs_thread (fid, lastpid);
 CREATE INDEX bbs_thread_fid_ok_views ON bbs_thread (fid, ok, views DESC);
 
 CREATE INDEX bbs_thread_fid_tid ON bbs_thread (fid, tid);
+
+CREATE INDEX bbs_thread_lang_lastpid ON bbs_thread (lang, lastpid);
+
+CREATE INDEX bbs_thread_lang_tid ON bbs_thread (lang, tid);
 
 CREATE INDEX bbs_thread_ok_tid ON bbs_thread (ok, tid);
 

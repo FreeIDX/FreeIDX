@@ -73,6 +73,7 @@ export function SettingPage() {
       device_tv_on: bool01(raw.device_tv_on ?? 1),
       forum_orderby: num(raw.forum_orderby) === 1 ? 1 : 0,
       update_views_on: bool01(raw.update_views_on ?? 1),
+      content_lang: num(raw.content_lang),
       upload_max_size: num(raw.upload_max_size, 20 * 1024 * 1024),
       lang: str(raw.lang, 'en-us'),
       admin_lang: str(raw.admin_lang, str(raw.lang, 'en-us')),
@@ -300,6 +301,22 @@ export function SettingPage() {
             value={form.update_views_on ?? 1}
             options={yesNo}
             onChange={(v) => set('update_views_on', Number(v))}
+          />
+        </Field>
+        {/* 内容语言分区：0=关闭（默认，行为不变） 1=开启默认全部 2=开启默认跟随界面语言 */}
+        <Field
+          label={t('setting_content_lang', '内容语言分区')}
+          hint={t('setting_content_lang_hint', '按帖子内容语言过滤主题列表。关闭时行为与升级前完全一致；开启后前台出现语言筛选条，发帖时自动识别并可手动修改。存量帖需先在「数据库维护」中回填语言后才会参与过滤')}
+        >
+          <RadioGroup
+            name="content_lang"
+            value={form.content_lang ?? 0}
+            options={[
+              { value: 0, text: t('content_lang_mode_off', '关闭') },
+              { value: 1, text: t('content_lang_mode_all', '开启（默认全部语言）') },
+              { value: 2, text: t('content_lang_mode_ui', '开启（默认跟随界面语言）') },
+            ]}
+            onChange={(v) => set('content_lang', Number(v))}
           />
         </Field>
         <Field label={t('setting_upload_limit', '附件上限')} htmlFor="s-upload" hint={t('setting_upload_limit_hint', '{size} MB（填写单位为字节，最大不超过 100 MB）', { size: ((form.upload_max_size ?? 0) / 1024 / 1024).toFixed(1) })}>

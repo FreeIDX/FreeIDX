@@ -88,6 +88,8 @@ export interface ThreadListItem {
   summary?: string;
   /** 搜索命中正文摘要（仅 /api/search range=all 下发，≤120 字；前端据此高亮关键词） */
   snippet?: string;
+  /** 内容语言（zh/en/ja/ko/ru/th/de/fr/es/other；空/缺省 = 未指定，不参与语言过滤） */
+  lang?: string;
   /** 已读标记为纯前端 localStorage，不占 DTO */
 }
 
@@ -301,6 +303,13 @@ export interface SiteSetting {
   favicon_url?: string;
   /** 顶部导航栏自定义项（后台「导航栏设置」，kv setting 存 JSON 字符串，归一化为数组；空/缺省 = 前台回落默认导航） */
   nav?: NavItem[];
+  /**
+   * 内容语言分区模式（后台「内容语言」设置，kv setting.content_lang）：
+   * 0 = 关闭（默认，行为与改造前完全一致）
+   * 1 = 开启，列表默认「全部语言」，用户可在筛选条自行切换
+   * 2 = 开启，列表默认跟随界面语言（适合内容已回填、希望默认分流的站点）
+   */
+  contentLang?: number;
   [k: string]: unknown;
 }
 
@@ -353,6 +362,8 @@ export interface CreateThreadReq {
   turnstileToken?: string;
   /** 标签（简蓝主题）：≤4 个，服务端归一（剔空白/逗号、单标签 ≤12 字、去重）后落 thread.tags */
   tags?: string[];
+  /** 内容语言（zh/en/ja/ko/ru/th/de/fr/es/other）：显式选择优先，缺省由服务端按标题+正文自动检测 */
+  lang?: string;
 }
 
 export interface CreatePostReq {

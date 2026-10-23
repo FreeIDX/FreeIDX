@@ -137,6 +137,8 @@ export async function loadSetting(cache: Cache, db: D1b): Promise<SiteSetting> {
       deviceTvOn: raw.device_tv_on === undefined ? true : !!raw.device_tv_on,
       /* 顶部导航栏自定义项（后台「导航栏设置」，kv 存 JSON 字符串；解析失败/缺省回落 undefined = 前台默认导航） */
       nav: parseNavItems(raw.nav),
+      /* 内容语言分区模式（0=关闭 1=开启默认全部 2=开启默认跟随界面语言；缺省 0 保持存量行为） */
+      contentLang: Math.min(2, Math.max(0, Number(raw.content_lang ?? 0) || 0)),
     } as SiteSetting;
   });
 }

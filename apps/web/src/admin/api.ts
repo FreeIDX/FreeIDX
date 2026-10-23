@@ -33,6 +33,7 @@ import type {
   GroupUpsertItem,
   MaintCronResult,
   MaintDbRunResult,
+  MaintLangBackfillResult,
   MaintOverview,
   MaintR2State,
   MaintR2Status,
@@ -210,6 +211,9 @@ export const runMaintDbTask = (task: string, opts: { batches?: number; dryRun?: 
   apiSend<MaintDbRunResult>('POST', '/api/admin/maintenance/db/run', { task, ...opts });
 /** 立即执行一次 cron 子任务（session/calibrate/cache_gc/email_code/queue/attach_tmp） */
 export const runMaintCronJob = (job: string) => apiSend<MaintCronResult>('POST', '/api/admin/maintenance/cron/run', { job });
+/** 存量主题内容语言回填（单批 ≤50 条，前端循环推进直到 done） */
+export const backfillMaintContentLang = (limit = 20) =>
+  apiSend<MaintLangBackfillResult>('POST', '/api/admin/maintenance/content-lang/backfill', { limit });
 
 export const getMaintR2Status = () => apiGet<MaintR2Status>('/api/admin/maintenance/r2/status');
 /** 开始/重置某前缀的任务；mode='delete' 必须带 confirm 且已有完成的扫描报告 */

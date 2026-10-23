@@ -11,11 +11,11 @@ export const P = 'bbs_post';
  *  image_urls 为列表图片组（≤9 张逗号分隔，00014 迁移新增）；
  *  summary 为列表摘要纯文本（≤300 字，00017 迁移新增） */
 export const THREAD_LIST_COLS =
-  'tid,fid,top,digest,closed,uid,username,avatar,subject,posts,views,images,files,lastpid,lastuid,lastusername,create_date,last_date,ok,content_buy,content_buy_type,tags,image_urls,summary';
+  'tid,fid,top,digest,closed,uid,username,avatar,subject,posts,views,images,files,lastpid,lastuid,lastusername,create_date,last_date,ok,content_buy,content_buy_type,tags,image_urls,summary,lang';
 
 /** thread_top JOIN thread 用显式前缀投影（禁运行期字符串改写） */
 export const THREAD_LIST_COLS_T =
-  't.tid,t.fid,t.top,t.digest,t.closed,t.uid,t.username,t.avatar,t.subject,t.posts,t.views,t.images,t.files,t.lastpid,t.lastuid,t.lastusername,t.create_date,t.last_date,t.ok,t.content_buy,t.content_buy_type,t.tags,t.image_urls,t.summary';
+  't.tid,t.fid,t.top,t.digest,t.closed,t.uid,t.username,t.avatar,t.subject,t.posts,t.views,t.images,t.files,t.lastpid,t.lastuid,t.lastusername,t.create_date,t.last_date,t.ok,t.content_buy,t.content_buy_type,t.tags,t.image_urls,t.summary,t.lang';
 
 /** 详情页 thread 行（不含正文） */
 export const THREAD_DETAIL_COLS = THREAD_LIST_COLS + ',firstpid,mods,userip';
