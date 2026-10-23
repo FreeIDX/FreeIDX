@@ -2,7 +2,7 @@
  * 版块 / 主题管理后台接口（T3-5，§14.4 / 工单 T3-5）：
  *   GET    /api/admin/forums        版块树 + access 矩阵（每组 5 项 allow*）+ 用户组
  *   POST   /api/admin/forums        新建版块：INSERT forum(RETURNING fid) → access 整表写入 → 清 forumlist
- *   PUT    /api/admin/forums/:fid   更新版块：UPDATE forum +（access 提供则整表替换）→ 清 forumlist
+ *   PUT    /api/admin/forums/:fid   更新版块：请求携带的标量才写入（缺省保持原值）+（access 提供则整表替换）→ 清 forumlist
  *   DELETE /api/admin/forums/:fid   删除版块：按 fid 级联删（回帖/倒排/主题/附件/计数）→ 清 forumlist
  *   GET    /api/admin/threads       主题管理列表（?fid/keyword/uid/create_ip/top/closed/digest/since/until/page/size，供批量操作选择）
  *   GET    /api/admin/threads/:tid  主题编辑回显（主题字段 + 首帖原文 message/doctype）
@@ -168,43 +168,69 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     return ok(c, t('common.created'), { data: { fid } });
   });
 
+  /**
+   * 更新版块：**提供即更新**（merge 语义）——只有请求里显式携带的键才会写入，缺省 = 保持原值；
+   * 要清空必须显式传 `''` / `0`（lang 另有 'none' = 显式不限制，见 normalizeForumLang）。
+   *
+   * 不用 PUT 的「全量标量替换」语义，是因为缺省被当成空会静默毁数据：省略 lang = 悄悄解绑
+   * （子版块还会连带回到继承）、省略 parent_fid = 把二级版块悄悄提到顶级、省略 accesson
+   * 会悄悄关掉权限矩阵。本接口的 access 本来就是「携带才整表替换」，标量改成同一口径后，
+   * 局部更新不会再误伤未提交的字段；完整提交（后台两个入口）的行为与以前完全一致。
+   */
   app.put('/api/admin/forums/:fid', async (c) => {
     const { db, cache } = core(c);
     const t = c.get('t');
     const fid = intParam(c.req.param('fid'));
     if (!fid) throw new AppError(Code.VALIDATION_ERROR, t('admin.fidInvalid'));
-    const exists = await db.prepare<{ fid: number }>('SELECT fid FROM bbs_forum WHERE fid = ?').bind(fid).first<{ fid: number }>();
-    if (!exists) throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
+    /* 连 parent_fid 一起读：lang 的哨兵判定需要知道变更后（或保持）的父级 */
+    const cur = await db
+      .prepare<{ fid: number; parent_fid: number }>('SELECT fid,parent_fid FROM bbs_forum WHERE fid = ?')
+      .bind(fid)
+      .first<{ fid: number; parent_fid: number }>();
+    if (!cur) throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
     const b = await readJson(c);
-    const name = String(b.name ?? '').trim();
-    if (!name) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumNameRequired'));
-    /* 二级版块约束：不得自引用；仅有子版块的版块不能再被设为子版块（否则成三级）；父必须是一级版块 */
-    const parentFid = normParentFid(b.parent_fid);
-    if (parentFid === fid) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumParentInvalid'));
-    if (parentFid > 0) {
-      if ((await childCount(db, fid)) > 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumParentLocked'));
-      await assertValidParent(db, t, parentFid);
+
+    const sets: string[] = [];
+    const vals: (string | number)[] = [];
+    /** 列名来自本函数内的字面量，不存在注入面 */
+    const put = (col: string, v: string | number): void => {
+      sets.push(`${col}=?`);
+      vals.push(v);
+    };
+
+    if ('name' in b) {
+      const name = String(b.name ?? '').trim();
+      if (!name) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumNameRequired'));
+      put('name', name);
     }
-    await db
-      .prepare(
-        'UPDATE bbs_forum SET name=?,rank=?,brief=?,announcement=?,accesson=?,orderby=?,icon=?,moduids=?,seo_title=?,seo_keywords=?,parent_fid=?,lang=? WHERE fid=?',
-      )
-      .bind(
-        name,
-        Number.isFinite(Number(b.rank)) ? Math.trunc(Number(b.rank)) : 0,
-        String(b.brief ?? ''),
-        String(b.announcement ?? ''),
-        as01(b.accesson),
-        as01(b.orderby),
-        Number.isFinite(Number(b.icon)) ? Math.trunc(Number(b.icon)) : 0,
-        String(b.moduids ?? ''),
-        String(b.seo_title ?? ''),
-        String(b.seo_keywords ?? ''),
-        parentFid,
-        normForumLang(b.lang, parentFid),
-        fid,
-      )
-      .run();
+    if ('rank' in b) put('rank', Number.isFinite(Number(b.rank)) ? Math.trunc(Number(b.rank)) : 0);
+    if ('brief' in b) put('brief', String(b.brief ?? ''));
+    if ('announcement' in b) put('announcement', String(b.announcement ?? ''));
+    if ('accesson' in b) put('accesson', as01(b.accesson));
+    if ('orderby' in b) put('orderby', as01(b.orderby));
+    if ('icon' in b) put('icon', Number.isFinite(Number(b.icon)) ? Math.trunc(Number(b.icon)) : 0);
+    if ('moduids' in b) put('moduids', String(b.moduids ?? ''));
+    if ('seo_title' in b) put('seo_title', String(b.seo_title ?? ''));
+    if ('seo_keywords' in b) put('seo_keywords', String(b.seo_keywords ?? ''));
+
+    /* 二级版块约束：不得自引用；仅有子版块的版块不能再被设为子版块（否则成三级）；父必须是一级版块 */
+    let parentFid = Number(cur.parent_fid ?? 0);
+    if ('parent_fid' in b) {
+      parentFid = normParentFid(b.parent_fid);
+      if (parentFid === fid) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumParentInvalid'));
+      if (parentFid > 0) {
+        if ((await childCount(db, fid)) > 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumParentLocked'));
+        await assertValidParent(db, t, parentFid);
+      }
+      put('parent_fid', parentFid);
+    }
+    /* 未提交 parent_fid 时用库中现值判定哨兵（顶级版块的 'none' 会归一回空串） */
+    if ('lang' in b) put('lang', normForumLang(b.lang, parentFid));
+
+    if (!sets.length && !('access' in b)) throw new AppError(Code.VALIDATION_ERROR, t('common.noFieldsToUpdate'));
+    if (sets.length) {
+      await db.prepare(`UPDATE bbs_forum SET ${sets.join(',')} WHERE fid=?`).bind(...vals, fid).run();
+    }
     // 仅当请求显式携带 access 时整表替换（编辑表单总是提交当前矩阵）
     if ('access' in b) {
       const access = normAccess(b.access);

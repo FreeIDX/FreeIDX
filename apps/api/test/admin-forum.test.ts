@@ -18,6 +18,8 @@ function rules(): SqlRule[] {
     { test: /SELECT gid,token_version FROM bbs_user/, first: { gid: 1, token_version: 0 } },
     { test: /INSERT INTO bbs_forum \(name/, first: { fid: 5 } },
     { test: /SELECT fid,icon_file FROM bbs_forum WHERE fid = \?/, first: { fid: 8, icon_file: '' } },
+    // 版块 PUT 的存在性 + 当前父级（lang 哨兵判定需要）；另一条同形查询在主题移动（threads PUT）
+    { test: /SELECT fid,parent_fid FROM bbs_forum WHERE fid = \?/, first: { fid: 8, parent_fid: 0 } },
     { test: /SELECT fid FROM bbs_forum WHERE fid = \?/, first: { fid: 8 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_forum WHERE parent_fid = \?/, first: { c: 0 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_forum WHERE fid = \? AND parent_fid = 0/, first: { c: 1 } },
@@ -111,11 +113,49 @@ describe('版块管理 CRUD（T3-5）', () => {
     expect(calls.some((c) => /INSERT OR REPLACE INTO bbs_forum_access/.test(c.sql))).toBe(true);
   });
 
+  it('PUT：只提交部分字段 → 只更新这些列，其余列（含 lang / parent_fid）保持原值', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ brief: '新简介' }) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    // 合并更新：SET 里只出现提交过的列，不会把 lang/parent_fid/accesson 冲成空
+    expect(upd?.sql).toBe('UPDATE bbs_forum SET brief=? WHERE fid=?');
+    expect(upd?.params).toEqual(['新简介', 8]);
+  });
+
+  it('PUT：只提交 lang → 只更新 lang（不要求 name）', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ lang: 'ja' }) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    expect(upd?.sql).toBe('UPDATE bbs_forum SET lang=? WHERE fid=?');
+    expect(upd?.params).toEqual(['ja', 8]);
+  });
+
+  it('PUT：空对象且不带 access → VALIDATION_ERROR（不产生 UPDATE）', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({}) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
+    expect(calls.some((c) => /UPDATE bbs_forum SET/.test(c.sql))).toBe(false);
+  });
+
   it('PUT：不存在 → NOT_FOUND', async () => {
     const rs: SqlRule[] = rules();
-    // 令存在性查询返回 null
-    const idx = rs.findIndex((r) => /SELECT fid FROM bbs_forum WHERE/.test(r.test.source));
-    rs[idx] = { test: /SELECT fid FROM bbs_forum WHERE fid = \?/, first: null };
+    // 令存在性查询（版块 PUT 读 fid + parent_fid）返回 null
+    const idx = rs.findIndex((r) => /SELECT fid,parent_fid FROM bbs_forum WHERE/.test(r.test.source));
+    rs[idx] = { test: /SELECT fid,parent_fid FROM bbs_forum WHERE fid = \?/, first: null };
     const { db, calls } = fakeD1Sql(rs);
     const res = await app.request(
       '/api/admin/forums/999',
@@ -198,8 +238,8 @@ describe('二级版块（0018_forum_parent）', () => {
     expect((await jsonOf(res)).code).toBe(Code.OK);
     const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
     expect(upd?.sql).toContain('parent_fid=?');
-    // 末位是 fid，其前是 lang（0024），故 parent_fid 在 -3
-    expect(upd?.params?.at(-3)).toBe(5);
+    // 合并更新：SET 只含提交过的列，故只断言参数集合
+    expect(upd?.params).toContain(5);
   });
 
   it('PUT：已有子版块的版块改为子版块 → 阻止（避免三级）', async () => {
