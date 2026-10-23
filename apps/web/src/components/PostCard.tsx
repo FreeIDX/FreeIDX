@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { PostItem } from '@freeidx/shared';
-import { fmtDate } from '../lib/api';
+import { fmtDate, fmtIp } from '../lib/api';
 import { useT } from '../lib/i18n';
 import { useLight } from '../store/theme';
 import { AttachRows } from './AttachRows';
@@ -151,11 +151,11 @@ export function PostCard(props: {
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3 text-xs text-lt-grey">
           <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <Link className="font-bold text-lt-grey transition-colors hover:text-brand" to={`/user/${p.uid}`}>
+            <Link className="text-sm font-bold text-lt-grey transition-colors hover:text-brand" to={`/user/${p.uid}`}>
               {p.username}
             </Link>
             {!light.postShowTime && <span className="text-lt-grey">{fmtDate(p.createDate)}</span>}
-            {p.userip !== undefined && <span title={t('ip_visible_tip')}>IP {p.userip}</span>}
+            {p.userip !== undefined && <span title={t('ip_visible_tip')}>IP {fmtIp(p.userip)}</span>}
             {/* 楼层号（.floor-parent.badge.badge-secondary：#909399 底白字胶囊；热门回复卡 floor=0 不显示） */}
             {light.postShowFloors && props.floor > 0 && (
               <span className="rounded-[3px] bg-[#909399] px-1.5 py-0.5 text-[11px] leading-none text-white tabular-nums">

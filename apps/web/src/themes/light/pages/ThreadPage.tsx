@@ -93,8 +93,8 @@ const barBadge =
 
 /** 标题样式（h4 级：text-base font-medium；关闭话题置灰） */
 function getTitleCls(th: { digest: number; closed: number }): string {
-  if (th.closed > 0) return 'text-base font-medium leading-snug text-zh-grey';
-  return 'text-base font-medium leading-snug text-foreground';
+  if (th.closed > 0) return 'text-lg font-medium leading-snug text-zh-grey';
+  return 'text-lg font-medium leading-snug text-foreground';
 }
 
 /** 附件区（首帖）：列表组外壳 + 共用附件行（AttachRows：免费图片预览，其余走下载端点强校验） */
@@ -847,7 +847,7 @@ export function ThreadPage() {
                         <VBadge v={th.uv} size={1} />
                       </span>
                     </Link>
-                    <Link className="font-medium text-foreground transition-colors hover:text-brand" to={`/user/${th.uid}`}>
+                    <Link className="text-sm font-medium text-foreground transition-colors hover:text-brand" to={`/user/${th.uid}`}>
                       {th.username}
                     </Link>
                     <span>·</span>
@@ -1063,7 +1063,7 @@ export function ThreadPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between text-xs">
-                        <Link className="font-medium text-foreground transition-colors hover:text-brand" to="/me">
+                        <Link className="text-sm font-medium text-foreground transition-colors hover:text-brand" to="/me">
                           {me.username}
                         </Link>
                         <span className="tabular-nums text-lt-grey">

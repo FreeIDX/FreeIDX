@@ -676,6 +676,11 @@ export function fmtDate(ts: number): string {
   }).format(new Date(ts * 1000));
 }
 
+/** 无符号整数 → 点分 IPv4（long2ip 语义，0 → '0.0.0.0'；帖子楼层 IP 展示用） */
+export function fmtIp(n: number): string {
+  return `${(n >>> 24) & 255}.${(n >>> 16) & 255}.${(n >>> 8) & 255}.${n & 255}`;
+}
+
 /* ---------------- 前台扩展端点（快速回复 / 插入代码 / 预设头像） ---------------- */
 
 /** 快速回复下拉数据：[默认回复语, ...# 分隔备选语]；enabled=false 或空数组不渲染 */
