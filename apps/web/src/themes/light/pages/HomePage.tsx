@@ -121,7 +121,7 @@ export function HomePage() {
         </Card>
       </div>
       {/* 右栏（3/12 栅格：用户卡/签到/热门收藏/排行/站点数据/用户榜） */}
-      <aside className="hidden w-[260px] shrink-0 self-start lg:sticky lg:top-4 lg:z-10 lg:block">
+      <aside className="hidden w-[285px] shrink-0 self-start lg:sticky lg:top-4 lg:z-10 lg:block">
         {light.indexUserinfo &&
           (me ? (
             <>

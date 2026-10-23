@@ -217,7 +217,7 @@ export function DiscoveryPage() {
         </div>
 
         {/* 右栏：站点统计 + 热门版块 + 三榜（discovery_forum_right） */}
-        <aside className="hidden w-[260px] shrink-0 self-start lg:block">
+        <aside className="hidden w-[285px] shrink-0 self-start lg:block">
           <SidePanel pad="p-4">
             <CardTitle>
               <Icon name="chart_bar" className="size-4 text-brand" />

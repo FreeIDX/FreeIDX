@@ -395,7 +395,7 @@ export function Layout({ children }: { children?: ReactNode }) {
         <>
       <header className="fixed inset-x-0 top-0 z-[999] w-full bg-card/96 backdrop-blur-[10.5px] max-lg:border-b max-lg:border-zh-line">
         {/* PC 行（lg+） */}
-        <div className="mx-auto hidden h-[75px] w-full max-w-[1140px] items-center gap-2 px-4 lg:flex 3xl:max-w-[1536px]">
+        <div className="mx-auto hidden h-[75px] w-full max-w-[1280px] items-center gap-2 px-4 lg:flex">
           <Link to="/" className="flex shrink-0 items-center" aria-label={setting?.sitename || 'FreeIDX'}>
             {setting?.logo_url ? (
               <img src={String(setting.logo_url)} alt={setting.sitename} className="h-[42px] w-auto max-w-none" />
@@ -651,17 +651,17 @@ export function Layout({ children }: { children?: ReactNode }) {
         </>
       </ThemeSlot>
 
-      {error && <div className="mx-auto w-full max-w-[1140px] px-4 pt-[100px] text-sm text-destructive lg:pt-[83px] 3xl:max-w-[1536px]">{error}</div>}
+      {error && <div className="mx-auto w-full max-w-[1280px] px-4 pt-[100px] text-sm text-destructive lg:pt-[83px]">{error}</div>}
 
       {/* 内容区：#body（padding-top:75px / 移动 3.93rem+二级行） */}
-      <main id="body" className="mx-auto w-full max-w-[1140px] flex-1 px-4 pb-8 pt-[100px] 3xl:max-w-[1536px] lg:pt-[83px] max-lg:pb-20">
+      <main id="body" className="mx-auto w-full max-w-[1280px] flex-1 px-4 pb-8 pt-[100px] lg:pt-[83px] max-lg:pb-20">
         {children}
       </main>
 
       {/* ============ footer（主题插槽：覆写时整块替换） ============ */}
       <ThemeSlot name="footer">
       <footer className="w-full bg-card py-4 text-[13px] text-lt-grey max-lg:pb-20">
-        <div className="mx-auto w-full max-w-[1140px] px-4 3xl:max-w-[1536px]">
+        <div className="mx-auto w-full max-w-[1280px] px-4">
           <InsertCode html={insertCodes.footer_start_htm} />
           <div className="flex flex-wrap items-start justify-between gap-4 max-sm:flex-col max-sm:items-center max-sm:text-center">
             <div className="min-w-0">

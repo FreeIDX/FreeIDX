@@ -420,7 +420,7 @@ export function TwoCol({
     <div className="flex flex-col gap-4 lg:flex-row">
       {left}
       <div className="min-w-0 flex-[3]">{children}</div>
-      <aside className={cx('hidden w-[260px] shrink-0 lg:block', asideSticky && 'self-start lg:sticky lg:top-4 lg:z-10')}>
+      <aside className={cx('hidden w-[285px] shrink-0 lg:block', asideSticky && 'self-start lg:sticky lg:top-4 lg:z-10')}>
         {aside}
       </aside>
     </div>
