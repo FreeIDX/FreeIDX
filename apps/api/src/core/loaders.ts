@@ -34,6 +34,8 @@ export interface ForumRow extends ForumForAccess {
   icon_url: string;
   /** 上级版块 fid，0 = 一级版块（0018_forum_parent，仅两级） */
   parent_fid: number;
+  /** 绑定内容语言（0024，空串 = 不限制；非空 = 本版块新主题强制该语言） */
+  lang: string;
 }
 
 export async function loadGrouplist(cache: Cache, db: D1b): Promise<Record<number, GroupForAccess>> {
@@ -62,6 +64,7 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
       f.icon_time = Number(f.icon_time ?? 0);
       f.icon_url = f.icon_file ? `/files/${f.icon_file}?v=${f.icon_time}` : '';
       f.parent_fid = Number(f.parent_fid ?? 0);
+      f.lang = String(f.lang ?? '');
       out[f.fid] = { ...f, accesson: Number(f.accesson), accesslist: {} };
     }
     for (const a of access.results) {

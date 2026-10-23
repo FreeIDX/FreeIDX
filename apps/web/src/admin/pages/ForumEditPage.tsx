@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES } from '@freeidx/shared';
 import { createForum, getForums, updateForum, uploadForumIcon, deleteForumIcon } from '../api';
 import type { AccessInput, ForumInput, GroupFullRow } from '../types';
 import { useAdminT } from '../t';
@@ -57,6 +58,7 @@ const EMPTY: ForumInput = {
   seo_title: '',
   seo_keywords: '',
   parent_fid: 0,
+  lang: '',
 };
 
 type Matrix = Record<number, Record<string, number>>;
@@ -99,6 +101,7 @@ export function ForumEditPage() {
       seo_title: row.seo_title,
       seo_keywords: row.seo_keywords,
       parent_fid: row.parent_fid,
+      lang: row.lang ?? '',
     });
     setIconUrl(row.icon_url);
     const seed: Matrix = {};
@@ -218,6 +221,19 @@ export function ForumEditPage() {
         </Field>
         <Field label={t('moderator', '版主')} hint={t('forum_moderator_hint', '逗号分隔的用户 ID，如 3,17；版主可在前台管理本版块')}>
           <Input value={form.moduids ?? ''} onChange={(e) => set('moduids', e.target.value)} placeholder="3,17" />
+        </Field>
+
+        {/* 内容语言绑定（0024）：空 = 不限制（发帖自动识别 + 可手动选择）；非空 = 新主题强制该语言。
+            文案复用前台已有的 content_lang_* 词条，避免为一处设置新增 10 个语言包的重复翻译。 */}
+        <Field label={t('content_lang_label')}>
+          <Select value={form.lang ?? ''} onChange={(e) => set('lang', e.target.value)}>
+            <option value="">{t('content_lang_auto')}</option>
+            {CONTENT_LANGS.map((l) => (
+              <option key={l} value={l}>
+                {CONTENT_LANG_NATIVE_NAMES[l]}
+              </option>
+            ))}
+          </Select>
         </Field>
 
         <Field label={t('user_privilege', '用户权限')}>

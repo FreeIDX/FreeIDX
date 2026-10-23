@@ -14,7 +14,7 @@
  * 全部路由挂在 adminGuard（app.use('/api/admin/*')）之后。
  */
 import { Hono } from 'hono';
-import { Code, GroupId } from '@freeidx/shared';
+import { Code, GroupId, normalizeContentLang } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import { loadForumlist, loadGrouplist } from '../../core/loaders';
@@ -91,6 +91,11 @@ function normParentFid(v: unknown): number {
   return Number.isFinite(Number(v)) ? Math.max(0, Math.trunc(Number(v))) : 0;
 }
 
+/** 归一化绑定内容语言（0024）：空串/非法值 → ''（= 不限制）；合法值收敛到 CONTENT_LANGS */
+function normForumLang(v: unknown): string {
+  return normalizeContentLang(v);
+}
+
 /** 校验上级版块：0=一级（合法）；>0 必须存在且自身为一级版块（仅支持两级） */
 async function assertValidParent(db: D1b, t: ApiT, parentFid: number): Promise<void> {
   if (parentFid === 0) return;
@@ -127,10 +132,11 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     if (!name) throw new AppError(Code.VALIDATION_ERROR, t('admin.forumNameRequired'));
     const parentFid = normParentFid(b.parent_fid);
     await assertValidParent(db, t, parentFid);
+    const lang = normForumLang(b.lang);
     const ts = now();
     const r = await db
       .prepare<{ fid: number }>(
-        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
+        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
       )
       .bind(
         name,
@@ -144,6 +150,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         String(b.seo_title ?? ''),
         String(b.seo_keywords ?? ''),
         parentFid,
+        lang,
         ts,
       )
       .first<{ fid: number }>();
@@ -174,7 +181,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     }
     await db
       .prepare(
-        'UPDATE bbs_forum SET name=?,rank=?,brief=?,announcement=?,accesson=?,orderby=?,icon=?,moduids=?,seo_title=?,seo_keywords=?,parent_fid=? WHERE fid=?',
+        'UPDATE bbs_forum SET name=?,rank=?,brief=?,announcement=?,accesson=?,orderby=?,icon=?,moduids=?,seo_title=?,seo_keywords=?,parent_fid=?,lang=? WHERE fid=?',
       )
       .bind(
         name,
@@ -188,6 +195,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         String(b.seo_title ?? ''),
         String(b.seo_keywords ?? ''),
         parentFid,
+        normForumLang(b.lang),
         fid,
       )
       .run();

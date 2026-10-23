@@ -38,11 +38,12 @@ function scalarInput(r: AdminForumRow): ForumInput {
     seo_title: r.seo_title,
     seo_keywords: r.seo_keywords,
     parent_fid: r.parent_fid,
+    lang: r.lang,
   };
 }
 
 const DIFF_KEYS: (keyof ForumInput)[] = [
-  'name', 'rank', 'brief', 'announcement', 'accesson', 'orderby', 'icon', 'moduids', 'seo_title', 'seo_keywords', 'parent_fid',
+  'name', 'rank', 'brief', 'announcement', 'accesson', 'orderby', 'icon', 'moduids', 'seo_title', 'seo_keywords', 'parent_fid', 'lang',
 ];
 
 function changed(a: AdminForumRow, b: AdminForumRow): boolean {
@@ -79,6 +80,7 @@ function BLANK_FORUM(): AdminForumRow {
     seo_title: '',
     seo_keywords: '',
     parent_fid: 0,
+    lang: '',
     accesslist: {},
   };
 }

@@ -129,7 +129,8 @@ CREATE TABLE bbs_forum (
   thread_check INTEGER NOT NULL DEFAULT 0,
   post_check INTEGER NOT NULL DEFAULT 0,
   edit_check INTEGER NOT NULL DEFAULT 0,
-  parent_fid INTEGER NOT NULL DEFAULT 0
+  parent_fid INTEGER NOT NULL DEFAULT 0,
+  lang TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE bbs_forum_access (

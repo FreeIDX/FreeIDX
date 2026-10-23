@@ -220,9 +220,13 @@ async function createThread(c: Ctx): Promise<Response> {
   const tags = normalizeTags((b as { tags?: unknown }).tags, new Set(lightCfg.tags.map((x) => x.name)));
   const imageUrls = extractImageUrls(message);
   const summary = extractSummary(message);
-  /* 内容语言（写时定稿）：显式选择优先（用户可覆盖检测结果），否则按标题+正文自动检测；
-     两者都判不出时落空串（= 不参与语言过滤，存量数据同口径）。 */
-  const lang = normalizeContentLang((b as { lang?: unknown }).lang) || detectContentLang(`${subject} ${message}`);
+  /* 内容语言（写时定稿）：版块绑定了语言（0024）则强制该语言，忽略用户选择与自动检测；
+     未绑定则显式选择优先（用户可覆盖检测结果），否则按标题+正文自动检测；
+     都判不出时落空串（= 不参与语言过滤，存量数据同口径）。 */
+  const lang =
+    String(forum.lang ?? '') ||
+    normalizeContentLang((b as { lang?: unknown }).lang) ||
+    detectContentLang(`${subject} ${message}`);
   const threadR = await core.db
     .prepare<{ tid: number }>(
       'INSERT INTO bbs_thread (fid,uid,username,avatar,userip,subject,create_date,last_date,firstpid,lastpid,lastuid,lastusername,content_buy,content_buy_type,tags,image_urls,summary,lang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING tid',

@@ -33,6 +33,10 @@ export function ComposePage() {
   // 冷加载 /new 时 forumlist 尚未就绪，useState 初值会永远停在 0 ⇒ 目标版块改为派生，用户手选才覆盖
   const [pickedFid, setPickedFid] = useState(0);
   const fid = pickedFid || Number(routeParams.fid ?? search.get('fid') ?? forumlist[0]?.fid ?? 0);
+  /* 当前选中版块（分类弹窗与触发器共用） */
+  const currentForum = forumlist.find((f) => f.fid === fid);
+  /* 版块绑定内容语言（0024）：非空时发帖语言锁定为该语言，服务端同样强制 */
+  const boundLang = (currentForum?.lang ?? '') as ContentLang | '';
   const [subject, setSubject] = useState('');
   const [err, setErr] = useState('');
   /* 收费帖设置（仅 allowsell 组渲染；content_num_status 0=否 1=是） */
@@ -63,8 +67,8 @@ export function ComposePage() {
         contentBuyType: sellType,
         turnstileToken: change.turnstileToken,
         tags: selTags,
-        // 内容语言：手动选择优先，否则使用前端预判结果（与服务端检测同源同实现）
-        lang: langSel || detected || undefined,
+        // 内容语言：版块绑定优先（服务端强制），否则手动选择，最后用前端预判结果（与服务端检测同源同实现）
+        lang: boundLang || langSel || detected || undefined,
       }),
     onSuccess: (d) => {
       void qc.invalidateQueries({ queryKey: ['threads'] });
@@ -111,8 +115,6 @@ export function ComposePage() {
 
   /* 版块下拉（沿用输入框基元尺寸，宽度自适应） */
   const selectCls = 'h-[38px] min-w-0 rounded-[4px] border border-input-line bg-card px-3 text-sm text-foreground outline-none transition-colors focus:border-brand focus:ring-3 focus:ring-[rgba(64,158,255,0.25)] disabled:cursor-not-allowed';
-  /* 当前选中版块（分类弹窗与触发器共用） */
-  const currentForum = forumlist.find((f) => f.fid === fid);
 
   return (
     <div className="flex flex-col gap-5 lg:flex-row">
@@ -201,26 +203,38 @@ export function ComposePage() {
             </div>
           )}
 
-          {/* 内容语言：默认自动识别（标题+正文，和服务端同一检测函数），可手动覆盖；
+          {/* 内容语言：版块绑定了语言（0024）则锁定为该语言（服务端同样强制）；
+              未绑定则默认自动识别（标题+正文，和服务端同一检测函数），可手动覆盖。
               仅用于语言筛选，不影响正文与界面语言。 */}
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zh-line pt-3 text-sm">
             <span className="text-ink-soft">{t('content_lang_label')}</span>
-            <select
-              className={cx(selectCls, 'h-[33px] w-auto px-2')}
-              value={langSel}
-              onChange={(e) => setLangSel(e.target.value)}
-              aria-label={t('content_lang_label')}
-            >
-              <option value="">
-                {t('content_lang_auto')}
-                {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
-              </option>
-              {CONTENT_LANGS.map((l) => (
-                <option key={l} value={l}>
-                  {CONTENT_LANG_NATIVE_NAMES[l]}
+            {boundLang ? (
+              <select
+                className={cx(selectCls, 'h-[33px] w-auto px-2')}
+                value={boundLang}
+                disabled
+                aria-label={t('content_lang_label')}
+              >
+                <option value={boundLang}>{CONTENT_LANG_NATIVE_NAMES[boundLang]}</option>
+              </select>
+            ) : (
+              <select
+                className={cx(selectCls, 'h-[33px] w-auto px-2')}
+                value={langSel}
+                onChange={(e) => setLangSel(e.target.value)}
+                aria-label={t('content_lang_label')}
+              >
+                <option value="">
+                  {t('content_lang_auto')}
+                  {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
                 </option>
-              ))}
-            </select>
+                {CONTENT_LANGS.map((l) => (
+                  <option key={l} value={l}>
+                    {CONTENT_LANG_NATIVE_NAMES[l]}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* 收费设置（仅 allowsell 组渲染；「购买 :」+ 是/否 radio，选「是」时现数字与币种） */}

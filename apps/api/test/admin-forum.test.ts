@@ -198,7 +198,8 @@ describe('二级版块（0018_forum_parent）', () => {
     expect((await jsonOf(res)).code).toBe(Code.OK);
     const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
     expect(upd?.sql).toContain('parent_fid=?');
-    expect(upd?.params?.at(-2)).toBe(5);
+    // 末位是 fid，其前是 lang（0024），故 parent_fid 在 -3
+    expect(upd?.params?.at(-3)).toBe(5);
   });
 
   it('PUT：已有子版块的版块改为子版块 → 阻止（避免三级）', async () => {
@@ -225,6 +226,52 @@ describe('二级版块（0018_forum_parent）', () => {
     const res = await app.request('/api/admin/forums/8', { method: 'DELETE', headers: writeHeaders(await token()) }, env);
     expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
     expect(calls.some((c) => /DELETE FROM bbs_forum WHERE fid = \?/.test(c.sql))).toBe(false);
+  });
+});
+
+describe('版块绑定内容语言（0024_forum_lang）', () => {
+  const envOf = (rs: SqlRule[]) => {
+    const { db, calls } = fakeD1Sql(rs);
+    return { env: { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: {} } as never, calls };
+  };
+
+  it('POST：写入 lang', async () => {
+    const { env, calls } = envOf(rules());
+    const res = await app.request(
+      '/api/admin/forums',
+      { method: 'POST', headers: writeHeaders(await token()), body: JSON.stringify({ name: '日语区', lang: 'ja' }) },
+      env,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const ins = calls.find((c) => /INSERT INTO bbs_forum \(name/.test(c.sql));
+    expect(ins?.sql).toContain('lang');
+    expect(ins?.params).toContain('ja');
+  });
+
+  it('PUT：写 lang，且乱序/大写值归一化为合法内容语言', async () => {
+    const { env, calls } = envOf(rules());
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ name: '综合区', lang: 'JA-jp' }) },
+      env,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    expect(upd?.sql).toContain('lang=?');
+    // 末位是 fid，lang 在它前一位
+    expect(upd?.params?.at(-2)).toBe('ja');
+  });
+
+  it('PUT：非法 / 空 lang → 落空串（= 不限制）', async () => {
+    const { env, calls } = envOf(rules());
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ name: '综合区', lang: 'xx-unknown' }) },
+      env,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    expect(upd?.params?.at(-2)).toBe('');
   });
 });
 

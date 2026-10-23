@@ -47,6 +47,8 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         seoKeywords: f.seo_keywords,
         /* 二级版块：上级版块 fid，0 = 一级版块（前端据此归并二级导航） */
         parentFid: f.parent_fid,
+        /* 绑定内容语言（0024）：非空时发帖页锁定语言选择，服务端强制该语言 */
+        lang: f.lang,
       }));
     const groups = Object.values(grouplist).map((g) => ({
       gid: g.gid,
