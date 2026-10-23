@@ -1056,6 +1056,8 @@ export type AdminKey =
   | 'forum_brief'
   | 'forum_brief_hint'
   | 'forum_cant_delete_system_reserved'
+  | 'forum_content_lang_hint'
+  | 'forum_content_lang_inherit'
   | 'forum_create_success'
   | 'forum_delete'
   | 'forum_edit'

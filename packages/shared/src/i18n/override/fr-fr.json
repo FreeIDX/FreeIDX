@@ -845,6 +845,8 @@
   "ext_value": "Valeur",
   "forum_announcement_hint": "Barre d'annonce épinglée en entrant dans ce forum",
   "forum_brief_hint": "Une ligne sous le titre de la page du forum en frontend",
+  "forum_content_lang_hint": "Vide sur un forum de premier niveau signifie aucune restriction (détection automatique à la publication) ; vide sur un sous-forum signifie héritage du forum parent ; une langue choisie est imposée aux nouveaux sujets de ce forum",
+  "forum_content_lang_inherit": "Hériter du forum parent",
   "forum_create_success": "Créé avec succès",
   "forum_icon_alt": "Icône du forum",
   "forum_icon_default": "Image par défaut intégrée",

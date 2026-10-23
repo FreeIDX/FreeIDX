@@ -845,6 +845,8 @@
   "ext_value": "Wert",
   "forum_announcement_hint": "Angepinnte Ankündigungsleiste beim Betreten dieses Forums",
   "forum_brief_hint": "Eine Zeile unter dem Forum-Seitentitel im Frontend",
+  "forum_content_lang_hint": "Leer bei einem Hauptforum bedeutet keine Einschränkung (automatische Erkennung beim Veröffentlichen); leer bei einem Unterforum bedeutet Vererbung vom übergeordneten Forum; eine gewählte Sprache wird für neue Themen in diesem Forum erzwungen",
+  "forum_content_lang_inherit": "Vom übergeordneten Forum erben",
   "forum_create_success": "Erfolgreich erstellt",
   "forum_icon_alt": "Forum-Icon",
   "forum_icon_default": "Eingebautes Standardbild",

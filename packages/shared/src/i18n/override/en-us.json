@@ -845,6 +845,8 @@
   "ext_value": "Value",
   "forum_announcement_hint": "Pinned announcement bar when entering this forum",
   "forum_brief_hint": "One line below the forum page title on frontend",
+  "forum_content_lang_hint": "Empty on a top-level forum means no restriction (auto-detect when posting); empty on a sub-forum means inherit from its parent; picking a language forces new threads in this forum to use it",
+  "forum_content_lang_inherit": "Inherit from parent forum",
   "forum_create_success": "Created successfully",
   "forum_icon_alt": "Forum icon",
   "forum_icon_default": "Built-in default image",

@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES } from '@freeidx/shared';
+import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES, type ContentLang } from '@freeidx/shared';
 import { createForum, getForums, updateForum, uploadForumIcon, deleteForumIcon } from '../api';
 import type { AccessInput, ForumInput, GroupFullRow } from '../types';
 import { useAdminT } from '../t';
@@ -158,6 +158,9 @@ export function ForumEditPage() {
   /** 二级版块：本版块已有子版块 → 锁定父选择（保持一级，避免三级）；父候选 = 一级版块（排除自身） */
   const hasChildren = routeFid > 0 && (q.data?.forums ?? []).some((f) => f.parent_fid === routeFid);
   const parentOptions = (q.data?.forums ?? []).filter((f) => f.parent_fid === 0 && f.fid !== routeFid);
+  /** 父版块（仅两级）：子版块留空 = 继承父版块语言，故空选项文案随父版块是否已绑定而变化 */
+  const parentForum = (q.data?.forums ?? []).find((f) => f.fid === (form?.parent_fid ?? 0));
+  const parentLangName = parentForum?.lang ? CONTENT_LANG_NATIVE_NAMES[parentForum.lang as ContentLang] : '';
 
   const submit = useAdminAction(
     async () => {
@@ -248,11 +251,14 @@ export function ForumEditPage() {
             <option value="1">{t('forum_orderby_create', '按发帖时间')}</option>
           </Select>
         </Field>
-        {/* 内容语言绑定（0024）：空 = 不限制（发帖自动识别 + 可手动选择）；非空 = 新主题强制该语言。
-            文案复用前台已有的 content_lang_* 词条，避免为一处设置新增 10 个语言包的重复翻译。 */}
-        <Field label={t('content_lang_label')}>
+        {/* 内容语言绑定（0024）：留空 = 顶级版块不限制 / 子版块继承父版块；非空 = 本版块新主题强制该语言 */}
+        <Field label={t('content_lang_label')} hint={t('forum_content_lang_hint')}>
           <Select value={form.lang ?? ''} onChange={(e) => set('lang', e.target.value)}>
-            <option value="">{t('content_lang_auto')}</option>
+            <option value="">
+              {form.parent_fid
+                ? `${t('forum_content_lang_inherit')}${parentLangName ? ` · ${parentLangName}` : ''}`
+                : t('content_lang_auto')}
+            </option>
             {CONTENT_LANGS.map((l) => (
               <option key={l} value={l}>
                 {CONTENT_LANG_NATIVE_NAMES[l]}

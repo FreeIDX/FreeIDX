@@ -846,6 +846,8 @@
   "ext_value": "値",
   "forum_announcement_hint": "このフォーラムに入った時のピン留めお知らせバー",
   "forum_brief_hint": "フロントのフォーラムページタイトル下の1行",
+  "forum_content_lang_hint": "最上位フォーラムで空欄なら制限なし（投稿時に自動判定）、子フォーラムで空欄なら親フォーラムを継承します。言語を選ぶと、このフォーラムの新しいスレッドはその言語に固定されます",
+  "forum_content_lang_inherit": "親フォーラムを継承",
   "forum_create_success": "作成に成功しました",
   "forum_icon_alt": "フォーラムアイコン",
   "forum_icon_default": "組み込みデフォルト画像",

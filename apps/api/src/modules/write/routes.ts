@@ -22,7 +22,7 @@ import {
   forumAccessUser,
   type AccessCtx,
 } from '../../core/access';
-import { loadForumlist, loadGrouplist, loadSetting, loadViewer, reqIp, makeAccessCtx } from '../../core/loaders';
+import { forumLangOf, loadForumlist, loadGrouplist, loadSetting, loadViewer, reqIp, makeAccessCtx } from '../../core/loaders';
 import { CheckStatus, canSeeUnapproved, checkOrNot, hasSeeCheck, shouldBlockUnapproved } from '../../core/check';
 import { attachKeysByPid, attachKeysByTid, postPurgeStmts, purgeR2Objects, threadPurgeStmts } from '../../core/purge';
 import { ipToLong } from '../../core/auth/session';
@@ -220,11 +220,11 @@ async function createThread(c: Ctx): Promise<Response> {
   const tags = normalizeTags((b as { tags?: unknown }).tags, new Set(lightCfg.tags.map((x) => x.name)));
   const imageUrls = extractImageUrls(message);
   const summary = extractSummary(message);
-  /* 内容语言（写时定稿）：版块绑定了语言（0024）则强制该语言，忽略用户选择与自动检测；
-     未绑定则显式选择优先（用户可覆盖检测结果），否则按标题+正文自动检测；
+  /* 内容语言（写时定稿）：版块有效语言（自身绑定，或继承父版块；0024）非空则强制该语言，
+     忽略用户选择与自动检测；否则显式选择优先（用户可覆盖检测结果），再否则按标题+正文自动检测；
      都判不出时落空串（= 不参与语言过滤，存量数据同口径）。 */
   const lang =
-    String(forum.lang ?? '') ||
+    forumLangOf(ctx.forumlist, fid) ||
     normalizeContentLang((b as { lang?: unknown }).lang) ||
     detectContentLang(`${subject} ${message}`);
   const threadR = await core.db

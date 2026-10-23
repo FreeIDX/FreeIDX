@@ -195,6 +195,18 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(d.forumlist[0]!.lang).toBe('ja');
   });
 
+  it('GET /api/bootstrap：子版块未绑定时继承父版块语言（0024 继承）', async () => {
+    const rules = baseRules({
+      forum: [{ ...FORUM_OPEN, lang: 'ja' }, { ...FORUM_OPEN, fid: 2, name: '子版块', parent_fid: 1, lang: '' }],
+    });
+    const { env } = envFor(rules);
+    const body = await json(await app.request('/api/bootstrap', {}, env as never));
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { forumlist: { fid: number; lang?: string }[] };
+    expect(d.forumlist.find((f) => f.fid === 1)?.lang).toBe('ja');
+    expect(d.forumlist.find((f) => f.fid === 2)?.lang).toBe('ja');
+  });
+
   it('GET /api/users/1 + /threads：公开列零敏感字段、我的主题走权限过滤', async () => {
     const { env } = envFor(baseRules());
     const body = await json(await app.request('/api/users/1', {}, env as never));

@@ -91,7 +91,7 @@ function normParentFid(v: unknown): number {
   return Number.isFinite(Number(v)) ? Math.max(0, Math.trunc(Number(v))) : 0;
 }
 
-/** 归一化绑定内容语言（0024）：空串/非法值 → ''（= 不限制）；合法值收敛到 CONTENT_LANGS */
+/** 归一化绑定内容语言（0024）：空串/非法值 → ''（= 未绑定：顶级不限制、子版块继承父版块）；合法值收敛到 CONTENT_LANGS */
 function normForumLang(v: unknown): string {
   return normalizeContentLang(v);
 }

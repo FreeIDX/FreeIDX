@@ -35,7 +35,7 @@ export function ComposePage() {
   const fid = pickedFid || Number(routeParams.fid ?? search.get('fid') ?? forumlist[0]?.fid ?? 0);
   /* 当前选中版块（分类弹窗与触发器共用） */
   const currentForum = forumlist.find((f) => f.fid === fid);
-  /* 版块绑定内容语言（0024）：非空时发帖语言锁定为该语言，服务端同样强制 */
+  /* 版块生效内容语言（0024，自身绑定或继承父版块）：非空时发帖语言锁定为该语言，服务端同样强制 */
   const boundLang = (currentForum?.lang ?? '') as ContentLang | '';
   const [subject, setSubject] = useState('');
   const [err, setErr] = useState('');

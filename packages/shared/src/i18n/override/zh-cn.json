@@ -838,6 +838,8 @@
   "ext_value": "值",
   "forum_announcement_hint": "进入本版块的置顶公告条",
   "forum_brief_hint": "前台版块页标题下方一行",
+  "forum_content_lang_hint": "顶级版块留空 = 不限制（发帖自动识别）；子版块留空 = 继承父版块；选择具体语言则本版块新主题强制使用该语言",
+  "forum_content_lang_inherit": "继承父版块",
   "forum_create_success": "创建成功",
   "forum_icon_alt": "版块图标",
   "forum_icon_default": "内置默认图",

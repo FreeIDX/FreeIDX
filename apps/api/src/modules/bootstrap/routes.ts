@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
 import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
-import { loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
+import { forumLangOf, loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
 import { remember } from '../../core/cache';
 import { getEmailProvider } from '../../core/email';
 import { getExtensions } from '../../core/extensions';
@@ -47,8 +47,8 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         seoKeywords: f.seo_keywords,
         /* 二级版块：上级版块 fid，0 = 一级版块（前端据此归并二级导航） */
         parentFid: f.parent_fid,
-        /* 绑定内容语言（0024）：非空时发帖页锁定语言选择，服务端强制该语言 */
-        lang: f.lang,
+        /* 生效内容语言（0024，已含父版块继承）：非空时发帖页锁定语言选择，服务端强制该语言 */
+        lang: forumLangOf(forumlist, f.fid),
       }));
     const groups = Object.values(grouplist).map((g) => ({
       gid: g.gid,

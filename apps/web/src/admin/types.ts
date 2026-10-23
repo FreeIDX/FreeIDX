@@ -43,7 +43,7 @@ export interface AdminForumRow {
   seo_keywords: string;
   /** 上级版块 fid，0 = 一级版块（0018_forum_parent，仅两级） */
   parent_fid: number;
-  /** 绑定内容语言（0024）：空串 = 不限制；非空 = 本版块新主题强制该语言 */
+  /** 绑定内容语言原始值（0024）：空串 = 未绑定（子版块继承父版块，顶级版块不限制）；非空 = 本版块新主题强制该语言 */
   lang: string;
   accesslist: Record<string, ForumAccessRow>;
 }
@@ -91,7 +91,7 @@ export interface ForumInput {
   seo_keywords?: string;
   /** 上级版块 fid：0/缺省 = 一级版块；>0 挂到该一级版块下（仅两级） */
   parent_fid?: number;
-  /** 绑定内容语言（0024）：''/缺省 = 不限制；非空 = 本版块新主题强制该语言 */
+  /** 绑定内容语言原始值（0024）：''/缺省 = 未绑定（子版块继承父版块，顶级版块不限制）；非空 = 本版块新主题强制该语言 */
   lang?: string;
   /** 仅在此键存在时整体替换权限矩阵；提交标量字段时不要带上，否则矩阵被清空 */
   access?: AccessInput[];
