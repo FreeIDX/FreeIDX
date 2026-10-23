@@ -7,9 +7,9 @@
  *  - 财务/审计数据（积分流水、订单、购买记录、版务日志）不提供清理入口，避免不可逆的账目丢失。
  */
 import { useState } from 'react';
-import type { AdminKey } from '@freeidx/shared';
-import { backfillMaintContentLang, getMaintOverview, runMaintCronJob, runMaintDbTask } from '../api';
-import type { MaintDbRunResult, MaintOverview } from '../types';
+import { CONTENT_LANG_NATIVE_NAMES, type AdminKey, type ContentLang } from '@freeidx/shared';
+import { backfillMaintContentLang, getMaintLangStats, getMaintOverview, runMaintCronJob, runMaintDbTask } from '../api';
+import type { MaintDbRunResult, MaintLangStats, MaintOverview } from '../types';
 import { useAdminT } from '../t';
 import { apiErrorMessage } from '../../lib/errors';
 import { Icon } from '../../components/icons';
@@ -35,6 +35,8 @@ export function DbMaintenancePage() {
   const [lastRun, setLastRun] = useState<Record<string, MaintDbRunResult>>({});
   /** 内容语言回填：最近一次剩余量（null = 本次会话尚未跑过） */
   const [langRemaining, setLangRemaining] = useState<number | null>(null);
+  /** 内容语言分布：按需统计（全表聚合，不自动加载） */
+  const [langStats, setLangStats] = useState<MaintLangStats | null>(null);
 
   const taskLabel = (id: string): string => t(('admin_maint_task_' + id) as AdminKey, id);
   const riskLabel = (risk: 1 | 2): string =>
@@ -127,6 +129,19 @@ export function DbMaintenancePage() {
     }
   };
 
+  /* 语言分布：全表聚合，服务端缓存 10 分钟；「刷新」强制重算 */
+  const doLangStats = async (refresh: boolean): Promise<void> => {
+    setBusy('langStats');
+    setFlash(null);
+    try {
+      setLangStats(await getMaintLangStats(refresh));
+    } catch (e) {
+      setFlash({ tone: 'warn', text: apiErrorMessage(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const rows = overview?.tasks ?? [];
 
   return (
@@ -203,6 +218,62 @@ export function DbMaintenancePage() {
           <p className="px-4 py-6 text-center text-sm text-muted">
             {t('admin_maint_probe_empty', '点击「开始体检」扫描一次。体检是全表扫描，结果缓存 1 小时。')}
           </p>
+        )}
+      </Card>
+
+      {/* 内容语言分布：按需全表聚合（服务端缓存 10 分钟），用于判断是否值得进入分区模式 */}
+      <Card
+        title={t('admin_maint_lang_stats_title', '内容语言分布')}
+        tools={
+          /* 首次点击可命中 10 分钟内缓存；已有结果时再点视为强制重算 */
+          <Button
+            size="sm"
+            variant="default"
+            loading={busy === 'langStats'}
+            onClick={() => void doLangStats(langStats !== null)}
+          >
+            <Icon name="refresh" />
+            {t('admin_maint_lang_stats_run', '统计')}
+          </Button>
+        }
+        noPadding
+      >
+        <p className="px-4 py-3 text-sm text-muted">{t('admin_maint_lang_stats_help', '按内容语言统计主题总数与近 30 天新增，用于判断是否值得开启语言分区。统计是全表聚合，结果缓存 10 分钟，按需点击即可。')}</p>
+        {langStats ? (
+          <Table
+            head={[
+              t('admin_maint_lang_stats_col_lang', '语言'),
+              t('admin_maint_lang_stats_col_total', '主题数'),
+              t('admin_maint_lang_stats_col_recent', '近 30 天'),
+              t('admin_maint_lang_stats_col_share', '占比'),
+            ]}
+            headCls={['', 'w-[120px] text-center', 'w-[120px] text-center', 'w-[100px] text-center']}
+            minWidth="min-w-[560px]"
+          >
+            {langStats.rows.map((r) => (
+              <tr key={r.lang || 'unknown'} className="border-b border-line-soft">
+                <td className="py-2">
+                  {r.lang
+                    ? (CONTENT_LANG_NATIVE_NAMES[r.lang as ContentLang] ?? r.lang)
+                    : t('admin_maint_lang_stats_unknown', '未标注')}
+                </td>
+                <td className="py-2 text-center tabular-nums">{r.total}</td>
+                <td className="py-2 text-center tabular-nums">{r.recent}</td>
+                <td className="py-2 text-center tabular-nums">
+                  {langStats.total ? ((r.total / langStats.total) * 100).toFixed(1) : '0.0'}%
+                </td>
+              </tr>
+            ))}
+            {!langStats.rows.length && (
+              <tr>
+                <td colSpan={4} className="py-6 text-center text-sm text-muted">
+                  {t('admin_maint_lang_stats_idle', '暂无主题数据')}
+                </td>
+              </tr>
+            )}
+          </Table>
+        ) : (
+          <p className="px-4 pb-4 text-sm text-muted">{t('admin_maint_lang_stats_idle', '暂无主题数据')}</p>
         )}
       </Card>
 

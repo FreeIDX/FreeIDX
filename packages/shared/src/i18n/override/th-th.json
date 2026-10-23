@@ -519,6 +519,15 @@
   "points_log_label": "ประวัติเครดิต"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "ภาษา",
+  "admin_maint_lang_stats_col_recent": "30 วันล่าสุด",
+  "admin_maint_lang_stats_col_share": "สัดส่วน",
+  "admin_maint_lang_stats_col_total": "กระทู้",
+  "admin_maint_lang_stats_help": "นับกระทู้ตามภาษาของเนื้อหา พร้อมจำนวนใหม่ใน 30 วันล่าสุด เพื่อตัดสินใจว่าควรเปิดการแยกภาษาหรือไม่ การรวมข้อมูลจะสแกนทั้งตารางและแคช 10 นาที ควรกดเมื่อจำเป็น",
+  "admin_maint_lang_stats_idle": "ยังไม่มีข้อมูลกระทู้",
+  "admin_maint_lang_stats_run": "นับ",
+  "admin_maint_lang_stats_title": "การกระจายภาษาของเนื้อหา",
+  "admin_maint_lang_stats_unknown": "ไม่ระบุ",
   "admin_maint_lang_all_done": "เติมข้อมูลกระทู้เดิมครบแล้ว ตอนนี้สามารถเปิดการกรองได้ที่ «ตั้งค่าพื้นฐาน → การแบ่งภาษาของเนื้อหา»",
   "admin_maint_lang_done": "รอบนี้เติมแล้ว {n} รายการ เหลือ {left}",
   "admin_maint_lang_help": "เติมภาษาของเนื้อหาสำหรับกระทู้เดิมจากหัวข้อและโพสต์แรก (ใช้อัลกอริทึมเดียวกับตอนโพสต์) ทำทีละชุด กดซ้ำจนเหลือ 0 โพสต์ใหม่จะถูกกำหนดตอนสร้างจึงไม่ต้องเติม",

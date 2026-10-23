@@ -41,6 +41,10 @@ const PROBE_CAP = 500;
 const OVERVIEW_TTL = 3600;
 /** 内容语言回填单批条数：20 条 = 3 次 D1 查询（JOIN 取文本 + CASE 批量更新 + COUNT 剩余） */
 const LANG_BACKFILL_BATCH = 20;
+/** 语言分布统计缓存时长（秒）：聚合是全表扫描，页面默认不自动跑，按需点击且复用缓存 */
+const LANG_STATS_TTL = 600;
+/** 语言分布统计的「近期」窗口（天） */
+const LANG_STATS_RECENT_DAYS = 30;
 
 /**
  * 孤儿删除任务表。risk 1 = 社交/倒排类（无 R2 副作用）；risk 2 = 附件（需先删对象）。
@@ -481,6 +485,40 @@ export function adminMaintenanceRoutes(): Hono<ReadEnv> {
       .prepare<{ c: number }>("SELECT COUNT(*) AS c FROM bbs_thread WHERE lang = ''")
       .first<{ c: number }>();
     return ok(c, 'ok', { data: { remaining: Number(row?.c ?? 0) } });
+  });
+
+  /**
+   * 语言分布统计：一条聚合查询同时拿到「总量」与「近 30 天新增」。
+   * 全表扫描（rows_read ≈ 主题数），故默认走缓存、仅 refresh=1 或首次点击时真查；
+   * 返回按总量降序，lang='' 同时返回（前端显示为「未标注」，用于判断回填进度）。
+   */
+  app.get('/api/admin/maintenance/content-lang/stats', async (c) => {
+    const { db, cache } = core(c);
+    const refresh = intParam(c.req.query('refresh')) === 1;
+    const key = 'maint:content_lang:stats';
+
+    if (!refresh) {
+      const hit = await cache.get<Record<string, unknown>>(key);
+      if (hit) return ok(c, 'ok', { data: { ...hit, cached: true } });
+    }
+
+    const since = now() - LANG_STATS_RECENT_DAYS * DAY;
+    const rows = await db
+      .prepare<{ lang: string; total: number; recent: number }>(
+        `SELECT lang, COUNT(*) AS total, SUM(CASE WHEN create_date >= ? THEN 1 ELSE 0 END) AS recent
+         FROM bbs_thread GROUP BY lang ORDER BY total DESC, lang ASC`,
+      )
+      .bind(since)
+      .all();
+    const list = rows.results.map((r) => ({
+      lang: String(r.lang ?? ''),
+      total: Number(r.total ?? 0),
+      recent: Number(r.recent ?? 0),
+    }));
+    const total = list.reduce((n, r) => n + r.total, 0);
+    const data = { rows: list, total, since, recentDays: LANG_STATS_RECENT_DAYS, generated: now(), cached: false };
+    await cache.set(key, data, LANG_STATS_TTL);
+    return ok(c, 'ok', { data: { ...data, budget: budgetOf(db) } });
   });
 
   app.post('/api/admin/maintenance/content-lang/backfill', async (c) => {

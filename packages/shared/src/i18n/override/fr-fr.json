@@ -519,6 +519,15 @@
   "points_log_label": "Journal des crédits"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "Langue",
+  "admin_maint_lang_stats_col_recent": "30 derniers jours",
+  "admin_maint_lang_stats_col_share": "Part",
+  "admin_maint_lang_stats_col_total": "Sujets",
+  "admin_maint_lang_stats_help": "Compte les sujets par langue du contenu et les nouveautés des 30 derniers jours pour décider s’il faut activer la séparation par langue. L’agrégation parcourt toute la table et est mise en cache 10 minutes ; à lancer à la demande.",
+  "admin_maint_lang_stats_idle": "Aucune donnée de sujet pour l’instant",
+  "admin_maint_lang_stats_run": "Compter",
+  "admin_maint_lang_stats_title": "Répartition des langues du contenu",
+  "admin_maint_lang_stats_unknown": "Non renseigné",
   "admin_maint_lang_all_done": "Tous les sujets existants sont renseignés. Vous pouvez maintenant activer le filtrage dans « Réglages de base → Langues du contenu ».",
   "admin_maint_lang_done": "{n} renseignés ce cycle, {left} restants",
   "admin_maint_lang_help": "Renseigne la langue du contenu des sujets existants à partir du titre et du premier message (même détecteur qu’à la publication). Exécution par petits lots ; cliquez jusqu’à ce qu’il n’en reste plus. Les nouveaux sujets sont classés à la création et n’ont pas besoin d’être renseignés.",

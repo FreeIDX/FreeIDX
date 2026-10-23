@@ -519,6 +519,15 @@
   "points_log_label": "積分流水"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "語言",
+  "admin_maint_lang_stats_col_recent": "近 30 天",
+  "admin_maint_lang_stats_col_share": "佔比",
+  "admin_maint_lang_stats_col_total": "主題數",
+  "admin_maint_lang_stats_help": "按內容語言統計主題總數與近 30 天新增，用於判斷是否值得開啟語言分區。統計是全表聚合，結果快取 10 分鐘，按需點擊即可。",
+  "admin_maint_lang_stats_idle": "暫無主題資料",
+  "admin_maint_lang_stats_run": "統計",
+  "admin_maint_lang_stats_title": "內容語言分佈",
+  "admin_maint_lang_stats_unknown": "未標註",
   "admin_maint_lang_all_done": "存量主題已全部回填完成。現在可以到「基本設定 → 內容語言分區」開啟過濾。",
   "admin_maint_lang_done": "本輪已回填 {n} 條，剩餘 {left} 條",
   "admin_maint_lang_help": "為存量主題按「標題 + 首帖正文」補算內容語言（與發帖時同一檢測函式）。分小批執行，可重複點擊直到剩餘為 0。新帖發帖時已自動定稿，無需回填。",

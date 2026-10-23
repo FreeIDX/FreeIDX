@@ -519,6 +519,15 @@
   "points_log_label": "Credits log"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "Language",
+  "admin_maint_lang_stats_col_recent": "Last 30 days",
+  "admin_maint_lang_stats_col_share": "Share",
+  "admin_maint_lang_stats_col_total": "Topics",
+  "admin_maint_lang_stats_help": "Counts topics by content language with new topics in the last 30 days, to decide whether language sections are worth enabling. The aggregation scans the whole table and is cached for 10 minutes; run it on demand.",
+  "admin_maint_lang_stats_idle": "No topic data yet",
+  "admin_maint_lang_stats_run": "Count",
+  "admin_maint_lang_stats_title": "Content language distribution",
+  "admin_maint_lang_stats_unknown": "Untagged",
   "admin_maint_lang_all_done": "All existing topics are backfilled. You can now enable filtering in Basic settings → Content languages.",
   "admin_maint_lang_done": "Backfilled {n} this round, {left} remaining",
   "admin_maint_lang_help": "Backfill the content language of existing topics from the title and the first post (same detector as when posting). Runs in small batches; click repeatedly until no topics remain. New posts are classified at creation and need no backfill.",

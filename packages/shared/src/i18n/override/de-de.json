@@ -519,6 +519,15 @@
   "points_log_label": "Punkte-Verlauf"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "Sprache",
+  "admin_maint_lang_stats_col_recent": "Letzte 30 Tage",
+  "admin_maint_lang_stats_col_share": "Anteil",
+  "admin_maint_lang_stats_col_total": "Themen",
+  "admin_maint_lang_stats_help": "Zählt Themen nach Inhaltssprache inklusive Neuzugängen der letzten 30 Tage, um zu entscheiden, ob Sprachbereiche sinnvoll sind. Die Aggregation scannt die ganze Tabelle und wird 10 Minuten gecacht; bei Bedarf ausführen.",
+  "admin_maint_lang_stats_idle": "Noch keine Themendaten",
+  "admin_maint_lang_stats_run": "Zählen",
+  "admin_maint_lang_stats_title": "Verteilung der Inhaltssprachen",
+  "admin_maint_lang_stats_unknown": "Ohne Angabe",
   "admin_maint_lang_all_done": "Alle bestehenden Themen sind nachgetragen. Die Filterung kann jetzt unter „Grundeinstellungen → Inhaltssprachen“ aktiviert werden.",
   "admin_maint_lang_done": "In dieser Runde {n} nachgetragen, {left} verbleibend",
   "admin_maint_lang_help": "Trägt die Inhaltssprache bestehender Themen anhand von Titel und erstem Beitrag nach (gleicher Erkenner wie beim Veröffentlichen). Läuft in kleinen Stapeln; klicken, bis nichts mehr übrig ist. Neue Beiträge werden beim Erstellen erkannt und müssen nicht nachgetragen werden.",

@@ -519,6 +519,15 @@
   "points_log_label": "포인트 내역"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "언어",
+  "admin_maint_lang_stats_col_recent": "최근 30일",
+  "admin_maint_lang_stats_col_share": "비율",
+  "admin_maint_lang_stats_col_total": "주제 수",
+  "admin_maint_lang_stats_help": "콘텐츠 언어별 주제 수와 최근 30일 신규 수를 집계해 언어 구획을 켤 가치가 있는지 판단합니다. 전체 테이블 집계이며 결과는 10분간 캐시됩니다. 필요할 때 실행하세요.",
+  "admin_maint_lang_stats_idle": "주제 데이터가 없습니다",
+  "admin_maint_lang_stats_run": "집계",
+  "admin_maint_lang_stats_title": "콘텐츠 언어 분포",
+  "admin_maint_lang_stats_unknown": "미지정",
   "admin_maint_lang_all_done": "기존 주제 보완이 완료되었습니다. 이제 «기본 설정 → 콘텐츠 언어»에서 필터를 켤 수 있습니다.",
   "admin_maint_lang_done": "이번에 {n}개 보완, {left}개 남음",
   "admin_maint_lang_help": "기존 주제의 콘텐츠 언어를 제목과 첫 게시물로 보완합니다(게시 시와 동일한 판별 함수). 소량 배치로 실행되며 남은 수가 0이 될 때까지 반복해서 클릭하세요. 새 게시물은 작성 시 확정되므로 보완이 필요 없습니다.",

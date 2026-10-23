@@ -325,6 +325,24 @@ export interface MaintCronResult {
   budget?: MaintBudget;
 }
 
+/** 内容语言分布：单行（lang 空串 = 未标注） */
+export interface MaintLangStatRow {
+  lang: string;
+  total: number;
+  recent: number;
+}
+
+/** 内容语言分布：全表聚合结果（服务端缓存 10 分钟） */
+export interface MaintLangStats {
+  rows: MaintLangStatRow[];
+  total: number;
+  since: number;
+  recentDays: number;
+  generated: number;
+  cached: boolean;
+  budget?: MaintBudget;
+}
+
 /** 内容语言回填：单批结果（前端循环推进直到 done） */
 export interface MaintLangBackfillResult {
   scanned: number;

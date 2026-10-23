@@ -34,6 +34,7 @@ import type {
   MaintCronResult,
   MaintDbRunResult,
   MaintLangBackfillResult,
+  MaintLangStats,
   MaintOverview,
   MaintR2State,
   MaintR2Status,
@@ -214,6 +215,9 @@ export const runMaintCronJob = (job: string) => apiSend<MaintCronResult>('POST',
 /** 存量主题内容语言回填（单批 ≤50 条，前端循环推进直到 done） */
 export const backfillMaintContentLang = (limit = 20) =>
   apiSend<MaintLangBackfillResult>('POST', '/api/admin/maintenance/content-lang/backfill', { limit });
+/** 内容语言分布（全表聚合，服务端缓存 10 分钟；refresh=1 强制重算） */
+export const getMaintLangStats = (refresh = false) =>
+  apiGet<MaintLangStats>(`/api/admin/maintenance/content-lang/stats${refresh ? '?refresh=1' : ''}`);
 
 export const getMaintR2Status = () => apiGet<MaintR2Status>('/api/admin/maintenance/r2/status');
 /** 开始/重置某前缀的任务；mode='delete' 必须带 confirm 且已有完成的扫描报告 */

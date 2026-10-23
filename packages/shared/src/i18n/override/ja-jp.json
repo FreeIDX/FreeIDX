@@ -520,6 +520,15 @@
   "top": "ピン留め"
  },
  "admin": {
+  "admin_maint_lang_stats_col_lang": "言語",
+  "admin_maint_lang_stats_col_recent": "直近 30 日",
+  "admin_maint_lang_stats_col_share": "割合",
+  "admin_maint_lang_stats_col_total": "トピック数",
+  "admin_maint_lang_stats_help": "コンテンツ言語ごとのトピック数と直近 30 日の新規数を集計し、言語分区を有効にする価値があるか判断します。全表集計のため結果は 10 分キャッシュされます。必要時に実行してください。",
+  "admin_maint_lang_stats_idle": "トピックデータがありません",
+  "admin_maint_lang_stats_run": "集計",
+  "admin_maint_lang_stats_title": "コンテンツ言語の分布",
+  "admin_maint_lang_stats_unknown": "未設定",
   "admin_maint_lang_all_done": "既存トピックの補完が完了しました。「基本設定 → コンテンツ言語」で絞り込みを有効にできます。",
   "admin_maint_lang_done": "今回 {n} 件補完、残り {left} 件",
   "admin_maint_lang_help": "既存トピックのコンテンツ言語を「タイトル + 最初の投稿」から補完します（投稿時と同じ判定関数）。小分けに実行されるため、残りが 0 になるまで繰り返しクリックしてください。新規投稿は作成時に確定するため補完不要です。",
