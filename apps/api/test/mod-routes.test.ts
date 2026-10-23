@@ -196,6 +196,16 @@ describe('版务批量接口（T3-1 DoD）', () => {
     expect(modlogActions(r)).toEqual(['move']);
   });
 
+  it('move：移入绑定版块 → 主题语言对齐（0024 强一致）', async () => {
+    const rules = baseRules();
+    rules.find((x) => /FROM bbs_forum ORDER BY/.test(x.test.source))!.rows = [FORUM1, { ...FORUM2, lang: 'ja' }];
+    const r = makeEnv(rules);
+    const body = await jsonOf(await post(r, { tids: [9], action: 'move', value: 2 }));
+    expect(body.code).toBe(Code.OK);
+    const upd = r.calls.find((c) => /UPDATE bbs_thread SET lang = \?/.test(c.sql));
+    expect(upd?.params).toEqual(['ja', 9]);
+  });
+
   it('move：目标版块不存在 → NOT_FOUND', async () => {
     const r = makeEnv(baseRules());
     expect((await jsonOf(await post(r, { tids: [9], action: 'move', value: 99 }))).code).toBe(Code.NOT_FOUND);

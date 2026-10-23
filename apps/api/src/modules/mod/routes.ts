@@ -14,7 +14,7 @@ import { Code, GroupId, type ModThreadsReq } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { Stmt } from '../../core/db';
 import { forumAccessMod } from '../../core/access';
-import { loadForumlist, loadGrouplist, loadSetting, loadViewer, makeAccessCtx, type ForumRow } from '../../core/loaders';
+import { forumLangOf, loadForumlist, loadGrouplist, loadSetting, loadViewer, makeAccessCtx, type ForumRow } from '../../core/loaders';
 import { CheckStatus, hasSeeCheck } from '../../core/check';
 import { attachKeysByTid, attachKeysForUserPurge, purgeR2Objects, threadPurgeStmts, userPurgeStmts } from '../../core/purge';
 import { getExtensions } from '../../core/extensions';
@@ -138,6 +138,10 @@ export function modRoutes(): Hono<ReadEnv> {
       throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
     }
 
+    /* 移动目标版块的生效语言（含父版块继承）：与发帖强制 / 前台编辑首帖 / 后台编辑主题同一口径；
+       整批同目标，循环外算一次 */
+    const moveLang = action === 'move' ? forumLangOf(forumlist, newFid) : '';
+
     for (const thread of threads.results) {
       const tid = Number(thread.tid);
       const fid = Number(thread.fid);
@@ -219,6 +223,10 @@ export function modRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_forum SET threads = threads - 1 WHERE fid = ?').bind(fid) as unknown as Stmt,
           db.prepare('UPDATE bbs_thread_top SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt,
         );
+        /* 移入绑定版块：主题语言对齐到绑定值（移出保持原值，不反向猜测） */
+        if (moveLang) {
+          stmts.push(db.prepare('UPDATE bbs_thread SET lang = ? WHERE tid = ?').bind(moveLang, tid) as unknown as Stmt);
+        }
         touchedForumlist = true;
 
         modlogs.push(logRow(v.uid, thread, 'move', ts));

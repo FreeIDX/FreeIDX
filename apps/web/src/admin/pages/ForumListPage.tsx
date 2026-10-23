@@ -182,10 +182,13 @@ export function ForumListPage() {
   const parentOptions = (self: AdminForumRow) => rows.filter((f) => isTop(f) && f.fid !== self.fid);
   /** 绑定语言摘要（只读）：具体语言 / 全部语言（显式不限制）/ 继承父版块(·语言) / 自动识别 */
   const langLabel = (f: AdminForumRow): string => {
+    const parent = f.parent_fid ? rows.find((p) => p.fid === f.parent_fid) : undefined;
+    /* 顶级版块的「显式不限制」与空串等价（服务端保存时会归一回空串），此处按自动识别展示 */
+    if (!parent) {
+      return f.lang && f.lang !== FORUM_LANG_UNRESTRICTED ? (CONTENT_LANG_NATIVE_NAMES[f.lang as ContentLang] ?? f.lang) : t('content_lang_auto');
+    }
     if (f.lang === FORUM_LANG_UNRESTRICTED) return t('content_lang_all');
     if (f.lang) return CONTENT_LANG_NATIVE_NAMES[f.lang as ContentLang] ?? f.lang;
-    const parent = f.parent_fid ? rows.find((p) => p.fid === f.parent_fid) : undefined;
-    if (!parent) return t('content_lang_auto');
     const inherited =
       parent.lang && parent.lang !== FORUM_LANG_UNRESTRICTED ? (CONTENT_LANG_NATIVE_NAMES[parent.lang as ContentLang] ?? '') : '';
     return `${t('forum_content_lang_inherit')}${inherited ? ` · ${inherited}` : ''}`;

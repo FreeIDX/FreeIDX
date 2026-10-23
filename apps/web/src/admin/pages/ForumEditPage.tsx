@@ -203,7 +203,12 @@ export function ForumEditPage() {
             id="f-parent"
             value={String(form.parent_fid ?? 0)}
             disabled={hasChildren}
-            onChange={(e) => set('parent_fid', Number(e.target.value || 0))}
+            onChange={(e) => {
+              const next = Number(e.target.value || 0);
+              set('parent_fid', next);
+              /* 顶级版块的「显式不限制」与空串等价：切回顶级时清掉哨兵，否则下拉会出现无对应选项的空值 */
+              if (next === 0 && form.lang === FORUM_LANG_UNRESTRICTED) set('lang', '');
+            }}
           >
             <option value="0">{t('forum_parent_top', '顶级版块')}</option>
             {parentOptions.map((f) => (
