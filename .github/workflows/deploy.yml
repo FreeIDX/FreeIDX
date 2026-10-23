@@ -1,7 +1,9 @@
 name: Deploy to Cloudflare
 
 # 生产发布：自动开通/复用 D1 与 KV，把真实 ID 只写进构建工作区（不提交），再部署单个 Worker。
-# 首次上线：手动触发并勾上 apply_migrations + run_seed；之后只推 main。
+# 每次运行（push main 与手动触发）都先应用未应用的 D1 迁移再部署：迁移均为增量式，
+# 已在 d1_migrations 表登记的文件自动跳过，不会改动既有数据，因此新增迁移无需再手动勾选。
+# 首次上线：手动触发并勾上 run_seed（初始版块 + 首管）。
 # 总开关：仓库 Variable CLOUDFLARE_DEPLOY 设为 false 可整体跳过发布；未创建时默认发布。
 
 on:
@@ -9,10 +11,6 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      apply_migrations:
-        description: 先应用 D1 迁移（--remote），再部署
-        type: boolean
-        default: false
       run_seed:
         description: 导入 seed/seed.sql（初始版块 + 首管，幂等）
         type: boolean
@@ -122,8 +120,7 @@ jobs:
           echo "D1=$DB  KV=$KV"
           grep -E '^(database_id|id|SITE_URL) ' wrangler.toml
 
-      - name: 应用 D1 迁移
-        if: ${{ inputs.apply_migrations }}
+      - name: 应用 D1 迁移（push 与手动触发均执行）
         working-directory: apps/api
         run: npx wrangler d1 migrations apply freeidx --remote
 
@@ -133,14 +130,15 @@ jobs:
         run: npx wrangler d1 execute freeidx --remote --file=./seed/seed.sql
 
       # 迁移门禁（2025-10 起）：Worker 的 SELECT 直接引用迁移新增的列（如 0024 的 bbs_forum.lang），
-      # 迁移没应用就发版会让 GET /api/bootstrap 与版块列表直接 500。apply_migrations 默认关闭，
-      # 所以这里在部署前做一次硬检查：远程库仍有未应用的迁移 → 中止发布，而不是等线上报错。
+      # 迁移没应用就发版会让 GET /api/bootstrap 与版块列表直接 500。迁移已在上一关自动应用，
+      # 这里仍做一次硬校验：远程库仍有未应用迁移 → 中止发布（防止 apply 被跳过、失败后继续，
+      # 或本地新增迁移没生效时让代码先于 schema 上线）。
       - name: 迁移门禁（代码不得先于 schema 上线）
         working-directory: apps/api
         run: |
           set -euo pipefail
           if ! npx wrangler d1 execute freeidx --remote --json --command "SELECT name FROM d1_migrations" > /tmp/d1-applied.json; then
-            echo "::error::读取远程 d1_migrations 失败（库可能尚未初始化）：请用 workflow_dispatch 勾选 apply_migrations 先应用迁移"
+            echo "::error::读取远程 d1_migrations 失败：请检查 CLOUDFLARE_API_TOKEN 的 D1 权限与 freeidx 库是否已创建"
             exit 1
           fi
           node - <<'NODE'
@@ -153,7 +151,7 @@ jobs:
           const local = fs.readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
           const missing = local.filter((f) => !applied.has(f));
           if (missing.length) {
-            console.error('::error::以下迁移尚未应用到远程库：' + missing.join(', ') + '；请用 workflow_dispatch 勾选 apply_migrations 重新发布');
+            console.error('::error::以下迁移尚未应用到远程库：' + missing.join(', ') + '；请检查上一关「应用 D1 迁移」的日志后重新运行流水线');
             process.exit(1);
           }
           console.log('迁移门禁通过：' + local.length + ' 个迁移均已应用');

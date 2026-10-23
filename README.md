@@ -140,10 +140,8 @@ Fork the project to your own repository. In your GitHub repository:
 On the **Actions** page of your GitHub repository:
 
 1. Select the **Deploy to Cloudflare** workflow
-2. Click **Run workflow**, select the `main` branch, and check:
-   - `apply_migrations` — create tables (`apps/api/migrations/`)
-   - `run_seed` — initial sections + first admin
-3. Once it runs green, you're live; the Worker `freeidx-api` is also only created at this step. **On subsequent pushes to main, these two checkboxes are off by default** and won't touch the database.
+2. Click **Run workflow**, select the `main` branch, and check `run_seed` — initial sections + first admin. Tables are created automatically from `apps/api/migrations/` (already-applied migrations are skipped, existing data is untouched).
+3. Once it runs green, you're live; the Worker `freeidx-api` is also only created at this step. **On subsequent pushes to main, `run_seed` stays off by default**; migrations are applied automatically without touching existing data.
 
 #### Step 4: Configure Runtime Secrets
 

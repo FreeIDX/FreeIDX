@@ -138,10 +138,8 @@
 在 GitHub 仓库的 **Actions** 页面：
 
 1. 选择 **Deploy to Cloudflare** workflow
-2. 点击 **Run workflow**，选择 `main` 分支，并勾选：
-   - `apply_migrations` —— 建表（`apps/api/migrations/`）
-   - `run_seed` —— 初始版块 + 首个管理员
-3. 跑绿即上线，Worker `freeidx-api` 也是在这一步才被创建出来。**以后推 main 时这两个勾默认是关的**，不会碰数据库。
+2. 点击 **Run workflow**，选择 `main` 分支，勾选 `run_seed` —— 初始版块 + 首个管理员（建表迁移会自动应用，无需勾选）。
+3. 跑绿即上线，Worker `freeidx-api` 也是在这一步才被创建出来。**以后推 main 时 `run_seed` 默认关闭**，迁移会自动补齐且不会改动既有业务数据。
 
 #### 第四步：配置运行时密钥
 

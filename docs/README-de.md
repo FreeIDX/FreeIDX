@@ -138,10 +138,8 @@ Das Projekt in das eigene Repository forken. Im GitHub-Repository:
 Auf der Seite **Actions** des GitHub-Repositorys:
 
 1. Den Workflow **Deploy to Cloudflare** auswählen
-2. Auf **Run workflow** klicken, den `main`-Branch auswählen und abhaken:
-   - `apply_migrations` — Tabellen anlegen (`apps/api/migrations/`)
-   - `run_seed` — initiale Bereiche + erster Admin
-3. Läuft der Workflow grün durch, ist das Forum live; der Worker `freeidx-api` wird ebenfalls erst in diesem Schritt angelegt. **Bei folgenden Pushes auf main sind diese beiden Checkboxen standardmäßig deaktiviert** und greifen die Datenbank nicht an.
+2. Auf **Run workflow** klicken, den `main`-Branch auswählen und `run_seed` abhaken — initiale Bereiche + erster Admin (Tabellen werden automatisch aus `apps/api/migrations/` angelegt, keine Checkbox nötig).
+3. Läuft der Workflow grün durch, ist das Forum live; der Worker `freeidx-api` wird ebenfalls erst in diesem Schritt angelegt. **Bei folgenden Pushes auf main ist `run_seed` standardmäßig deaktiviert**; Migrationen werden automatisch angewendet, ohne bestehende Daten zu verändern.
 
 #### Schritt 4: Runtime-Secrets konfigurieren
 

@@ -138,10 +138,8 @@ Forkez le projet dans votre propre dépôt. Dans votre dépôt GitHub :
 Sur la page **Actions** de votre dépôt GitHub :
 
 1. Sélectionnez le workflow **Deploy to Cloudflare**
-2. Cliquez sur **Run workflow**, sélectionnez la branche `main`, puis cochez :
-   - `apply_migrations` — créer les tables (`apps/api/migrations/`)
-   - `run_seed` — sections initiales + premier administrateur
-3. Une fois le workflow au vert, vous êtes en ligne ; le Worker `freeidx-api` n'est d'ailleurs créé qu'à cette étape. **Lors des pushs suivants vers main, ces deux cases sont décochées par défaut** et ne toucheront pas la base de données.
+2. Cliquez sur **Run workflow**, sélectionnez la branche `main`, puis cochez `run_seed` — sections initiales + premier administrateur (les tables sont créées automatiquement depuis `apps/api/migrations/`, sans case à cocher).
+3. Une fois le workflow au vert, vous êtes en ligne ; le Worker `freeidx-api` n'est d'ailleurs créé qu'à cette étape. **Lors des pushs suivants vers main, `run_seed` est décoché par défaut** ; les migrations sont appliquées automatiquement sans toucher aux données existantes.
 
 #### Étape 4 : configurer les secrets d'exécution
 

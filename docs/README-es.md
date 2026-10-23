@@ -138,10 +138,8 @@ Haz un fork del proyecto en tu propio repositorio. En tu repositorio de GitHub:
 En la página **Actions** de tu repositorio de GitHub:
 
 1. Selecciona el workflow **Deploy to Cloudflare**
-2. Haz clic en **Run workflow**, selecciona la rama `main` y marca:
-   - `apply_migrations` — crear las tablas (`apps/api/migrations/`)
-   - `run_seed` — secciones iniciales + primer administrador
-3. Cuando la ejecución termine en verde, tu foro estará en línea; el Worker `freeidx-api` también se crea solo en este paso. **En los push posteriores a main, estas dos casillas están desmarcadas por defecto** y no tocarán la base de datos.
+2. Haz clic en **Run workflow**, selecciona la rama `main` y marca `run_seed` — secciones iniciales + primer administrador (las tablas se crean automáticamente desde `apps/api/migrations/`, sin casilla).
+3. Cuando la ejecución termine en verde, tu foro estará en línea; el Worker `freeidx-api` también se crea solo en este paso. **En los push posteriores a main, `run_seed` está desmarcado por defecto**; las migraciones se aplican automáticamente sin tocar los datos existentes.
 
 #### Paso 4: Configurar los secrets en tiempo de ejecución
 

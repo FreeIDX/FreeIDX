@@ -138,10 +138,8 @@
 在 GitHub 儲存庫的 **Actions** 頁面：
 
 1. 選擇 **Deploy to Cloudflare** workflow
-2. 點選 **Run workflow**，選擇 `main` 分支，並勾選：
-   - `apply_migrations` —— 建立資料表（`apps/api/migrations/`）
-   - `run_seed` —— 初始看板 + 首位管理員
-3. 跑綠即上線，Worker `freeidx-api` 也是在這一步才被建立出來。**以後推 main 時這兩個勾選預設是關的**，不會動到資料庫。
+2. 點選 **Run workflow**，選擇 `main` 分支，勾選 `run_seed` —— 初始看板 + 首位管理員（建立資料表的遷移會自動套用，無需勾選）。
+3. 跑綠即上線，Worker `freeidx-api` 也是在這一步才被建立出來。**以後推 main 時 `run_seed` 預設關閉**，遷移會自動補齊且不會動到既有業務資料。
 
 #### 第四步：設定執行階段金鑰
 

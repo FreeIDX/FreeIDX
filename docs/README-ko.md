@@ -138,10 +138,8 @@ User visits: forum.example.com
 GitHub 저장소의 **Actions** 페이지에서:
 
 1. **Deploy to Cloudflare** 워크플로우를 선택합니다
-2. **Run workflow**를 클릭하고 `main` 브랜치를 선택한 뒤 다음 항목을 체크합니다:
-   - `apply_migrations` — 테이블 생성 (`apps/api/migrations/`)
-   - `run_seed` — 초기 섹션 + 최초 관리자
-3. 초록불이 뜨면 배포 완료입니다; Worker `freeidx-api`도 이 단계에서 비로소 생성됩니다. **이후** **`main`에 푸시할 때는 이 두 체크박스가 기본적으로 꺼져 있으며** 데이터베이스를 건드리지 않습니다.
+2. **Run workflow**를 클릭하고 `main` 브랜치를 선택한 뒤 `run_seed`를 체크합니다 — 초기 섹션 + 최초 관리자 (테이블은 `apps/api/migrations/`에서 자동 생성되며 체크가 필요 없습니다).
+3. 초록불이 뜨면 배포 완료입니다; Worker `freeidx-api`도 이 단계에서 비로소 생성됩니다. **이후 `main`에 푸시할 때는 `run_seed`가 기본적으로 꺼져 있으며**, 마이그레이션은 자동 적용되어 기존 데이터를 건드리지 않습니다.
 
 #### 4단계: 런타임 Secrets 설정
 

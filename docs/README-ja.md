@@ -138,10 +138,8 @@ User visits: forum.example.com
 GitHub リポジトリの **Actions** ページで以下を行います：
 
 1. **Deploy to Cloudflare** ワークフローを選択します
-2. **Run workflow** をクリックし、`main` ブランチを選択して、以下にチェックを入れます：
-   - `apply_migrations` — テーブルを作成します（`apps/api/migrations/`）
-   - `run_seed` — 初期セクションと最初の管理者を作成します
-3. グリーンで完了すれば公開は完了です。Worker `freeidx-api` もこのステップで初めて作成されます。**以降の main へのプッシュでは、この 2 つのチェックボックスはデフォルトでオフ**になっており、データベースには影響しません。
+2. **Run workflow** をクリックし、`main` ブランチを選択して `run_seed` にチェックを入れます — 初期セクションと最初の管理者を作成します（テーブルは `apps/api/migrations/` から自動的に作成され、チェックは不要です）。
+3. グリーンで完了すれば公開は完了です。Worker `freeidx-api` もこのステップで初めて作成されます。**以降の main へのプッシュでは `run_seed` はデフォルトでオフ**です。マイグレーションは自動的に適用され、既存データには影響しません。
 
 #### ステップ 4: ランタイム Secrets の設定
 
