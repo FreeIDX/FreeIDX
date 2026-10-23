@@ -49,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 与 deploy.yml 同口径：全量历史才能拿到正确的提交总数与最近 Tag（vite.config.ts 版本注入依赖）
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -59,6 +62,9 @@ jobs:
       # 目录不存在时 `wrangler deploy --dry-run` 会直接报错退出（2026-10-22 CI 红灯原因）
       - name: Build Pages frontend
         run: pnpm --filter @freeidx/web build
+        env:
+          # 与 deploy.yml 同口径：后台「版本更新」页的「当前提交」取此值
+          VITE_COMMIT_SHA: ${{ github.sha }}
       - name: Deploy Worker preview
         working-directory: apps/api
         env:

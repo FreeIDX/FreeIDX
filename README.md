@@ -161,6 +161,18 @@ Generate a random value locally and paste one at a time:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+#### Step 5: Stay Up to Date
+
+Your fork ships with `.github/workflows/sync-upstream.yml`. Once Actions are enabled, it runs daily and requires **no extra secrets** beyond the two Cloudflare ones:
+
+- Fast-forwards your `main` (and tags) to the upstream `FreeIDX/FreeIDX` `main` — upstream is fetched anonymously since it's public;
+- Pushes the update and triggers the deploy workflow automatically, so your site follows upstream releases within a day;
+- Turns **red** in the Actions tab if your `main` has diverged from upstream (e.g. you committed to it directly) — resolve the conflict once, or keep private customizations on a separate branch and leave `main` untouched.
+
+Need an update right now? Go to **Actions → Sync Upstream → Run workflow**, or click **Sync fork** on your repository's code page. Either path deploys automatically.
+
+> Note: GitHub disables scheduled workflows after 60 days without repository activity. If your fork stays quiet for a long stretch, run **Sync Upstream** manually once to re-arm the schedule. Private/customized forks should disable or delete this workflow and sync manually.
+
 ### Method 2: Local Development
 
 ```bash

@@ -22,13 +22,26 @@ function git(args: string[]): string | null {
 }
 
 /**
- * 构建版本号：<package 版本>+<提交总数>。
+ * 构建期版本信息（三件事解耦，避免「当前版本」显示错位）：
+ *  - `__GIT_TAG__`：最近可达的发布 Tag（`git describe --tags --abbrev=0`），如 v1.0.2。
+ *    「当前版本」以它为准——不管构建点在 Tag 前还是后，都能归到正确的发布版本；
+ *    领先提交数由 `__GIT_AHEAD__` 单独表达，不再伪装成版本号（此前 `1.0.1+17` 的 +17
+ *    是提交总数，Tag 之后任何一次部署都会因为哈希对不上而永远显示这个怪值）。
+ *  - `__APP_VERSION__`：纯发布版本号（无 +build 元数据）。优先取最近 Tag 的版本，
+ *    无 git 元数据（源码包/浅克隆找不到 Tag）时退化为 apps/web/package.json 的 version。
+ *  - `__BUILD_NUM__`：提交总数（构建号），仅用于后台「当前提交」的附注，不参与版本比较。
  *
- * 每次提交后 `git rev-list --count HEAD` 自动 +1，因此后台「版本更新」页的
- * 当前版本随提交自动变化，不需要手改代码；正式发版只提升 apps/web/package.json
- * 的 version 并补发布索引。没有 git 元数据（如源码压缩包构建）时退化为包版本。
+ * 注意：`git describe` 需要全量历史，deploy.yml 与 ci.yml 均已 fetch-depth: 0。
  */
-function resolveAppVersion(): string {
+function resolveTagInfo(): { tag: string | null; ahead: number | null } {
+  const tag = git(['describe', '--tags', '--abbrev=0']);
+  if (!tag || !/^v/.test(tag)) return { tag: null, ahead: null };
+  const count = git(['rev-list', '--count', `${tag}..HEAD`]);
+  const ahead = count && Number(count) >= 0 ? Number(count) : null;
+  return { tag, ahead };
+}
+
+function resolveAppVersion(recentTag: string | null): string {
   const overridden = process.env.VITE_APP_VERSION?.trim();
   if (overridden) return overridden;
 
@@ -40,13 +53,19 @@ function resolveAppVersion(): string {
     // 读取失败时用兜底版本，不阻断构建
   }
 
-  const count = git(['rev-list', '--count', 'HEAD']);
-  const sha = git(['rev-parse', '--short=7', 'HEAD']);
-  const build = count && Number(count) > 0 ? count : sha;
-  return build ? `${base}+${build}` : base;
+  const tagVersion = recentTag?.replace(/^v/, '') ?? '';
+  if (tagVersion && tagVersion !== base) {
+    // 包版本由发版流水线在 Tag 提交里才提升，Tag 前后的构建点容易出现错配：
+    // 版本号以最近 Tag 为准，并在构建日志里留痕，便于排查「线上显示旧主版本」。
+    console.warn(`[vite] 包版本 ${base} 与最近 Tag ${recentTag} 不一致，当前版本按 Tag 展示`);
+  }
+  return tagVersion || base;
 }
 
-const appVersion = resolveAppVersion();
+const { tag: gitTag, ahead: gitAhead } = resolveTagInfo();
+const appVersion = resolveAppVersion(gitTag);
+const commitCount = git(['rev-list', '--count', 'HEAD']);
+const buildNum = commitCount && Number(commitCount) > 0 ? Number(commitCount) : null;
 const commitSha = process.env.VITE_COMMIT_SHA?.trim() || git(['rev-parse', 'HEAD']) || '';
 
 /**
@@ -74,6 +93,9 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
     __COMMIT_SHA__: JSON.stringify(commitSha),
+    __GIT_TAG__: JSON.stringify(gitTag),
+    __GIT_AHEAD__: JSON.stringify(gitAhead),
+    __BUILD_NUM__: JSON.stringify(buildNum),
   },
   // 词典按「命名空间 × 语言」分包（前台 bbs / 后台 admin 各自成 chunk，见 packages/shared/src/i18n/bundles.ts）
   plugins: [react(), tailwindcss(), i18nSplitPlugin(resolve(webRoot, '../../packages/shared/src/i18n'))],

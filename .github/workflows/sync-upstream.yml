@@ -1,0 +1,62 @@
+name: Sync Upstream
+
+# 跟进上游 FreeIDX/FreeIDX：fork 本仓库即自带此 workflow，启用 Actions 后零配置生效。
+#  - 每日自动快进同步上游 main 与 tags；无更新则跳过（不空跑部署）。
+#  - 有更新时推送并触发 Deploy to Cloudflare（GITHUB_TOKEN 的 push 不会触发其他 workflow，
+#    故由本 workflow 显式 dispatch 部署）。
+#  - main 与上游分叉（直接改过本仓库 main）时红灯告警，提示改为网页 Sync fork 或本地解决冲突——
+#    同步链路任何异常都以红灯呈现，避免「静默停在旧版本」。
+#  - 上游为公开仓库，匿名拉取即可，不需要任何额外 secret/token。
+#  - 需要即时升级：Actions → Sync Upstream → Run workflow。
+#  - 私有化 fork（改代码自用）建议删除或禁用本 workflow，改为手动同步。
+#  - GitHub 机制：仓库 60 天无活动会自动禁用定时 workflow，长期未更新时请手动跑一次。
+
+on:
+  schedule:
+    - cron: '30 18 * * *' # UTC 18:30（北京时间 02:30），错开整点调度高峰
+  workflow_dispatch:
+
+permissions:
+  contents: write # 推送同步结果到 main 与 tags
+  actions: write # 同步后触发部署 workflow
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 版本号（git describe 最近 Tag）与提交计数都依赖全量历史
+          fetch-depth: 0
+      - name: 同步上游 main 与 tags
+        run: |
+          set -euo pipefail
+          git config user.name "sync-upstream[bot]"
+          git config user.email "actions@github.com"
+          git remote add upstream https://github.com/FreeIDX/FreeIDX.git
+          git fetch upstream main '+refs/tags/*:refs/tags/*' --force
+
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/main)
+          if [ "$LOCAL" = "$UPSTREAM" ]; then
+            echo "已与上游一致（$UPSTREAM），无需同步"
+            exit 0
+          fi
+
+          if ! git merge --ff-only upstream/main; then
+            echo "::error::无法快进合并：本仓库 main 与上游分叉（通常因直接提交过 main）。请在本地 rebase/合并上游后重试，或改用 GitHub 网页的 Sync fork 按钮解决冲突。私有化改动请放到独立分支，不要直接改 main。"
+            exit 1
+          fi
+
+          git push origin main
+          git push origin --tags
+          echo "已同步到上游 $UPSTREAM，触发部署…"
+
+      - name: 触发部署
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref main

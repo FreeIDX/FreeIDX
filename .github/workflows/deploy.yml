@@ -48,6 +48,10 @@ jobs:
         with:
           # 版本号 = 包版本 + 提交总数（vite.config.ts），浅克隆会把总数固定成 1，必须取全量历史
           fetch-depth: 0
+      - name: 补拉上游 tags（版本判定用）
+        # 后台「版本更新」页的当前版本靠 git describe 找最近 Tag；fork 经网页
+        # "Sync fork" 只同步分支不同步 tags，这里从上游匿名拉取兜底，任何 fork 状态下版本判定都正确
+        run: git fetch https://github.com/FreeIDX/FreeIDX.git '+refs/tags/*:refs/tags/*' --force
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

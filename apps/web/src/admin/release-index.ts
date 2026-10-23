@@ -81,9 +81,23 @@ export async function fetchReleaseChangelog(
   return fetchText(entry.changelogPath, signal);
 }
 
-/** 去掉版本号前缀 v，便于与构建期版本号比较 */
+/** 归一化版本号：去掉 v 前缀，并剥离 `+build` 构建元数据（如 1.0.1+17 → 1.0.1），只留可比较的版本部分 */
 export function normalizeVersion(version: string): string {
-  return version.trim().replace(/^v/i, '');
+  return version.trim().replace(/^v/i, '').replace(/\+.*$/, '');
+}
+
+/**
+ * 语义化版本比较（只比主/次/修订数字段，预发布段如 -rc1 不参与）：
+ * 返回 >0 表示 a 更新、<0 表示 a 更旧、0 表示同版本。构建元数据（+N）一律忽略。
+ */
+export function compareVersion(a: string, b: string): number {
+  const pa = normalizeVersion(a).split(/[.-]/).map((x) => Number(x) || 0);
+  const pb = normalizeVersion(b).split(/[.-]/).map((x) => Number(x) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
 }
 
 /** 提交短哈希（12 位）；空值显示 - */

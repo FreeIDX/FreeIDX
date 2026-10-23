@@ -4,8 +4,11 @@
  * 口径：
  *  - 发布数据托管在 GitHub 仓库 `.github/releases/version.json`，更新日志为仓库内 Markdown，
  *    页面经 raw.githubusercontent.com 直接读取，发版不需要重新部署站点（见 admin/release-index.ts）。
- *  - 当前版本是站点代码版本（1.0.0）；当前提交取构建期注入的 VITE_COMMIT_SHA，
- *    部署流水线在 GitHub Actions 里注入，本地开发未注入时显示 -。
+ *  - 当前版本取构建期注入的最近发布 Tag __GIT_TAG__（vite.config.ts 用 git describe 计算），
+ *    构建点无论在 Tag 之前还是之后都能归到正确发布；领先提交数（__GIT_AHEAD__）与
+ *    构建号（__BUILD_NUM__）单独展示，绝不拼进版本号（此前 `1.0.1+17` 的 +17 是提交总数）。
+ *  - 当前提交取构建期注入的 VITE_COMMIT_SHA，部署流水线在 GitHub Actions 里注入，
+ *    本地开发未注入时显示 -；无 git 元数据的构建（源码包/浅克隆）无 Tag 时回落包版本。
  *  - 版式：顶部说明 + 数据来源、四格指标、按版本倒序的发布卡（徽标/元信息/更新日志）；
  *    页面标题只由后台顶栏承担（此处不再重复渲染），发布卡默认折叠（点卡头展开元信息与更新日志）。
  */
@@ -17,6 +20,7 @@ import { Icon } from '../../components/icons';
 import { Alert, Badge, PageTitle, cardBodyCls, cardCls, cx } from '../ui';
 import {
   REPO_URL,
+  compareVersion,
   fetchReleaseChangelog,
   fetchReleaseIndex,
   isSameCommit,
@@ -25,15 +29,27 @@ import {
   type ReleaseEntry,
 } from '../release-index';
 
-/** 构建期注入：<package 版本>+<提交总数>，每次提交后自动变化（见 vite.config.ts） */
+/** 构建期注入：发布版本号（最近 Tag 的版本或包版本，无 +build 元数据，见 vite.config.ts） */
 declare const __APP_VERSION__: string;
 /** 构建期注入：当前构建对应的完整提交哈希 */
 declare const __COMMIT_SHA__: string;
+/** 构建期注入：最近可达发布 Tag（如 v1.0.2）；无 git 元数据时为空 */
+declare const __GIT_TAG__: string | null;
+/** 构建期注入：当前构建领先最近 Tag 的提交数；无 Tag 时为空 */
+declare const __GIT_AHEAD__: number | null;
+/** 构建期注入：git 提交总数（构建号），仅用于「当前提交」附注；无 git 元数据时为空 */
+declare const __BUILD_NUM__: number | null;
 
-/** 当前构建版本号（去掉可能的 v 前缀），如 1.0.0+128；未命中发布 Tag 时展示它 */
-const CURRENT_VERSION = normalizeVersion(__APP_VERSION__);
-/** 当前运行构建的提交号 */
+/** 最近发布 Tag（构建期已算好），如 v1.0.2 */
+const CURRENT_TAG = __GIT_TAG__ || null;
+/** 当前构建领先最近 Tag 的提交数 */
+const CURRENT_AHEAD = __GIT_AHEAD__ ?? null;
+/** 当前构建号（提交总数） */
+const CURRENT_BUILD = __BUILD_NUM__ ?? null;
+/** 当前构建的提交号 */
 const CURRENT_COMMIT = __COMMIT_SHA__ || null;
+/** 兜底展示的发布版本号（无 Tag 时用，如 1.0.2；构建元数据已在构建期剥离） */
+const CURRENT_VERSION = normalizeVersion(__APP_VERSION__);
 
 /** 索引/日志变动不频繁，缓存 5 分钟，避免每次进页都打 GitHub */
 const CACHE_TIME = 5 * 60 * 1000;
@@ -57,7 +73,23 @@ function previousTagOf(releases: ReleaseEntry[], entry: ReleaseEntry): string | 
   return null;
 }
 
-function Metric({ icon, label, value, mono }: { icon: IconName; label: string; value: string; mono?: boolean }) {
+function Metric({
+  icon,
+  label,
+  value,
+  mono,
+  hint,
+  hintTone,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  mono?: boolean;
+  /** 指标下的小字附注（如领先提交数、更新状态） */
+  hint?: string | null;
+  /** 附注语义色：success=正常/最新，warning=有新版本，缺省为灰 */
+  hintTone?: 'success' | 'warning';
+}) {
   return (
     <div className="flex items-start gap-3 bg-surface p-4">
       <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-brand/10 text-brand">
@@ -66,6 +98,18 @@ function Metric({ icon, label, value, mono }: { icon: IconName; label: string; v
       <div className="min-w-0">
         <p className="m-0 text-xs text-muted">{label}</p>
         <p className={cx('m-0 mt-0.5 truncate text-[15px] font-semibold', mono && 'font-mono')}>{value}</p>
+        {hint && (
+          <p
+            className={cx(
+              'm-0 mt-0.5 text-xs',
+              hintTone === 'success' && 'text-emerald-600',
+              hintTone === 'warning' && 'text-amber-600',
+              !hintTone && 'text-muted-2',
+            )}
+          >
+            {hint}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -85,7 +129,9 @@ function ReleaseCard({ entry, previousTag }: { entry: ReleaseEntry; previousTag:
     retry: false,
   });
 
-  const isCurrent = isSameCommit(entry.targetCommitish, CURRENT_COMMIT);
+  /* 「当前」判定按最近 Tag 匹配（构建期 git describe 得出）：Tag 之后继续提交的构建
+     仍能正确归到该发布；提交哈希相等作为补充（万一 Tag 缺失但构建正好是发布提交）。 */
+  const isCurrent = entry.tagName === CURRENT_TAG || isSameCommit(entry.targetCommitish, CURRENT_COMMIT);
   const status = entry.draft
     ? { tone: 'warning' as const, text: t('admin_version_draft') }
     : entry.prerelease
@@ -170,11 +216,30 @@ export function VersionUpdatePage() {
 
   const releases = q.data ?? [];
   const latest = releases.find((r) => !r.draft && !r.prerelease) ?? releases[0] ?? null;
-  // 运行中的提交若正好是某个发布 Tag 指向的提交，就直接展示该 Tag（例如 v1.1.0），
-  // 这样打 Tag 后无需重新部署，页面也能立刻把「当前版本」收敛到发布版本。
-  const runningRelease = CURRENT_COMMIT
-    ? (releases.find((r) => isSameCommit(r.targetCommitish, CURRENT_COMMIT)) ?? null)
-    : null;
+  // 当前构建所属的发布：优先按构建期最近 Tag 匹配（哈希相等仅作 Tag 缺失时的补充），
+  // 这样打 Tag 后无需重新部署、且 Tag 之后继续提交的构建也能收敛到正确发布版本。
+  const runningRelease = CURRENT_TAG
+    ? (releases.find((r) => r.tagName === CURRENT_TAG) ?? null)
+    : CURRENT_COMMIT
+      ? (releases.find((r) => isSameCommit(r.targetCommitish, CURRENT_COMMIT)) ?? null)
+      : null;
+
+  // 更新状态提示。注意时序竞态：push 后自动部署往往发生在打 Tag 之前，构建期
+  // git describe 只能找到旧 Tag；而发版会立即更新 version.json（无需部署）。
+  // 于是「领先 N 提交」的构建可能已经包含最新发布的提交——运行时无法判断祖先关系，
+  // 因此这种开发版构建只中性展示领先数，不断言「有新版本」；只有构建恰好落在发布点
+  // （领先数为 0）时，「落后于最新发布」的判断才可靠，才亮警示色。
+  const currentRef = CURRENT_TAG ?? CURRENT_VERSION;
+  const isDevBuild = CURRENT_AHEAD !== null && CURRENT_AHEAD > 0;
+  const upToDate = latest ? compareVersion(latest.tagName, currentRef) <= 0 : null;
+  const currentHint =
+    upToDate === null
+      ? null
+      : isDevBuild
+        ? t('admin_version_ahead', undefined, { n: CURRENT_AHEAD })
+        : upToDate
+          ? t('admin_version_up_to_date')
+          : t('admin_version_newer', undefined, { v: latest?.tagName ?? '' });
 
   return (
     <>
@@ -191,9 +256,24 @@ export function VersionUpdatePage() {
 
       <section className={cx(cardCls, 'overflow-hidden')}>
         <div className="grid gap-px bg-line-soft sm:grid-cols-2 xl:grid-cols-4">
-          <Metric icon="tag" label={t('admin_version_current')} value={runningRelease?.tagName ?? `v${CURRENT_VERSION}`} mono />
+          {/* 当前版本 = 构建期最近 Tag（优先）或运行发布匹配；无 Tag 时回落包版本（无 +build 元数据） */}
+          <Metric
+            icon="tag"
+            label={t('admin_version_current')}
+            value={CURRENT_TAG ?? runningRelease?.tagName ?? `v${CURRENT_VERSION}`}
+            mono
+            hint={currentHint}
+            hintTone={isDevBuild ? undefined : upToDate === false ? 'warning' : 'success'}
+          />
           <Metric icon="rocket" label={t('admin_version_latest')} value={latest?.tagName ?? '-'} mono />
-          <Metric icon="git_commit" label={t('admin_version_current_commit')} value={shortCommit(CURRENT_COMMIT)} mono />
+          {/* 提交与构建号分列：版本号不再携带 +N 构建元数据，构建号只作为提交的附注 */}
+          <Metric
+            icon="git_commit"
+            label={t('admin_version_current_commit')}
+            value={shortCommit(CURRENT_COMMIT)}
+            mono
+            hint={CURRENT_BUILD ? t('admin_version_build', undefined, { n: CURRENT_BUILD }) : null}
+          />
           <Metric
             icon="git_branch"
             label={t('admin_version_release_count')}
