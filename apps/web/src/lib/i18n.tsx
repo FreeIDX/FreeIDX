@@ -98,7 +98,7 @@ export function useLocaleBundle(lang: string): LocaleBundles {
     const off = subscribeBundles(sync);
     if (!getLoadedBundle(lang)) void loadLocaleBundle(lang);
     return off;
-  }, [read]);
+  }, [read, lang]);
   return bundle;
 }
 
