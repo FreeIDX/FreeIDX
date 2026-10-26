@@ -27,14 +27,31 @@ import { classifyUserAgent, type UaClass } from '../crawler';
 
 type Bucket = typeof caches.default;
 
-/** 匿名只读接口 → 边缘 TTL（§7 口径：列表 30s，详情 60s） */
-const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
+/**
+ * 匿名只读接口 → 边缘 TTL（§7 口径：列表 30s，详情 60s；榜单按更新频率 5–60min）。
+ * 导出供 edge-cache 测试枚举覆盖范围（测试同时守着「别把已接入端点改回去」）。
+ * 顺序敏感：更具体的路径必须排在通配规则之前（如 hot-favorites 先于列表、hot-posts 先于详情）。
+ */
+export const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/bootstrap$/, 30],
   [/^\/api\/threads$/, 30],
+  [/^\/api\/threads\/hot-favorites$/, 300],
+  [/^\/api\/threads\/\d+\/hot-posts$/, 60],
   [/^\/api\/forums\/\d+\/threads$/, 30],
   [/^\/api\/users\/\d+\/(?:threads|posts)$/, 30],
   [/^\/api\/threads\/\d+$/, 60],
   [/^\/api\/users\/\d+$/, 60],
+  [/^\/api\/online$/, 30],
+  [/^\/api\/posts\/latest$/, 30],
+  [/^\/api\/rank\/users$/, 600],
+  [/^\/api\/rank\/threads$/, 3600],
+  [/^\/api\/rank\/forum$/, 300],
+  [/^\/api\/rank\/list$/, 300],
+  [/^\/api\/insert-codes$/, 60],
+  [/^\/api\/quick-reply-message$/, 300],
+  [/^\/api\/vip\/plans$/, 600],
+  [/^\/api\/payment-providers$/, 600],
+  [/^\/api\/checkin$/, 30],
 ];
 
 /** 爬虫预渲染 HTML 的 TTL（与 §16.1 R2 产物同步，1h） */
@@ -91,6 +108,19 @@ function withState(res: Response, state: 'HIT' | 'MISS'): Response {
   const headers = new Headers(res.headers);
   headers.set('x-edge-cache', state);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+/**
+ * HIT 应答。
+ * `stripCacheControl`（API 专用）：HTTP 缓存按 URL 存、不认 Cookie，若把边缘副本的 `max-age=30`
+ * 下发，游客在窗口内登录后浏览器会喂回旧的「游客版」响应 → 登录成功但顶栏仍是游客（认证态串扰）。
+ * `/files/*` 直链必须传 false：avatar 是 `immutable`（key 已 ?v= 版本化）、forum/site 是 1 天，
+ * 剥掉会让浏览器在边缘 HIT 后退化成无版本化缓存（见 cachedCopy 的 keepCacheControl 注释）。
+ */
+function hitResponse(hit: Response, stripCacheControl: boolean): Response {
+  const headers = new Headers(hit.headers);
+  if (stripCacheControl) headers.delete('cache-control');
+  return withState(new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers }), 'HIT');
 }
 
 /** 写入门槛：200、未带 Set-Cookie、且响应未声明不可缓存（错误信封由 envelope 统一打 no-store） */
@@ -177,7 +207,7 @@ export function edgeCache() {
       const key = keyRequest(raw.url, ua, lang);
       const hit = await b.match(key);
       if (hit) {
-        c.res = withState(hit, 'HIT');
+        c.res = hitResponse(hit, !filePrefix);
         return;
       }
       await next();
