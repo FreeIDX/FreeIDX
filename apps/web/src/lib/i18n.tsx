@@ -9,7 +9,7 @@ import {
   type FrontKey,
   type LocaleBundles,
 } from '@freeidx/shared';
-import { EMPTY_BUNDLES, getLoadedBundle, loadLocaleBundle } from '@freeidx/shared/i18n/bundles';
+import { EMPTY_BUNDLES, getLoadedBundle, loadLocaleBundle, subscribeBundles } from '@freeidx/shared/i18n/bundles';
 import { setUiLocale } from './api';
 import { useAuth } from '../store/auth';
 
@@ -78,25 +78,27 @@ export function useLang(): string {
  *  - 目标语言已加载 → 直接返回；
  *  - 未加载 → 沿用 DEFAULT_LOCALE 并后台发起加载，到位后切到目标语言。
  * 与既有链路一致：站点语言本就来自 bootstrap，首屏同为「先 en-us 再切换」，不新增可见行为。
+ *
+ * 注意：单语言词典分 bbs / admin 两个分区、**分两批到达**（前台先拉 bbs，进后台才拉 admin）。
+ * 因此不能只在 lang 变化时取一次快照——必须订阅分区到位事件重取：
+ * 否则早于 admin 分区到达就挂载的组件（后台侧栏/顶栏标题）会一直握着只含 bbs 的旧快照，
+ * admin 命名空间词条全部落空，表现为「内容页中文、左侧菜单英文」（回退到代码里的英文 fallback）。
  */
 export function useLocaleBundle(lang: string): LocaleBundles {
-  const [bundle, setBundle] = useState<LocaleBundles>(
-    () => getLoadedBundle(lang) ?? getLoadedBundle(DEFAULT_LOCALE) ?? EMPTY_BUNDLES,
+  /* 目标语言未到位时回落 DEFAULT_LOCALE（bbs 未到则该语言整包视为不可用） */
+  const read = useCallback(
+    (): LocaleBundles => getLoadedBundle(lang) ?? getLoadedBundle(DEFAULT_LOCALE) ?? EMPTY_BUNDLES,
+    [lang],
   );
+  const [bundle, setBundle] = useState<LocaleBundles>(read);
   useEffect(() => {
-    const hit = getLoadedBundle(lang);
-    if (hit) {
-      setBundle(hit);
-      return;
-    }
-    let alive = true;
-    void loadLocaleBundle(lang).then((b) => {
-      if (alive && b) setBundle(b);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [lang]);
+    /* 快照对象按语言缓存，无新分区到达时 read() 返回同一引用 → setBundle 不触发多余渲染 */
+    const sync = (): void => setBundle(read());
+    sync();
+    const off = subscribeBundles(sync);
+    if (!getLoadedBundle(lang)) void loadLocaleBundle(lang);
+    return off;
+  }, [read]);
   return bundle;
 }
 
