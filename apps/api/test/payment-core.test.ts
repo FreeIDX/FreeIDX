@@ -171,10 +171,7 @@ describe('applyProviderEvent → 状态机落账', () => {
 
   it('refunded：refundOrder', async () => {
     const paidByNo: SqlRule = { test: /FROM bbs_order WHERE order_no = \?/, first: () => ({ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'paid', provider: 'stripe', provider_ref: 'REF-1', created_date: 1, paid_date: 1, fulfilled_date: 0 }) };
-    // 退款会查计划并按计划回收积分/时长；计划不存在时仍需执行到期回落语句
-    const noPlan: SqlRule = { test: /FROM bbs_vip_plan WHERE id = \?/, first: null };
-    const updGidBack: SqlRule = { test: /UPDATE bbs_user SET gid = vip_from_gid/, rows: [] };
-    const { core, calls } = makeCore([byRef, paidByNo, { ...paidByNo, first: () => ({ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'refunded', provider: 'stripe', provider_ref: 'REF-1', created_date: 1, paid_date: 1, fulfilled_date: 0 }) }, updOrder, noPlan, updGidBack]);
+    const { core, calls } = makeCore([byRef, paidByNo, { ...paidByNo, first: () => ({ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'refunded', provider: 'stripe', provider_ref: 'REF-1', created_date: 1, paid_date: 1, fulfilled_date: 0 }) }, updOrder]);
     const out = await applyProviderEvent(core, { providerRef: 'REF-1', status: 'refunded' }, 1);
     expect(out).toMatchObject({ action: 'refunded' });
     expect(calls.some((c) => /UPDATE bbs_order SET status = \?/.test(c.sql))).toBe(true);

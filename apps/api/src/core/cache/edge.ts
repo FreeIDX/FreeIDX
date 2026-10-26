@@ -27,52 +27,14 @@ import { classifyUserAgent, type UaClass } from '../crawler';
 
 type Bucket = typeof caches.default;
 
-/**
- * 匿名只读接口 → 边缘 TTL（§7 口径：列表 30s，详情 60s）。
- *
- * 收入标准（三条同时满足才可加入）：
- *  1. 响应体对「gid=0 的游客」是常量——不随 uid/sid 变化（带登录轨 Cookie 的请求本层直接绕开）；
- *  2. 无 Set-Cookie（门槛已有），且写操作后不要求「立刻可见」（写方都是登录态，本层不参与）；
- *  3. 敏感度可接受：返回的是站点公开数据，游客原本就能看到。
- *
- * TTL 约束：不超过该端点服务端缓存（L0/L2）的 TTL，否则边缘会比数据库层更陈旧。
- */
-export const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
+/** 匿名只读接口 → 边缘 TTL（§7 口径：列表 30s，详情 60s） */
+const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/bootstrap$/, 30],
-  // 启用主题 id：随 SPA 壳/首屏引导读取，后台切换后 30s 内边缘即更新
-  [/^\/api\/theme\/active$/, 30],
   [/^\/api\/threads$/, 30],
   [/^\/api\/forums\/\d+\/threads$/, 30],
   [/^\/api\/users\/\d+\/(?:threads|posts)$/, 30],
   [/^\/api\/threads\/\d+$/, 60],
   [/^\/api\/users\/\d+$/, 60],
-
-  /* ---- 首页/版块页右栏与聚合读 ----
-   * 这一组此前完全没有边缘缓存：游客每次 PV 都要真打 Worker + D1（首页一次 PV 5~8 个请求，
-   * 其中只有 bootstrap 与 /api/threads 命中）。它们都是「匿名同值」的只读聚合，加进来只花配置。
-   * 逐条说明为什么匿名副本可共享：
-   *  - /api/online：IP 字段仅对 gid 1/2 下发，其余字段（fid/url/last_date/用户名）与访客无关；
-   *  - /api/rank/*：ok=1 的公开榜单，无访问者参数；版块热门沿用同一口径；
-   *  - /api/posts/latest、/api/threads/hot-favorites：版块可读性过滤对 gid=0 恒定；
-   *  - /api/threads/:tid/hot-posts：liked 标记仅在登录态生成，审核位过滤对 gid=0 恒定。 */
-  [/^\/api\/online$/, 30],
-  [/^\/api\/posts\/latest$/, 30],
-  [/^\/api\/rank\/users$/, 600], // 服务端 new 档 600s / 其余 86400s，取最小值
-  [/^\/api\/rank\/threads$/, 3600], // 服务端 all 档 86400s / week 档 3600s
-  [/^\/api\/rank\/forum$/, 300], // 服务端无缓存，且版块页每次访问都查
-  [/^\/api\/rank\/list$/, 300], // 服务端无缓存（COUNT + 排序）
-  [/^\/api\/threads\/hot-favorites$/, 300],
-  [/^\/api\/threads\/\d+\/hot-posts$/, 60],
-
-  /* ---- 站点级配置类 ----
-   * 后台改完想立刻自查的站长带 admin_at Cookie，本层直接绕开（PERSONAL_COOKIE）；
-   * 但「管理员改完开无痕窗口看效果」是常见动作，故 TTL 不取小时级：
-   * insert-codes 每个页面都会拉（省请求的大头），给 60s 已足够把重复请求压掉。 */
-  [/^\/api\/insert-codes$/, 60],
-  [/^\/api\/quick-reply-message$/, 300],
-  [/^\/api\/vip\/plans$/, 600],
-  [/^\/api\/payment-providers$/, 600],
-  [/^\/api\/checkin$/, 30], // 仅 GET；签到写操作走 POST 且登录态绕开本层
 ];
 
 /** 爬虫预渲染 HTML 的 TTL（与 §16.1 R2 产物同步，1h） */
@@ -128,24 +90,6 @@ function keyRequest(url: string, ua: UaClass, lang?: string): Request {
 function withState(res: Response, state: 'HIT' | 'MISS'): Response {
   const headers = new Headers(res.headers);
   headers.set('x-edge-cache', state);
-  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
-}
-
-/**
- * API 命中下发：剥掉副本上的 Cache-Control（`/files/*` 不走这里，见调用点）。
- *
- * 副本上的 `public, max-age` 只有一个用途——向 Cloudflare 声明 Edge TTL。若原样下发给浏览器，
- * 浏览器会按 URL 缓存 30~60s，而 HTTP 缓存键**不含 Cookie**：游客在该窗口内登录后重新拉
- * /api/bootstrap，浏览器可能直接给出「游客版」响应 → 认证态串扰（表现为登录成功但顶栏仍是游客，
- * 最长 30~60s 自愈）。这与本文件顶部「客户端响应不带 TTL」的口径也相违。
- *
- * 保留浏览器缓存并无收益：TanStack staleTime 已是 30s，窗口内不会重复请求；窗口外的重复请求
- * 恰恰需要新数据。故与 MISS 口径对齐——TTL 只归边缘，不污染浏览器缓存。
- */
-function apiHit(res: Response): Response {
-  const headers = new Headers(res.headers);
-  headers.delete('cache-control');
-  headers.set('x-edge-cache', 'HIT');
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
@@ -233,9 +177,7 @@ export function edgeCache() {
       const key = keyRequest(raw.url, ua, lang);
       const hit = await b.match(key);
       if (hit) {
-        // /files/* 的副本带 `public, max-age=<很长>, immutable`（key 已 ?v= 版本化），必须原样下发，
-        // 否则浏览器每次都要重取图片；API 副本的 max-age 只服务 Edge TTL，需在下发时剥掉。
-        c.res = filePrefix ? withState(hit, 'HIT') : apiHit(hit);
+        c.res = withState(hit, 'HIT');
         return;
       }
       await next();

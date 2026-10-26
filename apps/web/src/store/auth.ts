@@ -1,9 +1,9 @@
 /** useAuth：bootstrap 一次拉取（setting/forumlist/grouplist/me），Zustand 全局态（§10.3） */
 import { create } from 'zustand';
 import type { ForumNode, GroupRow, SiteSetting, UserBrief } from '@freeidx/shared';
-import { md5Hex } from '@freeidx/shared';
 import { bootstrap, login, logout, onSessionExpired, register, type LoginResult, type RegisterResult } from '../lib/api';
 import { queryClient } from '../lib/query-client';
+import { md5 } from '../lib/md5';
 
 interface AuthState {
   loaded: boolean;
@@ -50,15 +50,6 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
-/**
- * bootstrap 单飞（性能项 C1 的配套）：首屏预载（main.tsx）、Layout 挂载、会话失效兜底
- * 三方都可能在 loaded 变 true 之前调用 load()，没有单飞时它们会各发一次请求
- * （每次多耗 1 次 Worker 请求，且响应乱序时可能用旧结果覆盖新结果）。
- * force（登录/登出/会话失效）必须拿到登录态变更**之后**的结果，所以先等掉进行中的请求再发新的，
- * 不能直接复用它。
- */
-let bootstrapInflight: Promise<void> | null = null;
-
 export const useAuth = create<AuthState>((set, get) => ({
   loaded: false,
   setting: null,
@@ -68,23 +59,11 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
   load: async (force = false) => {
     if (get().loaded && !force) return;
-    if (bootstrapInflight) {
-      if (!force) return bootstrapInflight;
-      await bootstrapInflight.catch(() => undefined);
-    }
-    const p = (async () => {
-      try {
-        const d = await bootstrap();
-        set({ loaded: true, setting: d.setting, forumlist: d.forumlist, grouplist: d.grouplist, me: d.me, runtime: d.runtime, ext: d.ext, error: null });
-      } catch (e) {
-        set({ error: e instanceof Error ? e.message : String(e) });
-      }
-    })();
-    bootstrapInflight = p;
     try {
-      await p;
-    } finally {
-      if (bootstrapInflight === p) bootstrapInflight = null;
+      const d = await bootstrap();
+      set({ loaded: true, setting: d.setting, forumlist: d.forumlist, grouplist: d.grouplist, me: d.me, runtime: d.runtime, ext: d.ext, error: null });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
     }
   },
   refresh: async () => {
@@ -93,7 +72,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   // 后端要求前端预哈希 md5(明文)（§8.4），登录/注册成功后 re-fetch bootstrap 让 me 生效
   // 鉴权态变更后失效全量 react-query 缓存：详情/列表的 allowupdate/allowdelete/计数由服务端按访问者下发，须随之刷新
   signIn: async (input) => {
-    const r = await login({ account: input.account, password: md5Hex(input.password), turnstileToken: input.turnstileToken });
+    const r = await login({ account: input.account, password: md5(input.password), turnstileToken: input.turnstileToken });
     await get().load(true);
     void queryClient.invalidateQueries();
     return r;
@@ -102,7 +81,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     const r = await register({
       username: input.username,
       email: input.email,
-      password: md5Hex(input.password),
+      password: md5(input.password),
       emailCode: input.emailCode,
       turnstileToken: input.turnstileToken,
     });

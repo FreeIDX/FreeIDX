@@ -76,18 +76,6 @@ export async function applyProviderEvent(
       return { handled: true, action: 'paid', orderNo: order.orderNo };
     }
     case 'refunded': {
-      // 部分退款 ≠ 撤销权益：只退部分金额时仍保留会员/积分，仅记录日志待人工处理；
-      // 全额退款（amountCents 缺省或 ≥ 订单金额）才走退款终态并回收权益。
-      if (
-        event.amountCents !== undefined &&
-        Number(event.amountCents) > 0 &&
-        Number(event.amountCents) < Number(order.amountCents)
-      ) {
-        console.warn(
-          `[payment] partial refund ignored: order=${order.orderNo} refunded=${event.amountCents} total=${order.amountCents}`,
-        );
-        return { handled: true, action: 'ignored', orderNo: order.orderNo };
-      }
       // 非法迁移（事件重放/单已被对账关单）不得抛错：抛错会让 provider 重试风暴并丢失 ack 语义
       try {
         await refundOrder(core.db, order.orderNo, ts);
@@ -260,12 +248,7 @@ interface RefundFlowResult {
   order?: OrderRow;
 }
 
-/** 后台退款编排（§15.1）：
- * 1. 先抢锁占位：只有当前状态为 paid/fulfilled 才能退款，抢占式更新状态到 refunding；
- * 2. 抢占成功后再调用通道退款，否则提前退出（并发/重复点击不重退）；
- * 3. 通道退款成功后，回滚权益并终态设为 refunded；
- * 4. 通道退款失败回滚状态到原状态，保证一致性。
- */
+/** 后台退款编排（§15.1）：通道 refund 成功（或无通道退款能力）才回写状态机 refunded。 */
 export async function issueRefund(
   core: { db: D1b; cache: Cache },
   env: Env | undefined,
@@ -275,29 +258,12 @@ export async function issueRefund(
 ): Promise<RefundFlowResult> {
   const order = await getOrder(core.db, orderNo);
   if (!order) return { ok: false, reason: 'common.orderNotFound' };
-  if (order.status === OrderStatus.REFUNDED) return { ok: true, order };
-
-  // 前置校验：只有 paid/fulfilled 允许退款。先验证状态机，再动真钱——
-  // 否则 pending/closed 单会在通道已退款后才被状态机拒绝，钱退了单不动。
-  if (order.status !== OrderStatus.PAID && order.status !== OrderStatus.FULFILLED) {
-    return { ok: false, reason: 'order.refundFailed' };
+  const provider = getProvider(order.provider);
+  const cfg = provider ? await resolveProviderConfig(core.cache, core.db, env, order.provider) : {};
+  if (provider?.refund) {
+    const r = await provider.refund(order, cfg);
+    if (!r.ok) return { ok: false, reason: r.reason ?? 'order.providerRefundFailed' };
   }
-  // 短时互斥锁：防止后台双击/并发请求对同一单重复调用通道退款（状态机本身只挡第一步）
-  const lockKey = `refund:lock:${orderNo}`;
-  if (await core.cache.get(lockKey)) return { ok: false, reason: 'order.refundFailed' };
-  await core.cache.set(lockKey, 1, 300);
-  try {
-    const provider = getProvider(order.provider);
-    const cfg = provider ? await resolveProviderConfig(core.cache, core.db, env, order.provider) : {};
-    if (provider?.refund) {
-      const r = await provider.refund(order, cfg);
-      if (!r.ok) return { ok: false, reason: r.reason ?? 'order.providerRefundFailed' };
-    }
-    // 通道退款成功 → 状态机 refunded + 回收权益（同一函数内条件翻转，幂等）
-    const updated = await refundOrder(core.db, orderNo, ts, t);
-    await core.cache.del(`user:${order.uid}`);
-    return { ok: true, order: updated };
-  } finally {
-    await core.cache.del(lockKey);
-  }
+  const updated = await refundOrder(core.db, orderNo, ts, t);
+  return { ok: true, order: updated };
 }

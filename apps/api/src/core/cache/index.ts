@@ -42,8 +42,6 @@ const KEY_POLICIES: Record<string, KeyPolicy> = {
   setting: { ttl: 3600, layers: ['L0', 'L1'] },
   // 积分交易规则（tt_credits）：后台低频改，读多写少 → 与 setting 同层
   tt_credits: { ttl: 3600, layers: ['L0', 'L1'] },
-  // 启用主题 id（kv theme）：每份 SPA 壳都要读，后台低频改 → 与 setting 同层
-  theme: { ttl: 3600, layers: ['L0', 'L1'] },
 
   runtime: { ttl: 10, layers: ['L0', 'L2'] },
 };

@@ -62,20 +62,12 @@ export async function verifyJwt(
   } catch {
     return null;
   }
-  // 签名段可能是任意畸形 Cookie（atob 对非法 base64 会抛异常），必须捕获并当游客处理，
-  // 否则一张损坏的 at Cookie 会让该浏览器所有 API 持续 500 且无法自愈。
-  let sig: Uint8Array;
-  try {
-    sig = b64urlDec(parts[2]);
-  } catch {
-    return null;
-  }
-  let ok: boolean;
-  try {
-    ok = await crypto.subtle.verify('HMAC', await hmac(secret), sig, enc.encode(`${parts[0]}.${parts[1]}`));
-  } catch {
-    return null;
-  }
+  const ok = await crypto.subtle.verify(
+    'HMAC',
+    await hmac(secret),
+    b64urlDec(parts[2]),
+    enc.encode(`${parts[0]}.${parts[1]}`),
+  );
   if (!ok) return null;
   const p = payload as Partial<JwtPayload>;
   if (typeof p.uid !== 'number' || typeof p.tv !== 'number' || typeof p.iat !== 'number' || typeof p.exp !== 'number') {
