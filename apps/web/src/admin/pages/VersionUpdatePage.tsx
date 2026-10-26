@@ -5,8 +5,8 @@
  *  - 发布数据托管在 GitHub 仓库 `.github/releases/version.json`，更新日志为仓库内 Markdown，
  *    页面经 raw.githubusercontent.com 直接读取，发版不需要重新部署站点（见 admin/release-index.ts）。
  *  - 当前版本取构建期注入的最近发布 Tag __GIT_TAG__（vite.config.ts 用 git describe 计算），
- *    构建点无论在 Tag 之前还是之后都能归到正确发布；构建号（__BUILD_NUM__）单独展示，
- *    绝不拼进版本号（此前 `1.0.1+17` 的 +17 是提交总数）。
+ *    构建点无论在 Tag 之前还是之后都能归到正确发布；构建号（__BUILD_NUM__）仅作为提交号后的
+ *    行内附注，绝不拼进版本号（此前 `1.0.1+17` 的 +17 是提交总数）。
  *  - 当前提交取构建期注入的 VITE_COMMIT_SHA，部署流水线在 GitHub Actions 里注入，
  *    本地开发未注入时显示 -；无 git 元数据的构建（源码包/浅克隆）无 Tag 时回落包版本。
  *  - 版式：顶部说明 + 数据来源、四格指标、按版本倒序的发布卡（徽标/元信息/更新日志）；
@@ -81,7 +81,7 @@ function Metric({
   label: string;
   value: string;
   mono?: boolean;
-  /** 指标下的小字附注（如更新状态） */
+  /** 主值右侧的小字附注（如更新状态、构建号） */
   hint?: string | null;
   /** 附注语义色：success=正常/最新，warning=有新版本，缺省为灰 */
   hintTone?: 'success' | 'warning';
@@ -93,19 +93,22 @@ function Metric({
       </span>
       <div className="min-w-0">
         <p className="m-0 text-xs text-muted">{label}</p>
-        <p className={cx('m-0 mt-0.5 truncate text-[15px] font-semibold', mono && 'font-mono')}>{value}</p>
-        {hint && (
-          <p
-            className={cx(
-              'm-0 mt-0.5 text-xs',
-              hintTone === 'success' && 'text-emerald-600',
-              hintTone === 'warning' && 'text-amber-600',
-              !hintTone && 'text-muted-2',
-            )}
-          >
-            {hint}
-          </p>
-        )}
+        {/* 附注与主值同行：状态跟在版本号后，构建号跟在提交号后，避免多占一行 */}
+        <p className="m-0 mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className={cx('truncate text-[15px] font-semibold', mono && 'font-mono')}>{value}</span>
+          {hint && (
+            <span
+              className={cx(
+                'shrink-0 whitespace-nowrap text-xs',
+                hintTone === 'success' && 'text-emerald-600',
+                hintTone === 'warning' && 'text-amber-600',
+                !hintTone && 'text-muted-2',
+              )}
+            >
+              {hint}
+            </span>
+          )}
+        </p>
       </div>
     </div>
   );
@@ -256,7 +259,7 @@ export function VersionUpdatePage() {
             hintTone={upToDate === false ? 'warning' : 'success'}
           />
           <Metric icon="rocket" label={t('admin_version_latest')} value={latest?.tagName ?? '-'} mono />
-          {/* 提交与构建号分列：版本号不再携带 +N 构建元数据，构建号只作为提交的附注 */}
+          {/* 构建号不再拼进版本号，作为提交号后的行内附注展示 */}
           <Metric
             icon="git_commit"
             label={t('admin_version_current_commit')}
