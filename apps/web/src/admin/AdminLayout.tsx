@@ -62,7 +62,7 @@ const MENU: MenuGroup[] = [
   {
     label: { textKey: 'admin_menu_user', fallback: 'User' },
     items: [
-      { key: 'user', to: '/admin/users', label: { textKey: 'admin_menu_user_manage', fallback: 'User Management' }, icon: 'user', prefixes: ['/admin/users', '/admin/groups'] },
+      { key: 'user', to: '/admin/users', label: { textKey: 'admin_menu_user_manage', fallback: 'User Management' }, icon: 'user', prefixes: ['/admin/users', '/admin/banned', '/admin/groups'] },
       /* 「加V认证」后台（待审核/已通过/手动加V/收费设置四档同页切换）；
          icon 取 star（加V/认证徽章语义，shield 已被「内容审核」占用） */
       { key: 'v', to: '/admin/v', label: { textKey: 'admin_menu_v_verify', fallback: 'V Verification' }, icon: 'star', prefixes: ['/admin/v'] },

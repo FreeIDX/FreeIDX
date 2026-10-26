@@ -518,7 +518,14 @@
   "point_reason_transfer_in": "Входящий",
   "point_reason_transfer_out": "Исходящий",
   "point_reason_v_apply": "Заявка на V",
-  "points_log_label": "Журнал очков"
+  "points_log_label": "Журнал очков",
+  "account_muted": "Ваш аккаунт лишён права писать, публикация контента временно недоступна.",
+  "account_suspended": "Доступ вашего аккаунта к сайту ограничен.",
+  "account_banned": "Вашему аккаунту запрещён вход на этот сайт.",
+  "ban_until_label": "Время разблокировки: {date}",
+  "ban_reason_label": "Причина: {reason}",
+  "ban_permanent": "Навсегда",
+  "compose_muted_hint": "Аккаунт лишён права писать: публикация и ответы временно недоступны."
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "Язык",
@@ -1187,6 +1194,31 @@
   "admin_maint_r2_prefix_forum": "Значки разделов forum/",
   "admin_maint_r2_prefix_site": "Значки сайта site/",
   "admin_maint_r2_prefix_attach": "Вложения attach/",
-  "admin_maint_r2_prefix_seo": "Снимки SEO seo/"
+  "admin_maint_r2_prefix_seo": "Снимки SEO seo/",
+  "ban_manage": "Чёрный список",
+  "ban_scope": "Объём блокировки",
+  "ban_scope_mute": "Мут (вход и просмотр разрешены, публикация запрещена)",
+  "ban_scope_read": "Без доступа (просмотр и публикация запрещены)",
+  "ban_scope_login": "Запрет входа (сессии сразу отзываются)",
+  "ban_duration": "Длительность",
+  "ban_duration_1h": "1 час",
+  "ban_duration_1d": "1 день",
+  "ban_duration_7d": "7 дней",
+  "ban_duration_30d": "30 дней",
+  "ban_duration_forever": "Навсегда",
+  "ban_submit": "Заблокировать",
+  "ban_unban": "Разблокировать",
+  "ban_status": "Статус",
+  "ban_status_none": "Норма",
+  "ban_status_banned": "Заблокирован",
+  "ban_current": "Текущая блокировка",
+  "ban_history": "История блокировок",
+  "ban_list": "Список заблокированных",
+  "ban_operator": "Оператор",
+  "ban_expire": "Истекает",
+  "ban_batch": "Массовая блокировка",
+  "ban_unban_confirm": "Разблокировать этого пользователя?",
+  "ban_no_selection": "Сначала выберите пользователей",
+  "ban_scope_required": "Выберите хотя бы один объём блокировки"
  }
 }

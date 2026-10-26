@@ -12,6 +12,7 @@ import { edgeCache } from './core/cache/edge';
 import { ok, handleError, handleNotFound } from './middleware/envelope';
 import { runlevel } from './middleware/runlevel';
 import { csrf } from './middleware/csrf';
+import { banGuard } from './middleware/ban';
 import { adminGuard } from './middleware/admin';
 import { canonicalHostRedirect } from './middleware/canonical-host';
 import { requestOrigin } from './core/site';
@@ -43,6 +44,7 @@ import { themeRoutes } from './modules/theme/routes';
 import { adminRoutes } from './modules/admin/routes';
 import { adminForumRoutes } from './modules/admin/forums';
 import { adminUserRoutes } from './modules/admin/users';
+import { adminBanRoutes } from './modules/admin/ban';
 import { adminRuntimeRoutes } from './modules/admin/runtime';
 import { adminMaintenanceRoutes } from './modules/admin/maintenance';
 import { adminExtensionsRoutes } from './modules/admin/extensions';
@@ -134,6 +136,9 @@ app.use('*', async (c, next) => {
   await next();
 });
 app.use('*', runlevel);
+// 小黑屋闸门（0025）：禁言/禁访/禁登按位拦截，须在 runlevel 之后（借其 setting 装载）、csrf 之前
+// （被封用户的写请求无需再付一次 CSRF 校验）。/api/auth/* 与 /api/admin/* 在中间件内豁免。
+app.use('*', banGuard());
 // CSRF 双提交（T2-3）：非 GET /api 写请求校验 X-CSRF-Token
 app.use('*', csrf);
 // 后台守卫（T3-3）：/api/admin/* 需 admin_at 且回查 gid=1，非授权一律 403（后续 admin 路由挂在此后）
@@ -203,6 +208,8 @@ app.route('/', adminRoutes());
 app.route('/', adminForumRoutes());
 // M3 后台（T3-6）：用户 CRUD + 用户组 12 项权限矩阵（§D.8#5 版务位仅 gid 1-5）
 app.route('/', adminUserRoutes());
+// 后台小黑屋（0025）：封禁/解封/生效列表/历史/批量（adminGuard 已覆盖 /api/admin/*）
+app.route('/', adminBanRoutes());
 // M3 后台（T3-7）：modlog 面板、runtime 统计面板（三预算实测）、缓存一键清空
 app.route('/', adminRuntimeRoutes());
 // M3 后台（T3-11）：运行维护 —— 数据库孤儿/失效清理（分批）+ R2 未使用对象扫描与删除

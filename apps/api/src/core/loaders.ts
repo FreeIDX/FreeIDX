@@ -4,7 +4,11 @@
  */
 import {
   FORUM_LANG_UNRESTRICTED,
+  BanScope,
+  Code,
+  GroupId,
   RunLevel,
+  effectiveBanScope,
   normalizeForumLang,
   type ContentLang,
   type NavItem,
@@ -14,6 +18,9 @@ import type { D1b } from './db';
 import { FORUM_COLS, USER_SESSION_COLS } from './db/columns';
 import type { Cache } from './cache';
 import { remember } from './cache';
+import { AppError } from '../middleware/envelope';
+import { banMessage } from './ban';
+import { t0, type ApiT } from './i18n';
 import type { AccessCtx, AccessRow, ForumForAccess, GroupForAccess } from './access';
 import type { Env } from '../types/env';
 import { ACCESS_TOKEN_TTL, verifyJwt } from './auth/jwt';
@@ -188,12 +195,16 @@ export async function loadSetting(cache: Cache, db: D1b): Promise<SiteSetting> {
   });
 }
 
-interface Viewer {
+export interface Viewer {
   uid: number;
   gid: number;
   username: string;
   /** 账号审核状态（tt_check user.OK）：1=正常 0=待审核 -1=未通过；游客恒 1（不受审核闸门约束） */
   ok: number;
+  /** 小黑屋：封禁位掩码（0025，1 禁言 2 禁访 4 禁登）+ 到期时间（0=永久）+ 理由 */
+  banScope?: number;
+  banUntil?: number;
+  banReason?: string;
 }
 
 const GUEST: Viewer = { uid: 0, gid: 0, username: '', ok: 1 };
@@ -241,6 +252,53 @@ function setSidCookie(c: ViewerCtx, sid: string): void {
  *  last_date 刷新节流 60s 走 waitUntil（在线口径 ±60s，D1 写额度护栏）。
  */
 export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<Viewer> {
+  /**
+   * 请求级去重（小黑屋闸门新增）：banGuard 与业务 handler 都会判当前访问者，
+   * 若各自走一遍本函数就要多查一次 bbs_session。Cache 实例是每请求一个，
+   * 故以 loaded 表按请求记忆，同请求内只装载一次（零额外 D1 读，免费层预算不变）。
+   * 语义安全：本请求内没有「先装载 viewer 再改变登录态」的路径（登录/登出/改密均直接写库后返回）。
+   */
+  const v = cache.hasLoaded(VIEWER_MEMO_KEY)
+    ? cache.getLoaded<Viewer>(VIEWER_MEMO_KEY)
+    : await (async () => {
+        const loaded = await loadViewerUncached(cache, db, c);
+        cache.putLoaded(VIEWER_MEMO_KEY, loaded);
+        return loaded;
+      })();
+  // 读侧小黑屋拦截（见 enforceBanOnRead 注释）
+  enforceBanOnRead(c, v);
+  return v;
+}
+
+/** 请求级 viewer 记忆键（带前缀避免与业务缓存键冲突） */
+const VIEWER_MEMO_KEY = '__viewer';
+
+/**
+ * 读侧小黑屋拦截（禁访/禁登）：
+ * 全部需要「当前用户」的读接口都会走 loadViewer，故在此统一拒绝，零额外查询（行已装载）。
+ * 不放进全局中间件的原因：/api/online 等接口刻意不解析 viewer 以省 D1，全局强制装载会破坏其预算承诺；
+ * 这些接口本身不含正文/用户数据，禁访用户读到在线人数属可接受残留。
+ * /api/auth/* 豁免：被封用户必须能登出与复核口令（否则无法自救）。
+ */
+function enforceBanOnRead(c: ViewerCtx, v: Viewer): void {
+  if (v.uid <= 0 || v.gid === GroupId.ADMIN) return;
+  let path = '';
+  try {
+    path = new URL(c.req.url).pathname;
+  } catch {
+    path = '';
+  }
+  if (path.startsWith('/api/auth/')) return;
+  const scope = effectiveBanScope(v.banScope, v.banUntil, Math.floor(Date.now() / 1000));
+  if (!(scope & (BanScope.READ | BanScope.LOGIN))) return;
+  const t = ((c as unknown as { get?: (k: string) => unknown }).get?.('t') as ApiT | undefined) ?? t0;
+  throw new AppError(Code.BANNED, banMessage(scope, Number(v.banUntil ?? 0), String(v.banReason ?? ''), t), {
+    banScope: scope,
+    banUntil: Number(v.banUntil ?? 0),
+  });
+}
+
+async function loadViewerUncached(cache: Cache, db: D1b, c: ViewerCtx): Promise<Viewer> {
   const sid = cookieOf(c, 'sid');
   let uid = 0;
   /** JWT 轨有效载荷的 tv（session 轨为 null，不参与比对） */
@@ -277,15 +335,24 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
   }
   if (!uid) return GUEST;
   const viewer = await remember(cache, `user:${uid}`, async () => {
+    /** 行类型 = Viewer + token_version + 小黑屋三列（USER_SESSION_COLS 已含 ban_*） */
+    type SessionRow = Viewer & { token_version: number; ban_scope: number; ban_until: number; ban_reason: string };
     const u = await db
-      .prepare<Viewer & { token_version: number }>(
-        `SELECT ${USER_SESSION_COLS}, token_version FROM bbs_user WHERE uid = ?`,
-      )
+      .prepare<SessionRow>(`SELECT ${USER_SESSION_COLS}, token_version FROM bbs_user WHERE uid = ?`)
       .bind(uid)
-      .first<Viewer & { token_version: number }>();
+      .first<SessionRow>();
     return u
-      ? { uid: u.uid, gid: u.gid, username: u.username, ok: Number(u.ok ?? 1), tv: Number(u.token_version ?? 0) }
-      : { uid: 0, gid: 0, username: '', ok: 1, tv: 0 };
+      ? {
+          uid: u.uid,
+          gid: u.gid,
+          username: u.username,
+          ok: Number(u.ok ?? 1),
+          banScope: Number(u.ban_scope ?? 0),
+          banUntil: Number(u.ban_until ?? 0),
+          banReason: String(u.ban_reason ?? ''),
+          tv: Number(u.token_version ?? 0),
+        }
+      : { uid: 0, gid: 0, username: '', ok: 1, banScope: 0, banUntil: 0, banReason: '', tv: 0 };
   });
   // 用户已被删除（查无此行）→ 游客：不再下发/写入 session（原实现在此处为空 uid 反复建 bbs_session 行）
   if (viewer.uid <= 0) return GUEST;

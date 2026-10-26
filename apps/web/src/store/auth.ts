@@ -25,6 +25,11 @@ interface AuthState {
     unreadNotices?: number;
     /** 账号审核状态（bootstrap me）：1=正常 0=待审核 -1=未通过；非 1 首页顶部提示 */
     ok?: number;
+    /** 小黑屋（bootstrap me）：生效中的封禁位（0=未封禁/已到期）1 禁言 2 禁访 4 禁登 */
+    banScope?: number;
+    /** 封禁到期（unix 秒，0=永久） */
+    banUntil?: number;
+    banReason?: string;
     /** see_check 组（bootstrap me）：列表显示审核图标、帖内现场审核按钮 */
     seeCheck?: boolean;
     /** 预设头像路径（user.avatar_auto，如 /avatars/7.png；avatar=0 且已设预设时才下发） */

@@ -15,6 +15,7 @@ interface TabItem {
 
 export const USER_TABS: TabItem[] = [
   { k: 'list', to: '/admin/users', textKey: 'admin_user_list', fallback: 'User List' },
+  { k: 'banned', to: '/admin/banned', textKey: 'ban_manage', fallback: 'Blacklist' },
   { k: 'group', to: '/admin/groups', textKey: 'admin_user_group', fallback: 'User Groups' },
   { k: 'create', to: '/admin/users/new', textKey: 'admin_user_create', fallback: 'Create User' },
 ];

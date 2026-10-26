@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CONTENT_LANG_NATIVE_NAMES, CONTENT_LANGS, detectContentLang, type ContentLang } from '@freeidx/shared';
+import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { createThread } from '../../../lib/api';
 import { Composer, type ComposerSubmit } from '../../../components/Composer';
 import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
@@ -92,6 +93,27 @@ export function ComposePage() {
           </Alert>
           <Button className="mt-3" onClick={() => openAuth('login')}>
             {t('go_to_login')}
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  /* 小黑屋（0025）：禁言/禁访/禁登都不可发帖。服务端 banGuard 同样会拒，这里提前给出可读原因，避免白填表单 */
+  const banScope = effectiveBanScope(me.banScope, me.banUntil, Math.floor(Date.now() / 1000));
+  if (banScope & (BanScope.MUTE | BanScope.READ | BanScope.LOGIN)) {
+    return (
+      <div className="mx-auto w-full lg:w-[83.333%]">
+        <Card header={<span className="font-medium">{t('thread_create')}</span>}>
+          <Alert tone="warning" icon="warning">
+            {t('compose_muted_hint')}{' '}
+            {me.banUntil && me.banUntil > 0
+              ? t('ban_until_label', { date: new Date(me.banUntil * 1000).toLocaleString() })
+              : t('ban_permanent')}
+            {me.banReason ? ` · ${t('ban_reason_label', { reason: me.banReason })}` : ''}
+          </Alert>
+          <Button className="mt-3" onClick={() => navigate('/')}>
+            {t('back_to_home')}
           </Button>
         </Card>
       </div>

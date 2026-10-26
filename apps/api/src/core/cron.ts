@@ -14,6 +14,7 @@ import { queueGc } from './queue';
 import { getExtensions } from './extensions';
 import { reconcilePending, sweepStaleOrders } from './payment/orchestrator';
 import { demoteExpiredVip } from './order';
+import { liftExpiredBans } from './ban';
 import { seoRebuildRenamed } from '../modules/seo/generate';
 
 export const ONLINE_HOLD_TIME_DEFAULT = 300;
@@ -304,6 +305,14 @@ export async function handleScheduled(
         if (rows.length) console.log(`[cron:vip-fallback] demoted=${rows.length}`);
       } catch (err) {
         console.warn('[cron:vip-fallback] failed:', err instanceof Error ? err.message : err);
+      }
+      // 小黑屋到期解封（0025）：读路径 effectiveBanScope 已做惰性判定（到期即刻放行），
+      // 本档只负责清列 + 失效 user:{uid} 缓存 + 回填历史表的解除时间，允许最坏晚 1h 反映到库。
+      try {
+        const lifted = await liftExpiredBans({ db, cache }, deps.now);
+        if (lifted) console.log(`[cron:ban-lift] lifted=${lifted}`);
+      } catch (err) {
+        console.warn('[cron:ban-lift] failed:', err instanceof Error ? err.message : err);
       }
       // 临时附件 GC：挪到每小时档（40 × 24 = 960/天），批量≤子请求预算，先删对象再删行。
       try {

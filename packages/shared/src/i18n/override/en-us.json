@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "Transfer in",
   "point_reason_transfer_out": "Transfer out",
   "point_reason_v_apply": "V application",
-  "points_log_label": "Credits log"
+  "points_log_label": "Credits log",
+  "account_muted": "Your account has been muted and cannot post content for now.",
+  "account_suspended": "Your account is restricted from accessing this site.",
+  "account_banned": "Your account is banned from signing in to this site.",
+  "ban_until_label": "Unban time: {date}",
+  "ban_reason_label": "Reason: {reason}",
+  "ban_permanent": "Permanent",
+  "compose_muted_hint": "Your account is muted; posting and replying are temporarily disabled."
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "Language",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "Forum icons forum/",
   "admin_maint_r2_prefix_site": "Site icons site/",
   "admin_maint_r2_prefix_attach": "Attachments attach/",
-  "admin_maint_r2_prefix_seo": "SEO snapshots seo/"
+  "admin_maint_r2_prefix_seo": "SEO snapshots seo/",
+  "ban_manage": "Blacklist",
+  "ban_scope": "Ban scope",
+  "ban_scope_mute": "Mute (sign in and browse, but cannot post)",
+  "ban_scope_read": "No access (cannot browse or post)",
+  "ban_scope_login": "Login ban (sessions revoked immediately)",
+  "ban_duration": "Duration",
+  "ban_duration_1h": "1 hour",
+  "ban_duration_1d": "1 day",
+  "ban_duration_7d": "7 days",
+  "ban_duration_30d": "30 days",
+  "ban_duration_forever": "Permanent",
+  "ban_submit": "Ban",
+  "ban_unban": "Unban",
+  "ban_status": "Status",
+  "ban_status_none": "Normal",
+  "ban_status_banned": "Banned",
+  "ban_current": "Current ban",
+  "ban_history": "Ban history",
+  "ban_list": "Banned users",
+  "ban_operator": "Operator",
+  "ban_expire": "Expires",
+  "ban_batch": "Bulk ban",
+  "ban_unban_confirm": "Unban this user?",
+  "ban_no_selection": "Select users first",
+  "ban_scope_required": "Select at least one ban scope"
  }
 }

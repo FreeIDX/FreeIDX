@@ -141,6 +141,46 @@ export interface AdminUserRow {
   create_ip_fmt: string;
   /** 账号审核状态：1=正常 0=待审核 -1=未通过 */
   ok: number;
+  /** 小黑屋（0025）：封禁位掩码 0=无 1=禁言 2=禁访 4=禁登（可组合） */
+  ban_scope: number;
+  /** 封禁到期（unix 秒，0=永久） */
+  ban_until: number;
+  ban_reason: string;
+}
+
+/** GET /api/admin/users/banned 行（生效中的封禁；ban_by_name 由服务端批量补） */
+export interface BannedUserRow {
+  uid: number;
+  gid: number;
+  username: string;
+  email: string;
+  ban_scope: number;
+  ban_until: number;
+  ban_reason: string;
+  ban_at: number;
+  ban_by: number;
+  ban_by_name: string;
+}
+
+/** GET /api/admin/users/:uid/bans 行（bbs_user_ban 历史） */
+export interface UserBanHistoryRow {
+  bid: number;
+  scope: number;
+  reason: string;
+  operator_uid: number;
+  operator_name: string;
+  create_date: number;
+  expire_date: number;
+  lifted_at: number;
+  lifted_by: number;
+}
+
+/** POST /api/admin/users/:uid/ban 入参（duration 与 until 二选一，duration=N 秒后解封） */
+export interface BanInput {
+  scope: number;
+  until?: number;
+  duration?: number;
+  reason?: string;
 }
 
 export interface AdminThreadRow {

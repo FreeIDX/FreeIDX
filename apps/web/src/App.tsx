@@ -35,6 +35,7 @@ const GroupListPage = lazy(() => import('./admin/pages/GroupListPage').then((m) 
 const GroupEditPage = lazy(() => import('./admin/pages/GroupEditPage').then((m) => ({ default: m.GroupEditPage })));
 const UserListPage = lazy(() => import('./admin/pages/UserListPage').then((m) => ({ default: m.UserListPage })));
 const UserEditPage = lazy(() => import('./admin/pages/UserEditPage').then((m) => ({ default: m.UserEditPage })));
+const BannedPage = lazy(() => import('./admin/pages/BannedPage').then((m) => ({ default: m.BannedPage })));
 const OtherPage = lazy(() => import('./admin/pages/OtherPage').then((m) => ({ default: m.OtherPage })));
 const DbMaintenancePage = lazy(() => import('./admin/pages/DbMaintenancePage').then((m) => ({ default: m.DbMaintenancePage })));
 const R2MaintenancePage = lazy(() => import('./admin/pages/R2MaintenancePage').then((m) => ({ default: m.R2MaintenancePage })));
@@ -83,6 +84,8 @@ function AdminRoutes() {
           <Route path="groups" element={<GroupListPage />} />
           <Route path="groups/:gid/edit" element={<GroupEditPage />} />
           <Route path="users" element={<UserListPage />} />
+          {/* 小黑屋：生效中的封禁名单与解封入口（0025） */}
+          <Route path="banned" element={<BannedPage />} />
           <Route path="users/new" element={<UserEditPage />} />
           <Route path="users/:uid/edit" element={<UserEditPage />} />
           <Route path="other" element={<OtherPage />} />

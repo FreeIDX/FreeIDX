@@ -10,7 +10,7 @@
  * 人机验证：发帖/回帖在参数解析后立刻校验 Turnstile token（附录 B 覆盖 登录/注册/发帖/回帖/找回密码/发码），早于任何 D1 读写。
  */
 import { Hono, type Context } from 'hono';
-import { Code, detectContentLang, normalizeContentLang, type CreatePostReq, type CreateThreadReq, type EventName, type EventPayload } from '@freeidx/shared';
+import { Code, detectContentLang, effectiveBanScope, normalizeContentLang, type CreatePostReq, type CreateThreadReq, type EventName, type EventPayload } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
@@ -42,6 +42,7 @@ import {
   upgradeGroupsByCredits,
 } from '../../core/points';
 import { NoticeType, noticeQuoteHtml, noticeReplyHtml, noticeSend } from '../../core/notice';
+import { banMessage } from '../../core/ban';
 import { associateAttachments } from '../attach/routes';
 import { scheduleSeo } from '../seo/generate';
 import { getExecCtx, intParam, patchRuntime, readJson, type ReadEnv } from '../shared';
@@ -67,6 +68,10 @@ interface AuthorRow {
   posts: number;
   /** 账号审核状态（tt_check）：非 1 且开启 user_check 时禁发帖回帖 */
   ok: number;
+  /** 小黑屋（0025）：封禁位掩码/到期/理由 */
+  ban_scope: number;
+  ban_until: number;
+  ban_reason: string;
 }
 
 async function requireLogin(core: Core, c: Ctx): Promise<{ viewer: AuthorRow; ctx: AccessCtx }> {
@@ -75,10 +80,22 @@ async function requireLogin(core: Core, c: Ctx): Promise<{ viewer: AuthorRow; ct
   const v = await loadViewer(cache, db, c);
   if (v.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('common.pleaseLogin'));
   const author = await db
-    .prepare<AuthorRow>('SELECT uid,gid,username,avatar,threads,posts,ok FROM bbs_user WHERE uid = ?')
+    .prepare<AuthorRow>('SELECT uid,gid,username,avatar,threads,posts,ok,ban_scope,ban_until,ban_reason FROM bbs_user WHERE uid = ?')
     .bind(v.uid)
     .first<AuthorRow>();
   if (!author || author.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('common.pleaseLogin'));
+  /**
+   * 小黑屋双保险（banGuard 已全局收口）：写路径是 banGuard 唯一的 MUTE 判定面，
+   * 此处再判一次，防止将来新增绕过 /api 前缀的写入口（如插件直挂路由）时漏拦。
+   * 本模块所有入口都是写操作，故任一封禁维度都拒绝。
+   */
+  const banScope = effectiveBanScope(author.ban_scope, author.ban_until, now());
+  if (banScope) {
+    throw new AppError(Code.BANNED, banMessage(banScope, Number(author.ban_until ?? 0), String(author.ban_reason ?? ''), t), {
+      banScope,
+      banUntil: Number(author.ban_until ?? 0),
+    });
+  }
   const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
   return { viewer: author, ctx: makeAccessCtx(author, forumlist, grouplist) };
 }

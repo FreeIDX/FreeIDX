@@ -518,7 +518,14 @@
   "point_reason_transfer_out": "送金",
   "point_reason_v_apply": "V申請",
   "points_log_label": "ポイント履歴",
-  "top": "ピン留め"
+  "top": "ピン留め",
+  "account_muted": "アカウントは投稿禁止となっており、現在コンテンツを投稿できません。",
+  "account_suspended": "アカウントは本サイトへのアクセスが制限されています。",
+  "account_banned": "アカウントは本サイトへのログインが禁止されています。",
+  "ban_until_label": "解除日時：{date}",
+  "ban_reason_label": "理由：{reason}",
+  "ban_permanent": "永久",
+  "compose_muted_hint": "アカウントは投稿禁止のため、現在スレッド作成・返信ができません。"
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "言語",
@@ -1187,6 +1194,31 @@
   "admin_maint_r2_prefix_forum": "フォーラムアイコン forum/",
   "admin_maint_r2_prefix_site": "サイトアイコン site/",
   "admin_maint_r2_prefix_attach": "添付 attach/",
-  "admin_maint_r2_prefix_seo": "SEO スナップショット seo/"
+  "admin_maint_r2_prefix_seo": "SEO スナップショット seo/",
+  "ban_manage": "ブラックリスト",
+  "ban_scope": "制限範囲",
+  "ban_scope_mute": "投稿禁止（ログイン・閲覧は可、投稿不可）",
+  "ban_scope_read": "アクセス禁止（閲覧・投稿とも不可）",
+  "ban_scope_login": "ログイン禁止（セッションを即時失効）",
+  "ban_duration": "期間",
+  "ban_duration_1h": "1 時間",
+  "ban_duration_1d": "1 日",
+  "ban_duration_7d": "7 日",
+  "ban_duration_30d": "30 日",
+  "ban_duration_forever": "永久",
+  "ban_submit": "制限する",
+  "ban_unban": "解除",
+  "ban_status": "状態",
+  "ban_status_none": "正常",
+  "ban_status_banned": "制限中",
+  "ban_current": "現在の制限",
+  "ban_history": "制限履歴",
+  "ban_list": "制限中ユーザー",
+  "ban_operator": "実行者",
+  "ban_expire": "期限",
+  "ban_batch": "一括制限",
+  "ban_unban_confirm": "このユーザーの制限を解除しますか？",
+  "ban_no_selection": "先にユーザーを選択してください",
+  "ban_scope_required": "制限範囲を 1 つ以上選択してください"
  }
 }

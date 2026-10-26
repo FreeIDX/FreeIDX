@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "Entrante",
   "point_reason_transfer_out": "Saliente",
   "point_reason_v_apply": "Solicitud V",
-  "points_log_label": "Registro de créditos"
+  "points_log_label": "Registro de créditos",
+  "account_muted": "Tu cuenta ha sido silenciada y por ahora no puede publicar contenido.",
+  "account_suspended": "El acceso de tu cuenta a este sitio está restringido.",
+  "account_banned": "Tu cuenta tiene prohibido iniciar sesión en este sitio.",
+  "ban_until_label": "Hora de desbloqueo: {date}",
+  "ban_reason_label": "Motivo: {reason}",
+  "ban_permanent": "Permanente",
+  "compose_muted_hint": "Tu cuenta está silenciada; publicar y responder están deshabilitados temporalmente."
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "Idioma",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "Iconos de foro forum/",
   "admin_maint_r2_prefix_site": "Iconos del sitio site/",
   "admin_maint_r2_prefix_attach": "Adjuntos attach/",
-  "admin_maint_r2_prefix_seo": "Instantáneas SEO seo/"
+  "admin_maint_r2_prefix_seo": "Instantáneas SEO seo/",
+  "ban_manage": "Lista negra",
+  "ban_scope": "Ámbito del bloqueo",
+  "ban_scope_mute": "Silenciar (puede entrar y leer, no publicar)",
+  "ban_scope_read": "Sin acceso (no puede leer ni publicar)",
+  "ban_scope_login": "Prohibir acceso (sesiones revocadas al instante)",
+  "ban_duration": "Duración",
+  "ban_duration_1h": "1 hora",
+  "ban_duration_1d": "1 día",
+  "ban_duration_7d": "7 días",
+  "ban_duration_30d": "30 días",
+  "ban_duration_forever": "Permanente",
+  "ban_submit": "Bloquear",
+  "ban_unban": "Desbloquear",
+  "ban_status": "Estado",
+  "ban_status_none": "Normal",
+  "ban_status_banned": "Bloqueado",
+  "ban_current": "Bloqueo actual",
+  "ban_history": "Historial de bloqueos",
+  "ban_list": "Usuarios bloqueados",
+  "ban_operator": "Operador",
+  "ban_expire": "Caduca",
+  "ban_batch": "Bloqueo masivo",
+  "ban_unban_confirm": "¿Desbloquear a este usuario?",
+  "ban_no_selection": "Selecciona usuarios primero",
+  "ban_scope_required": "Selecciona al menos un ámbito de bloqueo"
  }
 }

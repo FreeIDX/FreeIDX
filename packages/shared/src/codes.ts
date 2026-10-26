@@ -26,6 +26,8 @@ export const Code = {
   METHOD_ERROR: -9,
   /** 请求参数校验失败（Zod） */
   VALIDATION_ERROR: -10,
+  /** 账号处于小黑屋（封禁/禁言/禁访/禁登），文案含范围、到期与理由 */
+  BANNED: -11,
 
   // ---- 表单级业务错误（code > 0，字段级提示） ----
   FORM_SUBJECT_TOO_SHORT: 1001,

@@ -23,6 +23,9 @@ import type {
   AdminUserRow,
   AdminVApplyRow,
   AdminVUser,
+  BanInput,
+  BannedUserRow,
+  UserBanHistoryRow,
   CardGenResult,
   ExtensionDetail,
   ExtensionRow,
@@ -145,6 +148,19 @@ export const updateUser = (
 ) => apiSend<{ uid: number }>('PUT', `/api/admin/users/${uid}`, input);
 /** 硬删除并级联清理主题/帖子/附件；目标是 gid=1 时返回 code -3 '管理员不可删除' */
 export const deleteUser = (uid: number) => apiSend<{ uid: number }>('DELETE', `/api/admin/users/${uid}`);
+
+/* ---------------- 小黑屋（0025） ---------------- */
+/** 封禁/禁言/禁访/禁登：scope 位掩码 1/2/4 可组合；duration 为「从现在起 N 秒」，0/缺省 = 永久 */
+export const banUser = (uid: number, input: BanInput) => apiSend<{ uid: number }>('POST', `/api/admin/users/${uid}/ban`, input);
+export const unbanUser = (uid: number) => apiSend<{ uid: number }>('POST', `/api/admin/users/${uid}/unban`);
+/** 批量封禁：命中 gid=1 / 自己 / 不存在 的目标进 skipped，不整批失败；单次上限 50 */
+export const batchBanUsers = (input: BanInput & { uids: number[] }) =>
+  apiSend<{ uids: number[]; skipped: number[] }>('POST', '/api/admin/users/bans', input);
+/** 生效中的封禁列表（keyword 模糊匹配用户名/邮箱，与用户列表的精确匹配不同） */
+export const getBannedUsers = (q: { keyword?: string; page?: number; size?: number }) =>
+  apiGet<PageData<BannedUserRow>>(`/api/admin/users/banned${qs(q)}`);
+/** 某用户封禁历史（最近 50 条） */
+export const getUserBans = (uid: number) => apiGet<{ uid: number; list: UserBanHistoryRow[] }>(`/api/admin/users/${uid}/bans`);
 
 /**
  * 主题检索：keyword 是 **LIKE 模糊**（与 /api/admin/users 的精确口径相反）；

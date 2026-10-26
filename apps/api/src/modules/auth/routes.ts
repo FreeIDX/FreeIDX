@@ -11,10 +11,11 @@
  */
 import { Hono, type Context } from 'hono';
 import { setCookie } from 'hono/cookie';
-import { ADMIN_TOKEN_TTL, Code, GroupId, type LoginReq, type RegisterReq } from '@freeidx/shared';
+import { ADMIN_TOKEN_TTL, BanScope, Code, GroupId, effectiveBanScope, type LoginReq, type RegisterReq } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { core, randomPresetAvatar, readJson, type ReadEnv } from '../shared';
 import { loadSetting, loadViewer, reqIp } from '../../core/loaders';
+import { banMessage } from '../../core/ban';
 import { createSession, destroySession, destroyUserSessions, ipToLong } from '../../core/auth/session';
 import { hashPassword, verifyClientPassword } from '../../core/auth';
 import { issueAccessToken, ACCESS_TOKEN_TTL } from '../../core/auth/jwt';
@@ -66,6 +67,10 @@ interface UserSessionRow {
   avatar: number;
   username: string;
   email: string;
+  /** 小黑屋（0025）：USER_SESSION_COLS 已投影，登录前置判定禁登位 */
+  ban_scope: number;
+  ban_until: number;
+  ban_reason: string;
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -302,6 +307,20 @@ export function authRoutes(): Hono<ReadEnv> {
       throw new AppError(Code.FORM_PASSWORD_MISMATCH, t('auth.passwordWrong'));
     }
     await cache.del(failKey);
+
+    /**
+     * 小黑屋（0025）：禁登位在签发会话之前拒绝。
+     * 判在口令校验之后：不向未持有正确口令的人泄露「该账号已被封」这一信息。
+     * 禁言/禁访不拦登录——用户仍需能登录查看封禁原因、修改资料或申请解封。
+     */
+    const banScope = effectiveBanScope(user.ban_scope, user.ban_until, now());
+    if (banScope & BanScope.LOGIN) {
+      throw new AppError(
+        Code.BANNED,
+        banMessage(banScope, Number(user.ban_until ?? 0), String(user.ban_reason ?? ''), t),
+        { banScope, banUntil: Number(user.ban_until ?? 0) },
+      );
+    }
 
     const ts = now();
     await db

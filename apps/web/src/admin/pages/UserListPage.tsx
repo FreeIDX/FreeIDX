@@ -24,8 +24,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { GroupId, type AdminKey } from '@freeidx/shared';
-import { deleteUser, getUsers } from '../api';
+import { GroupId, effectiveBanScope, type AdminKey } from '@freeidx/shared';
+import { batchBanUsers, deleteUser, getUsers } from '../api';
+import { BAN_DURATIONS, BanScopePicker, scopeText } from '../ban';
+import { useAdminAction } from '../use-action';
 import type { AdminUserRow } from '../types';
 import { useAdminT } from '../t';
 import { useGroupName } from '../../lib/i18n';
@@ -41,9 +43,11 @@ import {
   Checkbox,
   ConfirmModal,
   ErrorState,
+  Field,
   Input,
   PageTitle,
   Select,
+  SubmitRow,
   TabBar,
   Table,
   cardCls,
@@ -98,6 +102,12 @@ export function UserListPage() {
   const batch = useBatchAction([['admin', 'users'], ['admin', 'runtime']]);
   const [picked, setPicked] = useState<number[]>([]);
   const [confirming, setConfirming] = useState(false);
+
+  /* 小黑屋：批量封禁（勾选后展开内联表单，避免误触；单用户封禁走编辑页的完整表单） */
+  const [banOpen, setBanOpen] = useState(false);
+  const [banScope, setBanScope] = useState(0);
+  const [banDuration, setBanDuration] = useState(BAN_DURATIONS[1]?.value ?? 86_400);
+  const [banReason, setBanReason] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const rows = q.data?.list ?? [];
@@ -134,6 +144,18 @@ export function UserListPage() {
   };
 
   const targets = rows.filter((r) => picked.includes(r.uid) && Number(r.gid) !== GroupId.ADMIN);
+
+  const banAct = useAdminAction(
+    () =>
+      batchBanUsers({ uids: targets.map((r) => r.uid), scope: banScope, duration: banDuration, reason: banReason.trim() }),
+    {
+      invalidate: [['admin', 'users'], ['admin', 'banned'], ['admin', 'runtime']],
+      onData: () => {
+        setPicked([]);
+        setBanOpen(false);
+      },
+    },
+  );
 
   const deletePicked = async () => {
     if (!picked.length) {
@@ -225,19 +247,20 @@ export function UserListPage() {
         <div className="min-h-px flex-1">
           <Table
             flush
-            minWidth="min-w-[960px]"
+            minWidth="min-w-[1060px]"
             head={[
               t('check_all', '全选'),
               'ID：',
               t('email', '邮箱'),
               t('username', '用户名'),
               t('user_group', '用户组'),
+              t('ban_status', '状态'),
               t('admin_user_reg_time', '注册时间'),
               t('admin_user_last_login_time', '最近登录时间'),
               t('create_ip', '创建 IP'),
               t('operation', '操作'),
             ]}
-            headCls={['w-[60px] text-center', 'w-[50px]', 'w-[150px]', 'w-[150px]', 'w-[100px]', 'w-[100px]', 'w-[130px]', 'w-[100px]', 'w-[60px]']}
+            headCls={['w-[60px] text-center', 'w-[50px]', 'w-[150px]', 'w-[150px]', 'w-[100px]', 'w-[110px]', 'w-[100px]', 'w-[130px]', 'w-[100px]', 'w-[60px]']}
           >
             {rows.map((r) => (
               <UserRow
@@ -253,11 +276,27 @@ export function UserListPage() {
         </div>
 
         <div className={cx(cardFooterCls, 'flex flex-wrap items-center justify-between gap-2')}>
-          {/* 删除钮不做 disabled，未勾选时靠提示语拦截 */}
-          <Button variant="danger" size="sm" loading={batch.pending} onClick={() => void deletePicked()}>
-            <Icon name="trash" />
-            {t('delete', '删除')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 删除钮不做 disabled，未勾选时靠提示语拦截 */}
+            <Button variant="danger" size="sm" loading={batch.pending} onClick={() => void deletePicked()}>
+              <Icon name="trash" />
+              {t('delete', '删除')}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                if (!picked.length) {
+                  batch.setFlash({ tone: 'warn', text: t('ban_no_selection', '请先勾选用户') });
+                  return;
+                }
+                setBanOpen((v) => !v);
+              }}
+            >
+              <Icon name="shield" />
+              {t('ban_batch', '批量封禁')}
+            </Button>
+          </div>
           <span className="text-[80%] text-muted">
             <Icon name="shield" className="ml-2 inline size-[1em] align-[-.125em]" />
             {t('admin_user_shield_legend', ':表示管理组成员，请谨慎操作！')}
@@ -266,6 +305,44 @@ export function UserListPage() {
       </section>
 
       {q.data && <AdminPagination page={q.data.page} totalPage={q.data.totalPage} href={buildHref} />}
+
+      {/* 批量封禁表单：勾选后展开，命中 gid=1 / 自己 / 不存在 的目标由服务端 skipped 返回 */}
+      {banOpen && (
+        <section className={cx(cardCls, 'p-4')}>
+          <h4 className="mb-0 text-[1.1rem] font-normal leading-[1.2]">
+            {t('ban_batch', '批量封禁')}（{targets.length}）
+          </h4>
+          {banAct.flash && <Alert tone={banAct.flash.tone}>{banAct.flash.text}</Alert>}
+          <BanScopePicker value={banScope} onChange={setBanScope} />
+          <Field label={t('ban_duration', '封禁时长')} htmlFor="batch-ban-duration">
+            <Select id="batch-ban-duration" value={String(banDuration)} onChange={(e) => setBanDuration(Number(e.target.value))}>
+              {BAN_DURATIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {t(d.key)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('ban_reason_label', '原因')} htmlFor="batch-ban-reason">
+            <Input id="batch-ban-reason" value={banReason} maxLength={200} onChange={(e) => setBanReason(e.target.value)} />
+          </Field>
+          <SubmitRow indentClass="sm:w-full">
+            <Button
+              block
+              loading={banAct.pending}
+              onClick={() => {
+                if (!banScope) {
+                  banAct.setFlash({ tone: 'warn', text: t('ban_scope_required', '请至少选择一种封禁范围') });
+                  return;
+                }
+                banAct.mutate();
+              }}
+            >
+              {t('ban_submit', '封禁')}
+            </Button>
+          </SubmitRow>
+        </section>
+      )}
 
       <ConfirmModal
         open={confirming}
@@ -314,6 +391,9 @@ function UserRow({
         {manage && <Icon name="shield" className="ml-[.5rem] inline size-[1em] align-[-.125em]" />}
       </td>
       <td>{groupName}</td>
+      <td>
+        <BanBadge scope={row.ban_scope} until={row.ban_until} />
+      </td>
       {/* create_date 即注册时间；login_date=0 表示从未登录，fmtDate 返回空串 */}
       <td className="whitespace-nowrap">{fmtDay(row.create_date)}</td>
       <td className="whitespace-nowrap tabular-nums">{fmtDate(row.login_date)}</td>
@@ -328,5 +408,20 @@ function UserRow({
         </Link>
       </td>
     </tr>
+  );
+}
+
+/** 封禁状态徽章：按 ban_until 惰性判定（已到期但 cron 未清理的行显示为正常） */
+function BanBadge({ scope, until }: { scope: number; until: number }) {
+  const t = useAdminT();
+  const eff = effectiveBanScope(scope, until, Math.floor(Date.now() / 1000));
+  if (!eff) return <span className="text-muted">{t('ban_status_none', '正常')}</span>;
+  return (
+    <span
+      className="inline-flex items-center rounded-[4px] bg-danger/10 px-2 py-0.5 text-xs text-danger"
+      title={scopeText(eff, t)}
+    >
+      {t('ban_status_banned', '已封禁')}
+    </span>
   );
 }

@@ -11,9 +11,9 @@
 --   pnpm --filter @freeidx/api db:apply && pnpm --filter @freeidx/api db:schema:dump
 -- 并把 migrations/ 与 schema.sql 一起提交。
 --
--- 对象统计：32 表 / 72 索引
+-- 对象统计：33 表 / 74 索引
 
--- ===== 表（32）=====
+-- ===== 表（33）=====
 CREATE TABLE bbs_ad_slot (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   position TEXT NOT NULL DEFAULT '',
@@ -274,7 +274,6 @@ CREATE TABLE bbs_post_like (
   tid INTEGER NOT NULL DEFAULT 0,
   create_date INTEGER NOT NULL DEFAULT 0
 );
-DELETE FROM sqlite_sequence;
 
 CREATE TABLE bbs_queue (
   queueid INTEGER NOT NULL DEFAULT 0,
@@ -371,8 +370,26 @@ CREATE TABLE bbs_user (
   ok INTEGER NOT NULL DEFAULT 1,
   v TEXT NOT NULL DEFAULT '0',
   avatar_auto TEXT NOT NULL DEFAULT '0',
-  bgimg TEXT NOT NULL DEFAULT '0'
+  bgimg TEXT NOT NULL DEFAULT '0',
+  ban_scope INTEGER NOT NULL DEFAULT 0,
+  ban_until INTEGER NOT NULL DEFAULT 0,
+  ban_reason TEXT NOT NULL DEFAULT '',
+  ban_at INTEGER NOT NULL DEFAULT 0,
+  ban_by INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE bbs_user_ban (
+  bid INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid INTEGER NOT NULL DEFAULT 0,
+  scope INTEGER NOT NULL DEFAULT 1,
+  reason TEXT NOT NULL DEFAULT '',
+  operator_uid INTEGER NOT NULL DEFAULT 0,
+  create_date INTEGER NOT NULL DEFAULT 0,
+  expire_date INTEGER NOT NULL DEFAULT 0,
+  lifted_at INTEGER NOT NULL DEFAULT 0,
+  lifted_by INTEGER NOT NULL DEFAULT 0
+);
+DELETE FROM sqlite_sequence;
 
 CREATE TABLE bbs_user_pay (
   cid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -410,7 +427,7 @@ CREATE TABLE bbs_vip_plan (
   gid INTEGER NOT NULL DEFAULT 0
 );
 
--- ===== 索引（72）=====
+-- ===== 索引（74）=====
 CREATE INDEX bbs_ad_slot_position ON bbs_ad_slot (position, enabled, sort);
 
 CREATE INDEX bbs_announcement_isshow ON bbs_announcement (isshow, aid);
@@ -526,6 +543,10 @@ CREATE INDEX bbs_thread_top_fid_top ON bbs_thread_top (fid, top);
 CREATE INDEX bbs_thread_top_top_tid ON bbs_thread_top (top, tid);
 
 CREATE INDEX bbs_thread_uid ON bbs_thread (uid);
+
+CREATE INDEX bbs_user_ban_uid ON bbs_user_ban (uid, create_date DESC);
+
+CREATE INDEX bbs_user_ban_until ON bbs_user (ban_until) WHERE ban_scope > 0;
 
 CREATE UNIQUE INDEX bbs_user_email ON bbs_user (email);
 

@@ -29,7 +29,7 @@ function baseRules(): SqlRule[] {
     { test: /SELECT uid FROM bbs_user WHERE email = \?/, first: null },
     { test: /SELECT uid FROM bbs_user WHERE username = \?/, first: null },
     { test: /INSERT INTO bbs_user \(gid,email,username/, first: { uid: 9 } },
-    { test: /SELECT uid,gid,username,avatar,threads,posts,credits,create_date,login_date,ok,v,avatar_auto,bgimg, email, create_ip FROM bbs_user/, rows: () => [{ uid: 9, email: 'x@y.z', create_ip: 16909060 }] },
+    { test: /SELECT uid,gid,username,avatar,threads,posts,credits,create_date,login_date,ok,v,avatar_auto,bgimg, email, create_ip, ban_scope, ban_until, ban_reason FROM bbs_user/, rows: () => [{ uid: 9, email: 'x@y.z', create_ip: 16909060 }] },
     { test: /SELECT tid,fid FROM bbs_thread WHERE uid = \?/, rows: () => [{ tid: 101, fid: 1 }] },
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN/, rows: () => [{ uid: 3, c: 2 }] },
     { test: /SELECT tid, COUNT\(\*\) AS c FROM bbs_post WHERE uid = \? AND isfirst = 0/, rows: () => [] },

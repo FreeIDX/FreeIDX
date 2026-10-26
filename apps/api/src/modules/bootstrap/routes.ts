@@ -3,6 +3,7 @@
  * 合并版头渲染依赖的 forumlist/grouplist/当前用户为单请求（§7 首屏 RTT 收敛）。
  */
 import { Hono } from 'hono';
+import { effectiveBanScope } from '@freeidx/shared';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
 import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
@@ -64,7 +65,7 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
       const [u, followers, following, favorites, unread] = await Promise.all([
         db
           .prepare<Record<string, number | string>>(
-            `SELECT ${USER_PUBLIC_COLS}, golds, rmbs FROM bbs_user WHERE uid = ?`,
+            `SELECT ${USER_PUBLIC_COLS}, golds, rmbs, ban_scope, ban_until, ban_reason FROM bbs_user WHERE uid = ?`,
           )
           .bind(viewer.uid)
           .first<Record<string, number | string>>(),
@@ -98,6 +99,14 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
           unreadNotices: Number(unread?.c ?? 0),
           /** 账号审核状态（tt_check）：非 1 时前台顶部提示且禁发帖回帖 */
           ok: Number(u.ok ?? 1),
+          /**
+           * 小黑屋（0025）：生效中的封禁位（0=未封禁/已到期）。
+           * 前台据此提示原因与到期时间，并在禁言时置灰发帖/回帖入口；
+           * 到期的惰性判定在前端按 banUntil 再算一次（bootstrap 可能命中缓存）。
+           */
+          banScope: effectiveBanScope(u.ban_scope, u.ban_until, Math.floor(Date.now() / 1000)),
+          banUntil: Number(u.ban_until ?? 0),
+          banReason: String(u.ban_reason ?? ''),
           /** see_check 组（tt_check）：列表/帖内显示未过审内容与现场审核按钮 */
           seeCheck: hasSeeCheck(grouplist[Number(u.gid)]),
           /** 认证头衔（'0'=未认证；个人中心头像旁 V 标） */

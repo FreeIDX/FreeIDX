@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "Reçu",
   "point_reason_transfer_out": "Envoyé",
   "point_reason_v_apply": "Demande V",
-  "points_log_label": "Journal des crédits"
+  "points_log_label": "Journal des crédits",
+  "account_muted": "Votre compte a été réduit au silence et ne peut pas publier de contenu pour le moment.",
+  "account_suspended": "L’accès de votre compte à ce site est restreint.",
+  "account_banned": "La connexion de votre compte à ce site est interdite.",
+  "ban_until_label": "Date de levée : {date}",
+  "ban_reason_label": "Motif : {reason}",
+  "ban_permanent": "Permanent",
+  "compose_muted_hint": "Votre compte est réduit au silence ; la publication et les réponses sont temporairement désactivées."
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "Langue",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "Icônes de forum forum/",
   "admin_maint_r2_prefix_site": "Icônes du site site/",
   "admin_maint_r2_prefix_attach": "Pièces jointes attach/",
-  "admin_maint_r2_prefix_seo": "Instantanés SEO seo/"
+  "admin_maint_r2_prefix_seo": "Instantanés SEO seo/",
+  "ban_manage": "Liste noire",
+  "ban_scope": "Périmètre du blocage",
+  "ban_scope_mute": "Silence (connexion et lecture autorisées, publication non)",
+  "ban_scope_read": "Accès interdit (lecture et publication)",
+  "ban_scope_login": "Connexion interdite (sessions révoquées immédiatement)",
+  "ban_duration": "Durée",
+  "ban_duration_1h": "1 heure",
+  "ban_duration_1d": "1 jour",
+  "ban_duration_7d": "7 jours",
+  "ban_duration_30d": "30 jours",
+  "ban_duration_forever": "Permanent",
+  "ban_submit": "Bloquer",
+  "ban_unban": "Débloquer",
+  "ban_status": "État",
+  "ban_status_none": "Normal",
+  "ban_status_banned": "Bloqué",
+  "ban_current": "Blocage en cours",
+  "ban_history": "Historique des blocages",
+  "ban_list": "Utilisateurs bloqués",
+  "ban_operator": "Opérateur",
+  "ban_expire": "Expire",
+  "ban_batch": "Blocage groupé",
+  "ban_unban_confirm": "Débloquer cet utilisateur ?",
+  "ban_no_selection": "Sélectionnez d’abord des utilisateurs",
+  "ban_scope_required": "Sélectionnez au moins un périmètre de blocage"
  }
 }

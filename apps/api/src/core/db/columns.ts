@@ -33,7 +33,9 @@ export const POST_PAGE_COLS =
 export const USER_PUBLIC_COLS =
   'uid,gid,username,avatar,threads,posts,credits,create_date,login_date,ok,v,avatar_auto,bgimg';
 
-/** 后台用户列表投影：公开列 + email/create_ip（只给 /api/admin/users） */
-export const USER_ADMIN_LIST_COLS = `${USER_PUBLIC_COLS}, email, create_ip`;
+/** 后台用户列表投影：公开列 + email/create_ip（只给 /api/admin/users）+ 封禁三列（状态列） */
+export const USER_ADMIN_LIST_COLS = `${USER_PUBLIC_COLS}, email, create_ip, ban_scope, ban_until, ban_reason`;
 
-export const USER_SESSION_COLS = 'uid,gid,password,salt,token_version,avatar,username,email,ok';
+/** 登录/会话投影：ban_* 供登录闸门与 loadViewer 判封禁（小黑屋 0025） */
+export const USER_SESSION_COLS =
+  'uid,gid,password,salt,token_version,avatar,username,email,ok,ban_scope,ban_until,ban_reason';

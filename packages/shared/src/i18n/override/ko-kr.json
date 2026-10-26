@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "받기",
   "point_reason_transfer_out": "보내기",
   "point_reason_v_apply": "V 신청",
-  "points_log_label": "포인트 내역"
+  "points_log_label": "포인트 내역",
+  "account_muted": "계정이 글쓰기 금지 상태여서 현재 콘텐츠를 게시할 수 없습니다.",
+  "account_suspended": "계정의 사이트 접근이 제한되었습니다.",
+  "account_banned": "계정의 사이트 로그인이 금지되었습니다.",
+  "ban_until_label": "해제 시간: {date}",
+  "ban_reason_label": "사유: {reason}",
+  "ban_permanent": "영구",
+  "compose_muted_hint": "계정이 글쓰기 금지 상태여서 현재 글/댓글을 작성할 수 없습니다."
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "언어",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "게시판 아이콘 forum/",
   "admin_maint_r2_prefix_site": "사이트 아이콘 site/",
   "admin_maint_r2_prefix_attach": "첨부 attach/",
-  "admin_maint_r2_prefix_seo": "SEO 스냅숏 seo/"
+  "admin_maint_r2_prefix_seo": "SEO 스냅숏 seo/",
+  "ban_manage": "블랙리스트",
+  "ban_scope": "제한 범위",
+  "ban_scope_mute": "글쓰기 금지 (로그인·열람 가능, 작성 불가)",
+  "ban_scope_read": "접근 금지 (열람·작성 불가)",
+  "ban_scope_login": "로그인 금지 (세션 즉시 만료)",
+  "ban_duration": "기간",
+  "ban_duration_1h": "1시간",
+  "ban_duration_1d": "1일",
+  "ban_duration_7d": "7일",
+  "ban_duration_30d": "30일",
+  "ban_duration_forever": "영구",
+  "ban_submit": "제한",
+  "ban_unban": "해제",
+  "ban_status": "상태",
+  "ban_status_none": "정상",
+  "ban_status_banned": "제한 중",
+  "ban_current": "현재 제한",
+  "ban_history": "제한 기록",
+  "ban_list": "제한 사용자",
+  "ban_operator": "처리자",
+  "ban_expire": "만료",
+  "ban_batch": "일괄 제한",
+  "ban_unban_confirm": "이 사용자의 제한을 해제할까요?",
+  "ban_no_selection": "먼저 사용자를 선택하세요",
+  "ban_scope_required": "제한 범위를 하나 이상 선택하세요"
  }
 }

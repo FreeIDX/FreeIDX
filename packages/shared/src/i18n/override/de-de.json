@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "Eingehend",
   "point_reason_transfer_out": "Ausgehend",
   "point_reason_v_apply": "V-Antrag",
-  "points_log_label": "Punkte-Verlauf"
+  "points_log_label": "Punkte-Verlauf",
+  "account_muted": "Ihr Konto wurde stummgeschaltet und kann derzeit keine Inhalte veröffentlichen.",
+  "account_suspended": "Der Zugriff Ihres Kontos auf diese Website ist eingeschränkt.",
+  "account_banned": "Ihr Konto ist von der Anmeldung auf dieser Website ausgeschlossen.",
+  "ban_until_label": "Entsperrung: {date}",
+  "ban_reason_label": "Grund: {reason}",
+  "ban_permanent": "Dauerhaft",
+  "compose_muted_hint": "Ihr Konto ist stummgeschaltet; Beiträge und Antworten sind vorübergehend deaktiviert."
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "Sprache",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "Forum-Symbole forum/",
   "admin_maint_r2_prefix_site": "Site-Symbole site/",
   "admin_maint_r2_prefix_attach": "Anhänge attach/",
-  "admin_maint_r2_prefix_seo": "SEO-Snapshots seo/"
+  "admin_maint_r2_prefix_seo": "SEO-Snapshots seo/",
+  "ban_manage": "Sperrliste",
+  "ban_scope": "Sperrumfang",
+  "ban_scope_mute": "Stummschaltung (Anmelden und Lesen erlaubt, Schreiben nicht)",
+  "ban_scope_read": "Kein Zugriff (Lesen und Schreiben gesperrt)",
+  "ban_scope_login": "Anmeldesperre (Sitzungen sofort widerrufen)",
+  "ban_duration": "Dauer",
+  "ban_duration_1h": "1 Stunde",
+  "ban_duration_1d": "1 Tag",
+  "ban_duration_7d": "7 Tage",
+  "ban_duration_30d": "30 Tage",
+  "ban_duration_forever": "Dauerhaft",
+  "ban_submit": "Sperren",
+  "ban_unban": "Entsperren",
+  "ban_status": "Status",
+  "ban_status_none": "Normal",
+  "ban_status_banned": "Gesperrt",
+  "ban_current": "Aktuelle Sperre",
+  "ban_history": "Sperrverlauf",
+  "ban_list": "Gesperrte Benutzer",
+  "ban_operator": "Ausgeführt von",
+  "ban_expire": "Läuft ab",
+  "ban_batch": "Mehrfachsperre",
+  "ban_unban_confirm": "Diesen Benutzer entsperren?",
+  "ban_no_selection": "Bitte zuerst Benutzer auswählen",
+  "ban_scope_required": "Bitte mindestens einen Sperrumfang wählen"
  }
 }

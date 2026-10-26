@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { useParams, useSearchParams } from 'react-router';
 import { useAuth } from '../../../store/auth';
 import { apiGet } from '../../../lib/api';
@@ -41,6 +42,8 @@ export function HomePage() {
   const forumlist = useAuth((s) => s.forumlist);
   const grouplist = useAuth((s) => s.grouplist);
   const me = useAuth((s) => s.me);
+  /** 小黑屋（0025）：生效范围按 banUntil 惰性判定（bootstrap 可能命中缓存，不带实时性承诺） */
+  const banScope = me ? effectiveBanScope(me.banScope, me.banUntil, Math.floor(Date.now() / 1000)) : 0;
   const runtime = useAuth((s) => s.runtime);
   /* 插入代码扩展注入位原始 HTML（全站共享缓存） */
   const insertCodes = useInsertCodes();
@@ -92,6 +95,21 @@ export function HomePage() {
         {me && me.ok !== 1 && (
           <Alert tone={me.ok === 0 ? 'primary' : 'warning'} icon={me.ok === 0 ? 'coffee' : 'warning_circle'} className="mb-2">
             {me.ok === 0 ? t('account_under_review') : t('account_not_approved')}
+          </Alert>
+        )}
+        {/* 小黑屋提示（0025）：禁登 > 禁访 > 禁言 取最重维度，附到期与理由 */}
+        {me && banScope > 0 && (
+          <Alert tone="warning" icon="warning_circle" className="mb-2">
+            {banScope & BanScope.LOGIN
+              ? t('account_banned')
+              : banScope & BanScope.READ
+                ? t('account_suspended')
+                : t('account_muted')}
+            {' '}
+            {me.banUntil && me.banUntil > 0
+              ? t('ban_until_label', { date: new Date(me.banUntil * 1000).toLocaleString() })
+              : t('ban_permanent')}
+            {me.banReason ? ` · ${t('ban_reason_label', { reason: me.banReason })}` : ''}
           </Alert>
         )}
         {/* 插入代码 index_main_start_htm：主列最新主题卡之前 */}

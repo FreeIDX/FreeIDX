@@ -13,8 +13,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { GroupId, md5Hex } from '@freeidx/shared';
-import { createUser, getUsers, updateUser } from '../api';
+import { GroupId, effectiveBanScope, md5Hex } from '@freeidx/shared';
+import { banUser, createUser, getUsers, getUserBans, unbanUser, updateUser } from '../api';
 import type { AdminUserRow } from '../types';
 import { useAdminT } from '../t';
 import { useGroupName } from '../../lib/i18n';
@@ -22,6 +22,7 @@ import { useAdminAction } from '../use-action';
 import { useAuth } from '../../store/auth';
 import { USER_TABS } from '../tabs';
 import { fmtDate } from '../../lib/api';
+import { BAN_DURATIONS, BanScopePicker, scopeText } from '../ban';
 import { Alert, Button, Card, ErrorState, Field, Input, LinkButton, PageTitle, Select, SubmitRow, TabBar } from '../ui';
 
 interface FormState {
@@ -87,6 +88,24 @@ export function UserEditPage() {
 
   const groups = grouplist.filter((g) => Number(g.gid) > 0);
   const emptyPatch = !isNew && Object.keys(patch()).length === 0;
+
+  /* ---------------- 小黑屋（0025） ---------------- */
+  /** 当前生效范围：按 ban_until 惰性判定（列表/历史里可能存着已到期的旧值） */
+  const curScope = row ? effectiveBanScope(row.ban_scope, row.ban_until, Math.floor(Date.now() / 1000)) : 0;
+  const [banScope, setBanScope] = useState(0);
+  const [banDuration, setBanDuration] = useState(BAN_DURATIONS[1]?.value ?? 86_400); // 默认 1 天
+  const [banReason, setBanReason] = useState('');
+  const banKeys = [['admin', 'users'], ['admin', 'banned'], ['admin', 'user-bans', routeUid]];
+  const bans = useQuery({
+    queryKey: ['admin', 'user-bans', routeUid],
+    queryFn: () => getUserBans(routeUid),
+    enabled: !isNew,
+  });
+  const banAct = useAdminAction(
+    () => banUser(routeUid, { scope: banScope, duration: banDuration, reason: banReason.trim() }),
+    { ok: t('ban_submit', '封禁'), invalidate: banKeys },
+  );
+  const unbanAct = useAdminAction(() => unbanUser(routeUid), { ok: t('ban_unban', '解封'), invalidate: banKeys });
 
   if (!isNew && q.isError) return <ErrorState error={q.error} />;
 
@@ -162,6 +181,76 @@ export function UserEditPage() {
         </SubmitRow>
         {emptyPatch && <p className="mt-2 text-xs text-muted">{t('user_no_change', '没有任何修改（邮箱/用户名/用户组未变、密码未填）。')}</p>}
       </Card>
+
+      {/* 小黑屋：封禁/禁言/禁访三档可组合，到期时间与理由随封禁一起落库（0025） */}
+      {!isNew && (
+        <Card>
+          <h4 className="mb-0 text-[1.1rem] font-normal leading-[1.2]">{t('ban_manage', '小黑屋')}</h4>
+          <p className="mt-2 mb-[1rem] text-sm text-muted">
+            {t('ban_current', '当前封禁')}：
+            {curScope
+              ? `${scopeText(curScope, t)} · ${row?.ban_until ? fmtDate(row.ban_until) : t('ban_permanent', '永久')}${
+                  row?.ban_reason ? ` · ${t('ban_reason_label', '原因：{reason}', { reason: row.ban_reason })}` : ''
+                }`
+              : t('ban_status_none', '正常')}
+          </p>
+          {banAct.flash && <Alert tone={banAct.flash.tone}>{banAct.flash.text}</Alert>}
+          {unbanAct.flash && <Alert tone={unbanAct.flash.tone}>{unbanAct.flash.text}</Alert>}
+          <BanScopePicker value={banScope} onChange={setBanScope} />
+          <Field label={t('ban_duration', '封禁时长')} htmlFor="u-ban-duration" hint={t('ban_expire', '到期')}>
+            <Select id="u-ban-duration" value={String(banDuration)} onChange={(e) => setBanDuration(Number(e.target.value))}>
+              {BAN_DURATIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {t(d.key)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('ban_reason_label', '原因')} htmlFor="u-ban-reason">
+            <Input id="u-ban-reason" value={banReason} maxLength={200} onChange={(e) => setBanReason(e.target.value)} />
+          </Field>
+          <SubmitRow>
+            <Button
+              block
+              loading={banAct.pending}
+              onClick={() => {
+                if (!banScope) {
+                  banAct.setFlash({ tone: 'warn', text: t('ban_scope_required', '请至少选择一种封禁范围') });
+                  return;
+                }
+                banAct.mutate();
+              }}
+            >
+              {t('ban_submit', '封禁')}
+            </Button>
+            {curScope > 0 && (
+              <Button block variant="danger" className="mt-2" loading={unbanAct.pending} onClick={() => unbanAct.mutate()}>
+                {t('ban_unban', '解封')}
+              </Button>
+            )}
+          </SubmitRow>
+        </Card>
+      )}
+
+      {!isNew && bans.data && bans.data.list.length > 0 && (
+        <Card title={t('ban_history', '封禁历史')}>
+          <ul className="m-0 list-none space-y-2 p-0 text-sm">
+            {bans.data.list.map((h) => (
+              <li key={h.bid}>
+                <span className="text-muted-2">{fmtDate(h.create_date)}</span>
+                {' · '}
+                {scopeText(h.scope, t)}
+                {' · '}
+                {h.expire_date > 0 ? fmtDate(h.expire_date) : t('ban_permanent', '永久')}
+                {h.reason ? ` · ${h.reason}` : ''}
+                {' · '}
+                {h.operator_name || `#${h.operator_uid}`}
+                {h.lifted_at > 0 ? ` · ${t('ban_unban', '解封')} ${fmtDate(h.lifted_at)}` : ''}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }

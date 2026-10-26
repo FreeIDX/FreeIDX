@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "รับเข้า",
   "point_reason_transfer_out": "โอนออก",
   "point_reason_v_apply": "สมัคร V",
-  "points_log_label": "ประวัติเครดิต"
+  "points_log_label": "ประวัติเครดิต",
+  "account_muted": "บัญชีของคุณถูกห้ามพูดคุยและไม่สามารถเผยแพร่เนื้อหาได้ในขณะนี้",
+  "account_suspended": "บัญชีของคุณถูกจำกัดการเข้าถึงเนื้อหาของไซต์นี้",
+  "account_banned": "บัญชีของคุณถูกห้ามเข้าสู่ระบบไซต์นี้",
+  "ban_until_label": "เวลาปลดล็อก: {date}",
+  "ban_reason_label": "เหตุผล: {reason}",
+  "ban_permanent": "ถาวร",
+  "compose_muted_hint": "บัญชีอยู่ระหว่างถูกห้ามพูดคุย จึงยังโพสต์หรือตอบกลับไม่ได้"
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "ภาษา",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "ไอคอนบอร์ด forum/",
   "admin_maint_r2_prefix_site": "ไอคอนไซต์ site/",
   "admin_maint_r2_prefix_attach": "ไฟล์แนบ attach/",
-  "admin_maint_r2_prefix_seo": "สแนปช็อต SEO seo/"
+  "admin_maint_r2_prefix_seo": "สแนปช็อต SEO seo/",
+  "ban_manage": "ห้องมืด",
+  "ban_scope": "ขอบเขตการระงับ",
+  "ban_scope_mute": "ห้ามพูดคุย (เข้าสู่ระบบและอ่านได้ แต่โพสต์ไม่ได้)",
+  "ban_scope_read": "ห้ามเข้าถึง (อ่านและโพสต์ไม่ได้)",
+  "ban_scope_login": "ห้ามเข้าสู่ระบบ (ตัดเซสชันทันที)",
+  "ban_duration": "ระยะเวลา",
+  "ban_duration_1h": "1 ชั่วโมง",
+  "ban_duration_1d": "1 วัน",
+  "ban_duration_7d": "7 วัน",
+  "ban_duration_30d": "30 วัน",
+  "ban_duration_forever": "ถาวร",
+  "ban_submit": "ระงับ",
+  "ban_unban": "ปลดล็อก",
+  "ban_status": "สถานะ",
+  "ban_status_none": "ปกติ",
+  "ban_status_banned": "ถูกระงับ",
+  "ban_current": "การระงับปัจจุบัน",
+  "ban_history": "ประวัติการระงับ",
+  "ban_list": "รายชื่อผู้ถูกระงับ",
+  "ban_operator": "ผู้ดำเนินการ",
+  "ban_expire": "หมดอายุ",
+  "ban_batch": "ระงับหลายราย",
+  "ban_unban_confirm": "ปลดล็อกผู้ใช้นี้หรือไม่?",
+  "ban_no_selection": "กรุณาเลือกผู้ใช้ก่อน",
+  "ban_scope_required": "กรุณาเลือกขอบเขตการระงับอย่างน้อยหนึ่งรายการ"
  }
 }

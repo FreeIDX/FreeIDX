@@ -517,7 +517,14 @@
   "point_reason_transfer_in": "轉入",
   "point_reason_transfer_out": "轉出",
   "point_reason_v_apply": "加V申請",
-  "points_log_label": "積分流水"
+  "points_log_label": "積分流水",
+  "account_muted": "您的帳號已被禁言，暫時無法發表內容。",
+  "account_suspended": "您的帳號已被限制存取本站內容。",
+  "account_banned": "您的帳號已被禁止登入本站。",
+  "ban_until_label": "解封時間：{date}",
+  "ban_reason_label": "原因：{reason}",
+  "ban_permanent": "永久",
+  "compose_muted_hint": "帳號處於禁言狀態，暫時無法發文或回覆。"
  },
  "admin": {
   "admin_maint_lang_stats_col_lang": "語言",
@@ -1186,6 +1193,31 @@
   "admin_maint_r2_prefix_forum": "版塊圖示 forum/",
   "admin_maint_r2_prefix_site": "站點圖示 site/",
   "admin_maint_r2_prefix_attach": "附件 attach/",
-  "admin_maint_r2_prefix_seo": "SEO 快照 seo/"
+  "admin_maint_r2_prefix_seo": "SEO 快照 seo/",
+  "ban_manage": "小黑屋",
+  "ban_scope": "封禁範圍",
+  "ban_scope_mute": "禁言（可登入、可瀏覽，不能發文回覆）",
+  "ban_scope_read": "禁訪（不能瀏覽與發文）",
+  "ban_scope_login": "禁止登入（並立即強制下線）",
+  "ban_duration": "封禁時長",
+  "ban_duration_1h": "1 小時",
+  "ban_duration_1d": "1 天",
+  "ban_duration_7d": "7 天",
+  "ban_duration_30d": "30 天",
+  "ban_duration_forever": "永久",
+  "ban_submit": "封禁",
+  "ban_unban": "解封",
+  "ban_status": "狀態",
+  "ban_status_none": "正常",
+  "ban_status_banned": "已封禁",
+  "ban_current": "目前封禁",
+  "ban_history": "封禁歷史",
+  "ban_list": "小黑屋名單",
+  "ban_operator": "操作人",
+  "ban_expire": "到期",
+  "ban_batch": "批次封禁",
+  "ban_unban_confirm": "確定解除該使用者的封禁？",
+  "ban_no_selection": "請先勾選使用者",
+  "ban_scope_required": "請至少選擇一種封禁範圍"
  }
 }
