@@ -33,7 +33,10 @@ export function OrderPage() {
   const q = useQuery({
     queryKey: ['order', no],
     queryFn: () => fetchOrder(no),
-    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 3000 : false),
+    // paid 是中间态：markPaid 后还要 fulfillOrder 履约，失败会停在 paid 待对账补单。
+    // 只轮询 pending 会让「支付成功」提示出现后永远不再刷新，权益未生效也不自知。
+    refetchInterval: (query) =>
+      query.state.data?.status === 'pending' || query.state.data?.status === 'paid' ? 3000 : false,
     enabled: Boolean(no),
   });
 
@@ -198,7 +201,18 @@ export function OrderPage() {
                     </div>
                   </div>
                 )}
-                {checkout?.mode === 'pending' && <p className="text-sm text-muted-foreground">{t('order_pending_hint')}</p>}
+                {/* pending 降级 / redirect 缺 url / qrcode 缺 content 都必须留重试入口，
+                    否则「去支付」按钮永久消失，用户只能整页刷新；复用既有词条不新增翻译。 */}
+                {(checkout?.mode === 'pending' ||
+                  (checkout?.mode === 'redirect' && !checkout.url) ||
+                  (checkout?.mode === 'qrcode' && !checkout.content)) && (
+                  <div className="flex flex-col items-start gap-2">
+                    <p className="text-sm text-muted-foreground">{t('order_pending_hint')}</p>
+                    <Button variant="outline" loading={busy} onClick={() => void goCheckout()}>
+                      {t('order_go_pay')}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 

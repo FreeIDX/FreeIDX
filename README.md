@@ -80,6 +80,7 @@ User visits: forum.example.com
 ### 🔌 Extensibility & Engineering
 
 - ✅ **Plugin mechanism** - hook / overwrite extension points + frontend component slots, hot-swappable from the admin panel, extending functionality without touching core code
+- ✅ **MCP server** - Expose forum content to AI clients (Claude Desktop, Cursor…) over the Model Context Protocol; personal access tokens are gated by the owner's permissions, moderation state and paywall, and write tools stay off by default
 - ✅ **Admin panel** - Site settings, sections, topics, users, user groups, cache — all in one place
 - ✅ **Multi-language** - Simplified/Traditional Chinese / English / Japanese / Korean / French / German / Spanish / Russian / Thai — 10 languages in total, script-generated + full-pipeline pre-commit validation, eliminating hardcoded copy
 - ✅ **Scheduled tasks** - Cron Triggers three-tier scheduling (every 5 minutes / hourly reconciliation / daily), automating session recycling, daily stats reset, attachment GC, and orphaned order reconciliation

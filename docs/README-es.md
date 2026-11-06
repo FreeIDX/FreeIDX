@@ -78,6 +78,7 @@ User visits: forum.example.com
 ### 🔌 Extensibilidad e ingeniería
 
 - ✅ **Mecanismo de plugins** - Puntos de extensión hook / overwrite + slots de componentes en el frontend, intercambiables en caliente desde el panel de administración, ampliando funcionalidades sin tocar el código central
+- ✅ **Servidor MCP** - Expone el contenido del foro a clientes de IA (Claude Desktop, Cursor…) mediante MCP; los tokens de acceso personal están limitados por los permisos, el estado de moderación y el muro de pago, y las herramientas de escritura están desactivadas por defecto
 - ✅ **Panel de administración** - Ajustes del sitio, secciones, temas, usuarios, grupos de usuarios, caché — todo en un solo lugar
 - ✅ **Multiidioma** - Chino simplificado/tradicional / inglés / japonés / coreano / francés / alemán / español / ruso / tailandés — 10 idiomas en total, generación por scripts + validación en todo el pipeline de pre-commit, eliminando los textos codificados de forma fija
 - ✅ **Tareas programadas** - Planificación en tres niveles con Cron Triggers (cada 5 minutos / conciliación horaria / diaria), automatizando el reciclado de sesiones, el reinicio diario de estadísticas, el GC de adjuntos y la conciliación de pedidos huérfanos

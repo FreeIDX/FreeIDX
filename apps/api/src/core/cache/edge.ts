@@ -49,8 +49,11 @@ export const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/threads\/\d+\/hot-posts$/, 60],
   [/^\/api\/insert-codes$/, 60],
   [/^\/api\/quick-reply-message$/, 300],
-  [/^\/api\/vip\/plans$/, 600],
-  [/^\/api\/payment-providers$/, 600],
+  /* 价格/通道是资金相关的高变更数据：后台改价、下架计划、停用通道后无法全网络主动 purge，
+   * 600s 边缘副本会让游客按旧价下单（placeOrder 实时读库按新价扣款）或落到已停用通道。
+   * 与 /api/forums/:fid/threads 同档 30s，把不一致窗口压到可控范围。 */
+  [/^\/api\/vip\/plans$/, 30],
+  [/^\/api\/payment-providers$/, 30],
   [/^\/api\/checkin$/, 30],
 ];
 

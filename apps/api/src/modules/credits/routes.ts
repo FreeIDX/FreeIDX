@@ -21,7 +21,8 @@ import type { Cache } from '../../core/cache';
 import { creditTypeCol, creditTypeLabel, loadCreditsRules, upgradeGroupByCredits } from '../../core/points';
 import { API_MESSAGES, type ApiT } from '../../core/i18n';
 import { loadForumlist, loadGrouplist, loadViewer, makeAccessCtx } from '../../core/loaders';
-import { forumAccessMod } from '../../core/access';
+import { forumAccessMod, threadListAccessFilter } from '../../core/access';
+import { toListItem } from '../my/routes';
 import { hasSeeCheck } from '../../core/check';
 import { getExtensions } from '../../core/extensions';
 import { THREAD_LIST_COLS_T } from '../../core/db/columns';
@@ -83,15 +84,19 @@ async function payThread(c: Ctx): Promise<Response> {
   const ts = now();
   const nonce = nonceOf();
   const anchor = 'EXISTS (SELECT 1 FROM bbs_paylist WHERE uid = ? AND nonce = ?)';
+  // 入账方（作者）必须在同一事务内存在：否则 ③ 的 UPDATE 命中 0 行，而买家扣款已生效 → 积分凭空消失。
+  // 守卫下推到锚行 ①：入账方缺失时锚行不产生，整批 0 变更，按余额不足路径报错而不丢钱。
+  const incomeGuard = authorUid > 0 ? ' AND EXISTS (SELECT 1 FROM bbs_user WHERE uid = ?)' : '';
+  const incomeParams = authorUid > 0 ? [authorUid] : [];
 
   const stmts: Stmt[] = [
-    // ① 购买清单：余额不足（或买家不存在）时 SELECT 不产出行 → changes=0；UNIQUE(tid,uid) WHERE type=1 防并发双买
+    // ① 购买清单：余额不足（或买家/入账方不存在）时 SELECT 不产出行 → changes=0；UNIQUE(tid,uid) WHERE type=1 防并发双买
     db
       .prepare(
         `INSERT INTO bbs_paylist (tid,uid,num,credit_type,type,paytime,nonce)
-         SELECT ?,?,?,?,1,?,? FROM bbs_user WHERE uid = ? AND ${col} >= ?`,
+         SELECT ?,?,?,?,1,?,? FROM bbs_user WHERE uid = ? AND ${col} >= ?${incomeGuard}`,
       )
-      .bind(tid, v.uid, price, creditType, ts, nonce, v.uid, price) as unknown as Stmt,
+      .bind(tid, v.uid, price, creditType, ts, nonce, v.uid, price, ...incomeParams) as unknown as Stmt,
     // ② 买家扣款（nonce 锚定本请求的购买行）
     db
       .prepare(`UPDATE bbs_user SET ${col} = ${col} - ? WHERE uid = ? AND ${anchor}`)
@@ -441,14 +446,16 @@ async function transfer(c: Ctx): Promise<Response> {
   const ts = now();
   const nonce = nonceOf();
   const anchor = 'EXISTS (SELECT 1 FROM bbs_user_pay WHERE uid = ? AND nonce = ?)';
+  // 收款方存在性下推到锚行：SELECT 之外的 TOCTOU（转账过程中账号被真删）不再造成「只扣不入」
+  const incomeGuard = ' AND EXISTS (SELECT 1 FROM bbs_user WHERE uid = ?)';
   const stmts: Stmt[] = [
-    // ① 发起方流水锚行（type=12；余额不足时 SELECT 不产出行 → changes=0）
+    // ① 发起方流水锚行（type=12；余额不足或收款方不存在时 SELECT 不产出行 → changes=0）
     db
       .prepare(
         `INSERT INTO bbs_user_pay (uid,status,num,type,credit_type,code,time,nonce)
-         SELECT ?,1,?,12,?,'',?,? FROM bbs_user WHERE uid = ? AND ${col} >= ?`,
+         SELECT ?,1,?,12,?,'',?,? FROM bbs_user WHERE uid = ? AND ${col} >= ?${incomeGuard}`,
       )
-      .bind(v.uid, num, creditTypeRaw, ts, nonce, v.uid, num) as unknown as Stmt,
+      .bind(v.uid, num, creditTypeRaw, ts, nonce, v.uid, num, toUid) as unknown as Stmt,
     // ② 发起方扣减
     db
       .prepare(`UPDATE bbs_user SET ${col} = ${col} - ? WHERE uid = ? AND ${col} >= ? AND ${anchor}`)
@@ -552,22 +559,27 @@ async function myPurchased(c: Ctx): Promise<Response> {
   const { db, cache } = core(c);
   const v = await loadViewer(cache, db, c);
   if (v.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('common.pleaseLogin'));
+  const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
+  const ctx = makeAccessCtx(v, forumlist, grouplist);
   const page = Math.max(1, intParam(c.req.query('page'), 1));
+  // 已购记录不是绕过审核可见性的凭证：回收站/待审主题不进列表
   const cnt = await db
-    .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_paylist p JOIN bbs_thread t ON t.tid = p.tid WHERE p.uid = ? AND p.type = 1')
+    .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_paylist p JOIN bbs_thread t ON t.tid = p.tid WHERE p.uid = ? AND p.type = 1 AND t.ok = 1')
     .bind(v.uid)
     .first<{ c: number }>();
   const total = Number(cnt?.c ?? 0);
   const rows = await db
     .prepare<Record<string, unknown>>(
       `SELECT ${THREAD_LIST_COLS_T} FROM bbs_paylist p JOIN bbs_thread t ON t.tid = p.tid
-       WHERE p.uid = ? AND p.type = 1 ORDER BY p.paytime DESC, p.plid DESC LIMIT ? OFFSET ?`,
+       WHERE p.uid = ? AND p.type = 1 AND t.ok = 1 ORDER BY p.paytime DESC, p.plid DESC LIMIT ? OFFSET ?`,
     )
     .bind(v.uid, PAGE_SIZE, (page - 1) * PAGE_SIZE)
     .all();
-  // 行投影由前端 ThreadList 卡片消费（与 /api/threads 同一列集口径）
+  // 前端 ThreadList 卡片消费 camelCase DTO（与 /api/threads、/api/my/favorites 同口径）；
+  // 原实现直接下发 snake_case 原始行 → 时间/付费标记/标签/图片组全部为 undefined。
+  const list = threadListAccessFilter(ctx, rows.results.map(toListItem));
   return ok(c, 'ok', {
-    data: { total, page, size: PAGE_SIZE, totalPage: totalPageOf(total, PAGE_SIZE), list: rows.results },
+    data: { total, page, size: PAGE_SIZE, totalPage: totalPageOf(total, PAGE_SIZE), list },
   });
 }
 

@@ -72,6 +72,9 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
   refresh: async () => {
     await get().load(true);
+    // 改密/会话失效等场景同样改变了鉴权态：详情/列表的 perms 与计数由服务端按访问者下发，
+    // 与 signIn/signUp/signOut 同口径失效全量缓存，避免游客界面配登录态缓存。
+    void queryClient.invalidateQueries();
   },
   // 后端要求前端预哈希 md5(明文)（§8.4），登录/注册成功后 re-fetch bootstrap 让 me 生效
   // 鉴权态变更后失效全量 react-query 缓存：详情/列表的 allowupdate/allowdelete/计数由服务端按访问者下发，须随之刷新

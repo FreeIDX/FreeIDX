@@ -90,6 +90,11 @@ export function UserPage() {
       if (ctx?.prev) qc.setQueryData(['user', uid], ctx.prev);
       setFollowErr(apiErrorMessage(e, t('follow_failed')));
     },
+    // 成功后必须回拉服务端真值：后端返回实时 COUNT 的 { followed, followers }，
+    // 只留乐观推算值会让并发关注/服务端去重后的粉丝数与按钮态长期错误。
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['user', uid] });
+    },
   });
 
   const onFollowClick = () => {

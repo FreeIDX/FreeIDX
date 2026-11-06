@@ -81,6 +81,18 @@ describe('支付回调（金额与状态机边界）', () => {
     expect(out).toMatchObject({ handled: true, action: 'ignored', orderNo: 'FI1' });
   });
 
+  it('部分退款（累计退款额 < 订单金额）→ 不回收全额权益、不把订单推到终态', async () => {
+    const { core, calls } = makeCore([
+      { test: /FROM bbs_order WHERE provider_ref = \?/, first: null },
+      { test: /FROM bbs_order WHERE order_no = \?/, first: () => orderRow('fulfilled') },
+    ]);
+    const out = await applyProviderEvent(core, { providerRef: 'ch_1', status: 'refunded', orderNo: 'FI1', amountCents: 500 }, 1);
+    expect(out).toMatchObject({ handled: true, action: 'ignored', orderNo: 'FI1' });
+    // 未达全额时不得动订单状态，也不得扣回 VIP/积分（桩无写规则，越界即 unmatched 抛错）
+    expect(calls.some((c) => /UPDATE bbs_order/.test(c.sql))).toBe(false);
+    expect(calls.some((c) => /UPDATE bbs_user/.test(c.sql))).toBe(false);
+  });
+
   it('二级反查：provider_ref 命中不到（refund 事件对象是 ch_）时回落 orderNo 定位订单', async () => {
     const rules: SqlRule[] = [
       { test: /FROM bbs_order WHERE provider_ref = \?/, first: null },

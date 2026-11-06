@@ -59,6 +59,13 @@ export function HomePage() {
     return qs ? `/?${qs}` : '/';
   };
 
+  /** 分页链接必须携带当前筛选参数：否则在「精华 / 最新回复」tab 上点第 2 页会静默跳回默认排序 */
+  const pageHref = (p: number) => {
+    const qs = new URLSearchParams(search).toString();
+    const path = p === 1 ? '/' : `/page/${p}`;
+    return qs ? `${path}?${qs}` : path;
+  };
+
   /* queryKey/URL 与发现页共用同一描述符（同 URL 同 key → 跨页共享缓存，切页不重复请求） */
   const contentLang = useContentLangFilter();
   const q = useQuery({ ...siteThreadsQuery(page, digest, orderby, contentLang), placeholderData: keepPreviousData });
@@ -130,10 +137,10 @@ export function HomePage() {
           {/* 内容语言筛选条（后台开启后显示；关闭时组件返回 null，连分隔线都不出现） */}
           <ContentLangBar wrap="bar" />
           {q.isError && <p className="px-5 py-6 text-center text-sm text-destructive">{(q.error as Error).message}</p>}
-          {q.data && <ThreadList data={q.data} baseHref={(p) => (p === 1 ? '/' : `/page/${p}`)} />}
+          {q.data && <ThreadList data={q.data} baseHref={pageHref} />}
           {q.data && (
             <div className="border-t border-zh-line px-4 py-3">
-              <Pagination page={q.data.page} totalPage={q.data.totalPage} href={(p) => (p === 1 ? '/' : `/page/${p}`)} className="my-0" />
+              <Pagination page={q.data.page} totalPage={q.data.totalPage} href={pageHref} className="my-0" />
             </div>
           )}
         </Card>

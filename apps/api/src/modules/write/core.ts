@@ -26,7 +26,7 @@ import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
 import type { Env } from '../../types/env';
 import { postMessageFmt, MESSAGE_MAX_CHARS } from '../../core/fmt';
-import { forumAccessUser, type AccessCtx } from '../../core/access';
+import { forumAccessMod, forumAccessUser, type AccessCtx } from '../../core/access';
 import { forumLangOf, loadForumlist, loadGrouplist, loadSetting, makeAccessCtx } from '../../core/loaders';
 import { CheckStatus, canSeeUnapproved, checkOrNot, hasSeeCheck, shouldBlockUnapproved } from '../../core/check';
 import { getExtensions } from '../../core/extensions';
@@ -39,7 +39,7 @@ import { NoticeType, noticeQuoteHtml, noticeReplyHtml, noticeSend } from '../../
 import { banMessage } from '../../core/ban';
 import { associateAttachments } from '../attach/routes';
 import { deleteThreadSeoHtml, generateThreadSeoHtml } from '../seo/generate';
-import { patchRuntime } from '../shared';
+import { patchRuntime, redactPaidBlocks } from '../shared';
 import type { ApiT } from '../../core/i18n';
 
 export interface WriteDeps {
@@ -141,7 +141,9 @@ function postQuoteHtml(uid: number, username: string, avatar: number, brief: str
 
 /** 引用摘要：去标签 → HTML 转义 → 超 100 码点加 ' ... ' → 截断 → \n→<br> */
 function postBrief(html: string): string {
-  const text = html
+  // 引用摘要会被写进新回帖的 message_fmt 持久化：先剥掉 [ttPay] 付费段，
+  // 否则任何用户都能引用付费首帖，把付费正文复制成公开楼层正文。
+  const text = redactPaidBlocks(html)
     .replace(/<[^>]*>/g, '')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -448,8 +450,9 @@ export async function createReplyCore(
       }
     }
   }
-  // closed：游客与等级组禁回，gid 1..5（管理/超版/版主/实习）可回
-  if (Number(thread.closed) > 0 && (viewer.gid === 0 || viewer.gid > 5)) {
+  // closed：与详情页 perms.allowpost 同一事实源（forumAccessMod allowtop）。
+  // 原实现按 gid<=5 硬判，会让无版务权的 gid=5 绕过前端禁用直接回帖。
+  if (Number(thread.closed) > 0 && !forumAccessMod(ctx, fid, 'allowtop')) {
     throw new AppError(Code.NO_PERMISSION, t('write.threadClosed'));
   }
 
@@ -458,21 +461,21 @@ export async function createReplyCore(
   const doctype = Number(draft.doctype ?? 0);
   if (codeLen(message) > MESSAGE_MAX_CHARS) throw new AppError(Code.FORM_MESSAGE_TOO_LONG, t('write.contentTooLong'));
 
-  // quotepid 校验：必须存在且同属本主题，否则归零
+  // quotepid 校验：必须存在、已过审且同属本主题，否则归零（不得引用待审/回收楼层正文）
   let quotepid = Number(draft.quotepid ?? 0);
   let quoteHtml = '';
   let quoteUid = 0;
   let quoteMessage = '';
   if (quotepid > 0) {
     const q = await deps.db
-      .prepare<{ pid: number; tid: number; uid: number; message: string }>('SELECT pid,tid,uid,message FROM bbs_post WHERE pid = ?')
+      .prepare<{ pid: number; tid: number; uid: number; message: string }>('SELECT pid,tid,uid,message FROM bbs_post WHERE pid = ? AND ok = 1')
       .bind(quotepid)
       .first<{ pid: number; tid: number; uid: number; message: string }>();
     if (!q || Number(q.tid) !== tid) {
       quotepid = 0;
     } else {
       quoteUid = Number(q.uid);
-      quoteMessage = String(q.message);
+      quoteMessage = redactPaidBlocks(String(q.message));
       const qu = await deps.db
         .prepare<{ username: string; avatar: number }>('SELECT username,avatar FROM bbs_user WHERE uid = ?')
         .bind(Number(q.uid))

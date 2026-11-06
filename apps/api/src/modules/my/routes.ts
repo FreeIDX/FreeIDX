@@ -347,10 +347,11 @@ async function toggleFavorite(c: Ctx): Promise<Response> {
     try {
       await db.prepare('INSERT INTO bbs_favorite (uid, tid, create_date) VALUES (?, ?, ?)').bind(v.uid, tid, now()).run();
     } catch (e) {
-      // 并发双击：两请求都查到「未收藏」，第二个撞唯一约束 → 按已收藏幂等成功（不 500、不误取消）
+      // 并发双击：两请求都查到「未收藏」，第二个 INSERT 撞唯一键 —— 库中确实已有收藏记录。
+      // 保持 existing=null 按「已收藏」返回，置非空会谎称已取消 + favorited:false。
       const msg = e instanceof Error ? e.message : String(e);
       if (!/UNIQUE constraint failed/i.test(msg)) throw e;
-      existing = { uid: v.uid };
+      existing = null;
     }
   }
   const cnt = await db
@@ -361,7 +362,7 @@ async function toggleFavorite(c: Ctx): Promise<Response> {
 }
 
 /** 主题行投影 → 列表 DTO（与首页列表同构：ok/付费/标签/图片组一并对齐，前端 ThreadList 直接复用） */
-function toListItem(x: Record<string, unknown>): ThreadListItem & { create_date: number; last_date: number } {
+export function toListItem(x: Record<string, unknown>): ThreadListItem & { create_date: number; last_date: number } {
   const s = (k: string) => String(x[k] ?? '');
   const n = (k: string) => Number(x[k] ?? 0);
   return {

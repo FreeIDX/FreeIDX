@@ -182,8 +182,9 @@ describe('边缘缓存：游客只读接口', () => {
       ['/api/threads/7/hot-posts', 60],
       ['/api/insert-codes', 60],
       ['/api/quick-reply-message', 300],
-      ['/api/vip/plans', 600],
-      ['/api/payment-providers', 600],
+      // 价格/通道后台可变且无全网络 purge：TTL 压到 30s，避免旧价展示与已停用通道
+      ['/api/vip/plans', 30],
+      ['/api/payment-providers', 30],
       ['/api/checkin', 30],
     ];
     for (const [path, ttl] of required) expect(ttlOf(path), `${path} 的边缘 TTL`).toBe(ttl);

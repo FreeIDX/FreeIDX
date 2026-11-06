@@ -1,8 +1,12 @@
 -- FreeIDX seed — 基础种子数据（§5.4），日期统一 unix 秒
 -- 应用方式：pnpm db:seed（wrangler d1 execute --local / 远端同名命令）
+-- 幂等口径：全部用 INSERT OR IGNORE（只补缺失行，绝不覆盖已有数据）。
+-- 原 INSERT OR REPLACE 是 DELETE+INSERT，重跑 seed 会：把 bbs_group 后续迁移新增的
+-- thread_check/post_check/edit_check/see_check/allowsell 五列静默重置为 0（清空站点审核矩阵与销售权限）、
+-- 把已改密的管理员密码重置为公开默认口令、把 setting/runtime 站点配置打回出厂值。
 
 --> s1_group（预置用户组 0/1/2/4/5/6/7/101-105，credits 区间见各组定义）
-INSERT OR REPLACE INTO bbs_group (gid, name, creditsfrom, creditsto, allowread, allowthread, allowpost, allowattach, allowdown, allowtop, allowupdate, allowdelete, allowmove, allowbanuser, allowdeleteuser, allowviewip) VALUES
+INSERT OR IGNORE INTO bbs_group (gid, name, creditsfrom, creditsto, allowread, allowthread, allowpost, allowattach, allowdown, allowtop, allowupdate, allowdelete, allowmove, allowbanuser, allowdeleteuser, allowviewip) VALUES
 (0,   '游客组',       0,     0,         1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0),
 (1,   '管理员组',     0,     0,         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
 (2,   '超级版主组',   0,     0,         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
@@ -18,12 +22,12 @@ INSERT OR REPLACE INTO bbs_group (gid, name, creditsfrom, creditsto, allowread, 
 (106, 'VIP会员组',    0,     0,         1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0);
 
 --> s2_forum（默认版块，同 install.sql：fid=1 允许删除保留 system_forum=[1]）
-INSERT OR REPLACE INTO bbs_forum (fid, name, rank, brief, create_date) VALUES
+INSERT OR IGNORE INTO bbs_forum (fid, name, rank, brief, create_date) VALUES
 (1, '默认版块', 1, '默认版块介绍', 0);
 
 --> s3_forum_access（fid=1 × 全部组的 5 项权限矩阵，等价 forum_access_padding；
 --     forum.accesson=0 时不生效，后台开权限控制后即按此矩阵双与）
-INSERT OR REPLACE INTO bbs_forum_access (fid, gid, allowread, allowthread, allowpost, allowattach, allowdown) VALUES
+INSERT OR IGNORE INTO bbs_forum_access (fid, gid, allowread, allowthread, allowpost, allowattach, allowdown) VALUES
 (1, 0,   1, 0, 1, 0, 1),
 (1, 1,   1, 1, 1, 1, 1),
 (1, 2,   1, 1, 1, 1, 1),
@@ -40,14 +44,14 @@ INSERT OR REPLACE INTO bbs_forum_access (fid, gid, allowread, allowthread, allow
 
 --> s4_admin（首个管理员，预置哈希 = 旧 md5 兼容链路，
 --     登录后可通过 legacy 校验懒升级；生产部署务必改密）
-INSERT OR REPLACE INTO bbs_user (uid, gid, email, username, password, salt, create_date) VALUES
+INSERT OR IGNORE INTO bbs_user (uid, gid, email, username, password, salt, create_date) VALUES
 (1, 1, 'admin@admin.com', 'admin', 'd98bb50e808918dd45a8d92feafc4fa3', '123456', 0);
 
 --> s5_setting（kv 表 setting 键 = 站点设置唯一存储，§5.3）
-INSERT OR REPLACE INTO bbs_kv (k, v, expiry) VALUES
+INSERT OR IGNORE INTO bbs_kv (k, v, expiry) VALUES
 ('setting', '{"sitename":"FreeIDX","brief":"FreeIDX 论坛","url":"","kw":"","desc":"","runlevel":5,"user_create_on":1,"user_create_email_on":0,"user_resetpw_on":1,"admin_on":1,"forum_orderby":0,"update_views_on":1,"upload_max_size":20971520,"lang":"en-us"}', 0),
 ('extensions', '{}', 0);
 
 --> s6_stat_baseline（runtime 初值由 COUNT 重建，seed 后校准）
-INSERT OR REPLACE INTO bbs_kv (k, v, expiry) VALUES
+INSERT OR IGNORE INTO bbs_kv (k, v, expiry) VALUES
 ('runtime', '{"users":1,"threads":0,"posts":0,"onlines":1,"todayusers":0,"todayposts":0,"todaythreads":0,"cron_1_last_date":0,"cron_2_last_date":0}', 0);

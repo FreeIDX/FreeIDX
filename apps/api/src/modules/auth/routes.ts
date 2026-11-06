@@ -104,6 +104,25 @@ async function consumeIpSendBudget(
 }
 
 /**
+ * 注册验证码失败预算：同邮箱连续输错 FAIL_LIMIT 次即作废旧码并锁定窗口。
+ * 6 位数字码空间仅 900000；若校验失败不消耗任何额度，未配 Turnstile 的站点可被枚举
+ * 验证码批量注册任意邮箱。计数走 L2（强一致，见 cache/policyFor），避免 isolate 各自计数被绕过。
+ */
+async function noteEmailCodeFailure(
+  cache: { get: <T>(k: string) => Promise<T | null>; set: <T>(k: string, v: T, ttl?: number) => Promise<void> },
+  db: D1b,
+  email: string,
+  codeId: number,
+): Promise<void> {
+  const key = `code_fail:${email}`;
+  const used = (await cache.get<number>(key)) ?? 0;
+  await cache.set(key, used + 1, FAIL_LOCK_TTL);
+  if (used + 1 >= FAIL_LIMIT) {
+    await db.prepare('UPDATE bbs_email_code SET used = 1 WHERE id = ?').bind(codeId).run();
+  }
+}
+
+/**
  * 注册默认积分（kv 三键 d_credit/d_gold/d_rmb）：
  * D1（SQLite）不支持改列默认，改存 kv 三键，注册时显式发放。
  * 读取失败/未配置 = 0（不赠送）。
@@ -208,7 +227,9 @@ export function authRoutes(): Hono<ReadEnv> {
     // IP 维度：同 IP 换邮箱批量索码同样要挡（本接口不防枚举，可直接返回限流错误）
     if (!(await consumeIpSendBudget(cache, c, scene))) throw new AppError(Code.RATE_LIMITED, t('auth.sendTooFrequent'));
 
-    const code = String(100000 + Math.floor(Math.random() * 900000));
+    // CSPRNG：Math.random 可预测，验证码必须是密码学随机数
+    const rnd = crypto.getRandomValues(new Uint32Array(1));
+    const code = String(100000 + (Number(rnd[0]) % 900000));
     await db
       .prepare('INSERT INTO bbs_email_code (email, code, scene, create_date, expiry, used) VALUES (?, ?, ?, ?, ?, 0)')
       .bind(email, code, scene, ts, ts + EMAIL_CODE_TTL)
@@ -255,7 +276,10 @@ export function authRoutes(): Hono<ReadEnv> {
         .bind(email, 'user_create', ts)
         .first<{ id: number; code: string }>();
       if (!row) throw new AppError(Code.FORM_EMAIL_CODE_ERROR, t('auth.codeNeedFirst'));
-      if (!b.emailCode || String(b.emailCode) !== row.code) throw new AppError(Code.FORM_EMAIL_CODE_ERROR, t('auth.codeInvalid'));
+      if (!b.emailCode || String(b.emailCode) !== row.code) {
+        await noteEmailCodeFailure(cache, db, email, Number(row.id));
+        throw new AppError(Code.FORM_EMAIL_CODE_ERROR, t('auth.codeInvalid'));
+      }
       rowId = Number(row.id);
     }
 

@@ -61,7 +61,7 @@ function baseRules(over: Partial<Record<string, unknown[] | null>> = {}): SqlRul
       { pid: 1, tid: 2, uid: 1, isfirst: 1, ok: 1, create_date: 1700000001, userip: 16 << 24, images: 0, files: 0, doctype: 0, quotepid: 0, message: '原始首贴', message_fmt: '<p>首贴内容</p>' },
       { pid: 2, tid: 2, uid: 2, isfirst: 0, ok: 1, create_date: 1700000002, userip: 16 << 24, images: 0, files: 0, doctype: 0, quotepid: 1, message: '原始回复', message_fmt: '<p>回复内容</p>' },
     ] },
-    { test: /FROM bbs_post WHERE pid IN/, rows: [{ pid: 1, uid: 1, message_fmt: '<p>首贴内容</p>' }] },
+    { test: /FROM bbs_post WHERE (ok = 1 AND )?pid IN/, rows: [{ pid: 1, uid: 1, message_fmt: '<p>首贴内容</p>' }] },
     { test: /bbs_attach/, rows: [] },
     { test: /FROM bbs_user WHERE uid IN/, rows: (params) => params.map((uid) => Number(uid) === 2 ? { uid: 2, username: 'user2', avatar: 9 } : { uid: Number(uid), username: 'admin', avatar: 0 }) },
     { test: /FROM bbs_user WHERE uid = \?/, first: { uid: 1, gid: 1, username: 'admin', avatar: 0, threads: 2, posts: 5, credits: 3, create_date: 1, login_date: 2 } },
@@ -151,6 +151,26 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(calls.length).toBeLessThanOrEqual(20);
     await Promise.all(waited); // waitUntil 旁路落库
     expect(calls.some((c) => /UPDATE bbs_thread SET views/.test(c.sql))).toBe(true);
+  });
+
+  it('GET /api/threads/2/hot-posts：未购游客 includeFirst=1 也不得读到付费段正文', async () => {
+    const rules: SqlRule[] = [
+      { test: /SELECT fid,ok,uid,content_buy FROM bbs_thread WHERE tid = \?/, first: { fid: 1, ok: 1, uid: 1, content_buy: 10 } },
+      {
+        test: /FROM bbs_post p JOIN bbs_post_like/,
+        rows: [{ pid: 1, uid: 1, isfirst: 1, doctype: 0, quotepid: 0, images: 0, files: 0, message_fmt: '<p>[ttPay]SECRET-PAID-BODY[/ttPay]</p>', create_date: 1, ok: 1, likes: 1 }],
+      },
+      { test: /SELECT 1 AS x FROM bbs_paylist/, first: null },
+      ...baseRules(),
+    ];
+    const { env } = envFor(rules);
+    const res = await app.request('/api/threads/2/hot-posts?includeFirst=1&threshold=1', {}, env as never);
+    const body = await json(res);
+    expect(body.code).toBe(Code.OK);
+    const list = (body.data as { list: { messageFmt: string }[] }).list;
+    expect(list).toHaveLength(1);
+    expect(list[0]!.messageFmt).not.toContain('SECRET-PAID-BODY');
+    expect(list[0]!.messageFmt).toContain('[ttPay][/ttPay]');
   });
 
   it('GET /api/threads/9：不存在 → NOT_FOUND 信封', async () => {

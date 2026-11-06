@@ -551,7 +551,16 @@ export function threadRoutes(): Hono<ReadEnv> {
     // purchased 默认 '1'（content_buy=0 或首帖无 [ttPay] 付费段时视为无需购买）；
     // content_buy>0 且存在付费段时，仅作者本人 / paylist type=1 已购者可见。
     // 未购时服务端清空段内正文（仅保留空标记供前台渲染价格/购买按钮），防止直连 API 绕过付费墙。
-    const firstFmt = posts.find((p) => p.isfirst === 1)?.message_fmt ?? '';
+    // 付费主题可见性：翻到第 2 页起 posts 不含首帖，必须补查首帖正文判断是否存在 [ttPay] 付费段，
+    // 否则 hasPayBlocks 恒为 false → purchased 误报 true（详情页第 2 页丢失购买入口）。
+    let firstFmt = posts.find((p) => p.isfirst === 1)?.message_fmt ?? '';
+    if (!firstFmt && page > 1 && Number(thread.content_buy) > 0) {
+      const first = await db
+        .prepare<{ message_fmt: string }>(`SELECT message_fmt FROM ${P} WHERE tid = ? AND isfirst = 1`)
+        .bind(tid)
+        .first<{ message_fmt: string }>();
+      firstFmt = String(first?.message_fmt ?? '');
+    }
     const hasPayBlocks = /\[ttPay\][\s\S]*?\[\/ttPay\]/i.test(firstFmt);
     let purchased = true;
     if (Number(thread.content_buy) > 0 && hasPayBlocks) {
@@ -599,7 +608,9 @@ export function threadRoutes(): Hono<ReadEnv> {
     const quotedR = quotePids.length
       ? await db
           .prepare<{ pid: number; uid: number; message_fmt: string }>(
-            `SELECT pid,uid,message_fmt FROM ${P} WHERE pid IN (${quotePids.map(() => '?').join(',')})`,
+            // 引用摘要同样受审核态与付费墙约束：不取未过审楼层正文，摘要剥掉 [ttPay] 付费段，
+            // 防止通过 quotepid 引用把待审/付费内容写进摘要下发给无权用户。
+            `SELECT pid,uid,message_fmt FROM ${P} WHERE ok = 1 AND pid IN (${quotePids.map(() => '?').join(',')})`,
           )
           .bind(...quotePids)
           .all()
@@ -664,7 +675,7 @@ export function threadRoutes(): Hono<ReadEnv> {
               quoted: {
                 pid: quote.pid,
                 username: usersMap.get(quote.uid)?.username ?? '',
-                messageSnippet: quote.message_fmt.replace(/<[^>]*>/g, '').slice(0, 80),
+                messageSnippet: redactPaidBlocks(String(quote.message_fmt ?? '')).replace(/<[^>]*>/g, '').slice(0, 80),
               },
             }
           : {}),
@@ -892,10 +903,11 @@ export function threadRoutes(): Hono<ReadEnv> {
       try {
         await db.prepare('INSERT INTO bbs_like (uid, tid, create_date) VALUES (?, ?, ?)').bind(viewer.uid, tid, now()).run();
       } catch (e) {
-        // 并发双击：两请求都查到「未赞」，第二个撞唯一约束 → 按已点赞幂等成功（不 500、不误取消）
+        // 并发双击：两请求都查到「未赞」，第二个 INSERT 撞唯一键 —— 此刻库中确实已有一条赞。
+        // 必须保持 existing=null 按「已点赞」返回；置为非空会谎称已取消 + liked:false，前端状态与 DB 相反。
         const msg = e instanceof Error ? e.message : String(e);
         if (!/UNIQUE constraint failed/i.test(msg)) throw e;
-        existing = { uid: viewer.uid };
+        existing = null;
       }
     }
     const cnt = await db
@@ -944,10 +956,10 @@ export function threadRoutes(): Hono<ReadEnv> {
           .bind(viewer.uid, pid, Number(post.tid), now())
           .run();
       } catch (e) {
-        // 并发双击撞唯一约束 → 按已点赞幂等成功（同主题点赞口径）
+        // 并发双击撞唯一约束 → 库中已点赞，按「已点赞」幂等成功（同主题点赞口径，不得倒置为取消）
         const msg = e instanceof Error ? e.message : String(e);
         if (!/UNIQUE constraint failed/i.test(msg)) throw e;
-        existing = { uid: viewer.uid };
+        existing = null;
       }
     }
     const cnt = await db
@@ -978,12 +990,16 @@ export function threadRoutes(): Hono<ReadEnv> {
     ]);
     const ctx = makeAccessCtx(viewer, forumlist, grouplist);
     const th = await db
-      .prepare<{ fid: number }>('SELECT fid FROM bbs_thread WHERE tid = ?')
+      .prepare<{ fid: number; ok: number; uid: number; content_buy: number }>('SELECT fid,ok,uid,content_buy FROM bbs_thread WHERE tid = ?')
       .bind(tid)
-      .first<{ fid: number }>();
+      .first<{ fid: number; ok: number; uid: number; content_buy: number }>();
     if (!th) throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
     if (!forumAccessUser(ctx, Number(th.fid), 'allowread')) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
     const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
+    // 主题级审核可见性：主题已入回收站/待审但楼层 ok=1 时，热门回复不得成为绕行读入口（与详情/点赞同口径）
+    if (!canSeeUnapproved(Number(th.ok), { seeCheck, isAuthor: Number(th.uid) === viewer.uid })) {
+      throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
+    }
     const r = await db
       .prepare<{
         pid: number;
@@ -1009,6 +1025,20 @@ export function threadRoutes(): Hono<ReadEnv> {
     const rows = r.results.filter((x) =>
       canSeeUnapproved(Number(x.ok), { seeCheck, isAuthor: Number(x.uid) === viewer.uid }),
     );
+    // 付费墙：includeFirst=1 会把首帖带进热门回复列表，必须与详情页同口径校验购买态，
+    // 否则未购游客可用 ?includeFirst=1&threshold=1 直读 [ttPay] 段全文（该接口还被匿名边缘缓存）。
+    let firstVisible = true;
+    const firstRow = rows.find((x) => Number(x.isfirst) === 1);
+    if (firstRow && Number(th.content_buy) > 0 && /\[ttPay\][\s\S]*?\[\/ttPay\]/i.test(String(firstRow.message_fmt ?? ''))) {
+      const paid =
+        viewer.uid > 0
+          ? await db
+              .prepare<{ x: number }>('SELECT 1 AS x FROM bbs_paylist WHERE tid = ? AND uid = ? AND type = 1')
+              .bind(tid, viewer.uid)
+              .first<{ x: number }>()
+          : null;
+      firstVisible = Boolean(paid) || (viewer.uid > 0 && Number(th.uid) === viewer.uid);
+    }
     const uids = [...new Set(rows.map((x) => Number(x.uid)))];
     // 当前访问者已赞集合（登录态；一次 IN 批量）
     const likedPids = new Set<number>();
@@ -1050,7 +1080,10 @@ export function threadRoutes(): Hono<ReadEnv> {
         isfirst: Number(x.isfirst) as PostItem['isfirst'],
         doctype: Number(x.doctype) as PostItem['doctype'],
         quotepid: Number(x.quotepid),
-        messageFmt: String(x.message_fmt ?? ''),
+        messageFmt:
+          Number(x.isfirst) === 1 && !firstVisible
+            ? redactPaidBlocks(String(x.message_fmt ?? ''), true)
+            : String(x.message_fmt ?? ''),
         images: Number(x.images),
         files: Number(x.files),
         createDate: Number(x.create_date),

@@ -15,18 +15,11 @@ import type { D1b } from '../../core/db';
 import type { Cache } from '../../core/cache';
 import { claimPendingOrder, getOrder, markPaid, fulfillOrder, releaseOrderClaim } from '../../core/order';
 import { dispatchWebhook, linkProviderRef } from '../../core/payment/orchestrator';
-import { asRedeemable, getProvider, listReadyProviders, providerLifecycle, resolveProviderConfig, runCheckout, type ProviderView, type RedeemResult } from '../../core/payment/registry';
+import { acceptCurrency, asRedeemable, getProvider, listReadyProviders, providerLifecycle, resolveProviderConfig, runCheckout, type RedeemResult } from '../../core/payment/registry';
 import type { ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
 const now = () => Math.floor(Date.now() / 1000);
-
-/** 收银台币种过滤：capabilities.currencies 为空（卡密/通道无关币种）视为接受任意币种 */
-function acceptCurrency(v: ProviderView, currency: string | undefined): boolean {
-  if (!currency) return true;
-  const list = v.capabilities.currencies ?? [];
-  return list.length === 0 || list.some((c) => c.toUpperCase() === currency.toUpperCase());
-}
 
 /** GET /api/payment-providers —— 收银台可用通道（仅 ready，按币种过滤；卡密等 redeem 通道置前作兜底） */
 async function providers(c: Ctx): Promise<Response> {

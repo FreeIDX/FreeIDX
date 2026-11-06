@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CONTENT_LANG_NATIVE_NAMES, CONTENT_LANGS, detectContentLang, type ContentLang } from '@freeidx/shared';
 import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { createThread } from '../../../lib/api';
+import { nonNegInt } from '../../../lib/params';
 import { Composer, type ComposerSubmit } from '../../../components/Composer';
 import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
 import { Icon } from '../../../components/icons';
@@ -38,7 +39,7 @@ export function ComposePage() {
 
   // 冷加载 /new 时 forumlist 尚未就绪，useState 初值会永远停在 0 ⇒ 目标版块改为派生，用户手选才覆盖
   const [pickedFid, setPickedFid] = useState(0);
-  const fid = pickedFid || Number(routeParams.fid ?? search.get('fid') ?? forumlist[0]?.fid ?? 0);
+  const fid = pickedFid || nonNegInt(routeParams.fid ?? search.get('fid'), forumlist[0]?.fid ?? 0);
   /* 当前选中版块（分类弹窗与触发器共用） */
   const currentForum = forumlist.find((f) => f.fid === fid);
   /* 版块生效内容语言（0024，自身绑定或继承父版块）：非空时发帖语言锁定为该语言，服务端同样强制 */

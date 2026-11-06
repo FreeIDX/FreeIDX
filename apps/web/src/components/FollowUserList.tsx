@@ -102,7 +102,7 @@ export function FollowUserList({
     queryKey: ['follow-users', url],
     queryFn: ({ pageParam }) => fetchFollowUserPage(url, pageParam),
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => last.nextCursor,
+    getNextPageParam: (last) => (last.list.length >= last.size ? last.nextCursor : undefined),
   });
   const items = q.data?.pages.flatMap((pg) => pg.list) ?? [];
 

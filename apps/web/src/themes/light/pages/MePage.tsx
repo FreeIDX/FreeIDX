@@ -137,7 +137,8 @@ export function MePage() {
     queryKey: ['my-favorites'],
     queryFn: ({ pageParam }) => fetchMyFavorites(pageParam),
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => last.nextCursor,
+    // 后端「本页有行」就回 nextCursor，末页也非空；须用满页判定终止，否则加载更多按钮常驻
+    getNextPageParam: (last) => (last.list.length >= last.size ? last.nextCursor : undefined),
     enabled: section === 'favorites' && Boolean(me),
   });
   /* 我赞过的主题（bbs_like.rowid 倒序） */
@@ -145,7 +146,8 @@ export function MePage() {
     queryKey: ['my-likes'],
     queryFn: ({ pageParam }) => fetchMyLikes(pageParam),
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => last.nextCursor,
+    // 后端「本页有行」就回 nextCursor，末页也非空；须用满页判定终止，否则加载更多按钮常驻
+    getNextPageParam: (last) => (last.list.length >= last.size ? last.nextCursor : undefined),
     enabled: section === 'likes' && Boolean(me),
   });
   /* A2 改密：入参前端预哈希 md5(明文)（§8.4，与登录/注册一致） */
@@ -190,6 +192,8 @@ export function MePage() {
   if (!me) {
     return (
       <Card header={t('my_home')}>
+        {/* 改密成功后服务端全端登出 → me=null 走本早退分支；成功提示必须在这里渲染，否则用户只看到「请先登录」 */}
+        {pwOk && <p className="mb-3 rounded border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{pwOk}</p>}
         <p className="text-sm text-muted-foreground">
           {t('please_login_first')}
           <button
@@ -667,7 +671,8 @@ function FollowSection({ active }: { active: boolean }) {
     queryKey: ['my-follow-stream'],
     queryFn: ({ pageParam }) => fetchMyFollowingStream(pageParam),
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => last.nextCursor,
+    // 后端「本页有行」就回 nextCursor，末页也非空；须用满页判定终止，否则加载更多按钮常驻
+    getNextPageParam: (last) => (last.list.length >= last.size ? last.nextCursor : undefined),
     enabled: active && tab === 'timeline' && Boolean(me),
   });
 

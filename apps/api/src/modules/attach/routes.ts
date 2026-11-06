@@ -483,10 +483,13 @@ export async function associateAttachments(a: AssocArgs): Promise<void> {
     const stored = fileExt(oldKey); // 含 `_ext` 名单外形态一并保留
     const newKey = attachKey(ym, stored);
     const obj = await bucket.get(oldKey);
-    if (obj && obj.body != null) {
-      await bucket.put(newKey, obj.body as ArrayBufferView, { httpMetadata: { contentType: 'application/octet-stream' } });
-      await bucket.delete(oldKey);
+    if (!obj || obj.body == null) {
+      // R2 对象缺失（GC 提前回收/写入延迟/抖动）：不能把 newKey 写成 status=1 的正式行，
+      // 否则该附件永久 404 且再无回收/修复路径。保留 status=0 交由 GC 处理，也不计 images/files。
+      continue;
     }
+    await bucket.put(newKey, obj.body as ArrayBufferView, { httpMetadata: { contentType: 'application/octet-stream' } });
+    await bucket.delete(oldKey);
     if (Number(r.isimage) > 0) images++;
     else files++;
     stmts.push(

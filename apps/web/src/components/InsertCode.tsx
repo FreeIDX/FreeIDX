@@ -37,9 +37,13 @@ export function InsertCode({ html, className }: { html: string; className?: stri
       fresh.text = old.textContent ?? '';
       old.replaceWith(fresh);
     });
+    // 注入码变更/组件卸载时清掉上次注入的节点，避免旧脚本产生的 DOM 残留、重复渲染
+    return () => host.replaceChildren();
   }, [html, hasScript]);
 
   if (!html) return null;
-  if (hasScript) return <div ref={ref} className={className} />;
-  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  // 不同分支换 key 强制重建 DOM 节点：脚本注入分支里由 JS 插入的子节点不受 React 管理，
+  // 复用同一 div 会让旧注入内容在切回普通 HTML 分支时残留。
+  if (hasScript) return <div key="with-script" ref={ref} className={className} />;
+  return <div key="plain" className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }

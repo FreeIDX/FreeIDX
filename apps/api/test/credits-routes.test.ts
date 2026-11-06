@@ -246,8 +246,16 @@ describe('读路径（②b：myCredits / record / purchased）', () => {
     expect(d.total).toBe(1);
     expect(d.list[0]?.tid).toBe(9);
     expect(d.list[0]?.subject).toBe('付费主题');
-    // 列表查询必须带 type=1 过滤（已购语义），不得泄露其他 paylist 类型
+    // 列表查询必须带 type=1 过滤（已购语义），不得泄露其他 paylist 类型；
+    // 且须排除未过审/回收站主题（已购记录不是绕过审核可见性的凭证）
     const listCall = r.calls.find((c) => /FROM bbs_paylist p JOIN bbs_thread t ON t\.tid = p\.tid[\s\S]*ORDER BY p\.paytime DESC/.test(c.sql));
     expect(listCall?.sql).toContain('p.type = 1');
+    expect(listCall?.sql).toContain('t.ok = 1');
+    // 前端 ThreadList 消费 camelCase DTO：原实现直发原始行会让时间/付费位全部为 undefined
+    const row = d.list[0] as unknown as Record<string, unknown>;
+    expect(row.createDate).toBe(1700000000);
+    expect(row.lastDate).toBe(1700000000);
+    expect(row.ok).toBe(1);
+    expect(row.contentBuy).toBe(0);
   });
 });

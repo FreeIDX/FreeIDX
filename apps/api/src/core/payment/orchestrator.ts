@@ -76,6 +76,15 @@ export async function applyProviderEvent(
       return { handled: true, action: 'paid', orderNo: order.orderNo };
     }
     case 'refunded': {
+      // 部分退款（Stripe charge.refunded 的 amount_refunded 为累计退款额）不得把订单推到终态：
+      // refundOrder 会全额扣回 duration_days/credits 并回落 VIP 组，且此后 webhook 重放被幂等忽略。
+      // 明确小于订单金额时只 ack + 记录，等累计达到全额的事件再回收权益。
+      if (event.amountCents !== undefined && Number(event.amountCents) < Number(order.amountCents)) {
+        console.warn(
+          `[payment] ${t0('pay.logAmountMismatch', { orderNo: order.orderNo, provider: order.provider, event: event.amountCents, order: order.amountCents })}`,
+        );
+        return { handled: true, action: 'ignored', orderNo: order.orderNo };
+      }
       // 非法迁移（事件重放/单已被对账关单）不得抛错：抛错会让 provider 重试风暴并丢失 ack 语义
       try {
         await refundOrder(core.db, order.orderNo, ts);

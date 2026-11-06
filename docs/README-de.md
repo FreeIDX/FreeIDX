@@ -78,6 +78,7 @@ User visits: forum.example.com
 ### 🔌 Erweiterbarkeit & Engineering
 
 - ✅ **Plugin-Mechanismus** - hook-/overwrite-Erweiterungspunkte + Frontend-Komponenten-Slots, hot-swappable über das Admin-Panel – Funktionalität erweitern, ohne den Kerncode anzufassen
+- ✅ **MCP-Server** - Stellt Foreninhalte KI-Clients (Claude Desktop, Cursor…) über MCP bereit; persönliche Zugriffstoken sind durch Rechte, Moderationsstatus und Bezahlschranke dreifach begrenzt, Schreibwerkzeuge bleiben standardmäßig aus
 - ✅ **Admin-Panel** - Seiteneinstellungen, Bereiche, Themen, Benutzer, Benutzergruppen, Cache – alles an einem Ort
 - ✅ **Mehrsprachigkeit** - Vereinfachtes/Traditionelles Chinesisch / Englisch / Japanisch / Koreanisch / Französisch / Deutsch / Spanisch / Russisch / Thai – insgesamt 10 Sprachen, skriptgeneriert + Pre-Commit-Validierung über die gesamte Pipeline, ganz ohne hartcodierte Texte
 - ✅ **Geplante Aufgaben** - Cron Triggers mit dreistufiger Planung (alle 5 Minuten / stündlicher Abgleich / täglich), automatisiert Session-Recycling, täglichen Statistik-Reset, Attachment-GC und den Abgleich verwaister Orders

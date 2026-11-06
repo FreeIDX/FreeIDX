@@ -100,6 +100,17 @@ describe('双轨合并', () => {
     expect(res.headers.get('set-cookie') ?? '').toMatch(/sid=[0-9a-f]{32}/);
   });
 
+  it('sid 留存但 session 行已被 cron GC 删除：JWT 轨仍重建 session（在线状态不永久丢失）', async () => {
+    const token = await issueAccessToken(SECRET, 1, USER.token_version);
+    // 浏览器仍带 sid，但 bbs_session 行已不存在；旧实现按 !sid 判定会跳过重建
+    const { env, calls } = envFor(rules([{ test: /SELECT uid,last_date FROM bbs_session/, first: null }]));
+    const res = await app.request('/api/bootstrap', { headers: { cookie: `sid=stale; at=${token}` } }, env as never);
+    const body = (await res.json()) as { data: { me: { uid: number } | null } };
+    expect(body.data.me?.uid).toBe(1);
+    expect(calls.some((c) => /REPLACE INTO bbs_session/.test(c.sql))).toBe(true);
+    expect(res.headers.get('set-cookie') ?? '').toMatch(/sid=[0-9a-f]{32}/);
+  });
+
   it('tv 不符 → 改密吊销立即生效（刚签发亦然，无 30 分钟豁口）', async () => {
     const token = await issueAccessToken(SECRET, 1, 999); // tv 与库不符但刚签发
     const { env, calls } = envFor(rules());

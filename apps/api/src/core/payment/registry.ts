@@ -85,6 +85,13 @@ export interface ProviderView {
   capabilities: PaymentCapabilities;
 }
 
+/** 通道币种兼容：空列表 = 不限币种（卡密等与法币无关的通道）。下单与收银台展示共用同一口径 */
+export function acceptCurrency(v: ProviderView, currency: string | undefined): boolean {
+  if (!currency) return true;
+  const list = v.capabilities.currencies ?? [];
+  return list.length === 0 || list.some((c) => c.toUpperCase() === currency.toUpperCase());
+}
+
 /**
  * 卡密式通道的可选能力（T5-5 暴露的契约扩展点）：
  * 冻结的 PaymentProvider 契约只覆盖 redirect/qrcode + webhook，卡密无跳转、无 webhook，靠"输入兑换码即时开通"。

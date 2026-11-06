@@ -303,7 +303,9 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
   let uid = 0;
   /** JWT 轨有效载荷的 tv（session 轨为 null，不参与比对） */
   let jwtTv: number | null = null;
-  /** JWT 有效但无 session：需确认用户仍存在后才重建 session（避免为已删 uid 反复建行） */
+  /** sid cookie 是否命中有效 session 行（cron 会 GC 掉闲置行：cookie 在、行已没） */
+  let sessionFound = false;
+  /** JWT 有效但 session 未命中：需确认用户仍存在后才重建 session（避免为已删 uid 反复建行） */
   let rebuildSession = false;
   if (sid) {
     const sess = await db
@@ -313,6 +315,7 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
       .bind(sid)
       .first<{ uid: number; last_date: number }>();
     if (sess && Number(sess.uid) > 0) {
+      sessionFound = true;
       uid = Number(sess.uid);
       if (Math.floor(Date.now() / 1000) - Number(sess.last_date) > 60) {
         const url = new URL(c.req.url).pathname;
@@ -331,7 +334,9 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
       if (p) {
         uid = p.uid;
         jwtTv = p.tv;
-        rebuildSession = !sid;
+        // 用「session 行是否存在」而非「sid cookie 是否存在」判定：cron 每 5 分钟 GC 闲置 session 后，
+        // 浏览器仍持有 sid，若按旧逻辑 !sid 为 false 就永不重建，用户会永久从在线列表消失。
+        rebuildSession = !sessionFound;
       }
     }
   }

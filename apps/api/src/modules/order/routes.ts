@@ -11,7 +11,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import { loadViewer } from '../../core/loaders';
 import type { D1b } from '../../core/db';
 import { createOrder, findPlan, getOrder, listEnabledPlans, type VipPlanRow } from '../../core/order';
-import { listReadyProviders } from '../../core/payment/registry';
+import { acceptCurrency, listReadyProviders } from '../../core/payment/registry';
 import { intParam, type ReadEnv } from '../shared';
 
 type Ctx = Context<ReadEnv>;
@@ -74,7 +74,13 @@ async function placeOrder(c: Ctx): Promise<Response> {
   // （checkout 恒降级、webhook 恒 404），只能靠对账兜底。
   if (!provider) throw new AppError(Code.VALIDATION_ERROR, t('pay.providerRequired'));
   const ready = await listReadyProviders(core.cache, core.db);
-  if (!ready.some((p) => p.id === provider)) throw new AppError(Code.VALIDATION_ERROR, t('pay.providerUnavailable'));
+  const chosen = ready.find((p) => p.id === provider);
+  if (!chosen) throw new AppError(Code.VALIDATION_ERROR, t('pay.providerUnavailable'));
+  // 币种兼容是下单的硬条件：前端只保证「有通道支持该币种」时按钮可点，直连 API 同样要挡，
+  // 否则会落下一笔 checkout 必然失败/错币种扣款的 pending 订单。
+  if (!acceptCurrency(chosen, String(plan.currency))) {
+    throw new AppError(Code.VALIDATION_ERROR, t('pay.providerUnavailable'));
+  }
 
   const order = await createOrder(core, { uid: v.uid, plan, provider, ts: now() });
   // checkout（redirect/qrcode/redeem）由 payment-core 依 provider 插件装配（T5-4）；未启用通道返回 pending 态由前端轮询。

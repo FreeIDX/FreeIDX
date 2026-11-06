@@ -63,14 +63,18 @@ export function VipPage() {
       openAuth('login');
       return;
     }
-    if (!effectiveProvider) {
+    // 通道必须支持该套餐币种：全局选中的通道（或 providers[0]）可能只支持另一种币种，
+    // 直接下单会落下币种不兼容的 pending 单。优先沿用选中通道，否则取该币种的首个可用通道。
+    const usable = providers.filter((p) => supportsCurrency(p, plan.currency));
+    const provider = usable.find((p) => p.id === effectiveProvider)?.id ?? usable[0]?.id ?? '';
+    if (!provider) {
       setErr(t('order_choose_provider'));
       return;
     }
     setBusyPlanId(plan.id);
     setErr('');
     try {
-      const order = await placeOrder(plan.id, effectiveProvider);
+      const order = await placeOrder(plan.id, provider);
       navigate(`/order/${order.order_no}`);
     } catch (e) {
       setErr(apiErrorMessage(e, t('operation_failed')));
@@ -133,7 +137,7 @@ export function VipPage() {
                   block
                   variant="primary"
                   loading={busyPlanId === plan.id}
-                  disabled={!usable.length && !!providers.length}
+                  disabled={!usable.length}
                   onClick={() => void buy(plan)}
                 >
                   {me ? t('vip_buy') : t('vip_login_to_buy')}
