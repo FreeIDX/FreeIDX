@@ -19,6 +19,7 @@ import { NotFoundPage } from './NotFoundPage';
 import { Turnstile, turnstileDisabled } from '../../../components/Turnstile';
 import { Alert, Breadcrumb, Button, Card, Modal, TagBadge, cx } from '../../../components/ui';
 import { useReadUnread } from '../../../hooks/useReadUnread';
+import { LG_UP, useMediaQuery } from '../../../hooks/useMediaQuery';
 import { useAuth } from '../../../store/auth';
 import { useAuthModal } from '../../../store/authModal';
 import { useT, useGroupName, useForumName, useLocalizedSetting } from '../../../lib/i18n';
@@ -440,10 +441,17 @@ export function ThreadPage() {
     staleTime: 30_000,
   });
   const opUid = th?.uid ?? 0;
+  /**
+   * 作者卡是右栏 `hidden ... lg:block`（≥992px 才渲染）的粘性卡片，窄屏下**一个字段都用不到**。
+   * 移动端是论坛主要流量，此前每个帖子页都白打一次 /api/users/:uid（1 个 RTT + 一次 D1 读，
+   * 含 session/follow 计数 4 个查询）。这里按视口能力关掉，桌面端行为完全不变；
+   * 窗口拉宽时 matchMedia 会变更 → 查询自动补发。
+   */
+  const isWide = useMediaQuery(LG_UP);
   const author = useQuery({
     queryKey: ['user', opUid],
     queryFn: () => apiGet<UserProfile>(`/api/users/${opUid}`),
-    enabled: Boolean(th),
+    enabled: Boolean(th) && isWide,
   });
   const au = author.data;
 
