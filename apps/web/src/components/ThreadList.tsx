@@ -20,6 +20,7 @@ import { useReadUnread } from '../hooks/useReadUnread';
 import { useAuth } from '../store/auth';
 import { useForumName, useT } from '../lib/i18n';
 import { useLight } from '../store/theme';
+import { useTheme } from '../lib/theme/provider';
 
 export interface ThreadPageData {
   list: ThreadListItem[];
@@ -226,9 +227,15 @@ function Row({
 }) {
   const navigate = useNavigate();
   const t = useT();
+  /* 站内预取：hover/聚焦时提前下详情页 chunk（纯静态资源，不打后端，未点击零副作用）。
+     详情页 chunk 13.5KB(br)，预取后点击基本是 0 等待；触屏无 hover 自然退化为点击后加载。 */
+  const threadPage = useTheme()?.module.pages?.thread;
+  const prefetch = () => threadPage?.preload?.();
   return (
     <li
       className={cx('cursor-pointer border-b border-zh-line px-5 py-[0.7rem] last:border-b-0 hover:bg-zh-row-hover', className)}
+      onMouseEnter={prefetch}
+      onFocus={prefetch}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('a,button,input,label')) return;
         navigate(`/thread/${th.tid}`);

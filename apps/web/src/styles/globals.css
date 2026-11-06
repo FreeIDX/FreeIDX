@@ -34,6 +34,20 @@
   --input: 210 14% 82%; /* #ced4da */
   --ring: 210 100% 50%;
   --radius: 0.375rem; /* 6px：卡片 rounded-lg，输入框/按钮 rounded-md(4px) */
+  /*
+   * 正文字体栈：**默认不引用中文字体**。
+   * HarmonyOS 子集 454KB 是首访最大的单一资源（占首屏流量 60%+），而站点支持 10 种语言、
+   * 绝大多数访客根本不看汉字。@font-face 只在字体被实际使用时才下载，所以把中文字体
+   * 收进「中文界面」分支即可：非中文界面零下载，中文界面与改版前完全一致（无视觉回归）。
+   * 切换时机见 lib/i18n 的 I18nProvider（写 <html lang>）与 apps/api 壳注入（首屏前就写好）。
+   */
+  --font-app: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica, 微软雅黑, 华文细黑, STHeiti, sans-serif;
+}
+
+/* 中文界面（zh-cn / zh-tw）：HarmonyOS Sans SC 优先，回退微软雅黑（body_font_style=1） */
+html[lang^='zh'] {
+  --font-app: 'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
 }
 
 @theme {
@@ -100,9 +114,9 @@
   --breakpoint-3xl: 1920px;
   /* 卡片软阴影：业务自定义，非 Bootstrap 默认 */
   --shadow-card: 2px 2px 3px rgba(173, 181, 189, 0.25);
-  --font-sans:
-    'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica, 微软雅黑, 华文细黑,
-    STHeiti, sans-serif;
+  /* 字体栈由 --font-app 决定（见下方 :root 的定义）：Tailwind preflight 用 --default-font-family
+     = --font-sans 作用于 <html>，这里改为转发，保证「非中文界面不加载中文字体」对所有元素生效 */
+  --font-sans: var(--font-app);
   --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
@@ -212,9 +226,8 @@
   --color-top-normal: #ff8800;
   --color-top-global: #da24a7;
   --shadow-card: 0 0 0 0 rgba(0, 0, 0, 0.08); /* 清零 box-shadow（扁平） */
-  /* 字体：HarmonyOS Sans SC 优先，回退微软雅黑（body_font_style=1） */
-  font-family: 'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Helvetica, Arial,
-    sans-serif;
+  /* 字体：跟随 --font-app（中文界面 HarmonyOS 优先，其它语言系统字体栈，见 :root 注释） */
+  font-family: var(--font-app);
 }
 
 /* 固定色相的装饰色（主题语义色） */
@@ -224,9 +237,9 @@
   --color-info: #00b8d8;
 }
 
-/* 得意黑（body_font_style=2）：全站正文覆盖 */
+/* 得意黑（body_font_style=2）：全站正文覆盖（回退仍走 --font-app，中文界面才会带上 HarmonyOS） */
 .theme-zh.font-smiley {
-  font-family: 'smileySans', 'HarmonyOS_Sans_SC_Medium', 'Microsoft YaHei', sans-serif;
+  font-family: 'smileySans', var(--font-app);
 }
 
 @font-face {

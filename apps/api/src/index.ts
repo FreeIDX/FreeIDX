@@ -4,7 +4,7 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { AVAILABLE_LOCALES } from '@freeidx/shared';
+import { AVAILABLE_LOCALES, DEFAULT_LOCALE } from '@freeidx/shared';
 import type { Env } from './types/env';
 import { D1b } from './core/db';
 import { Cache } from './core/cache';
@@ -242,14 +242,35 @@ app.route('/', seoCoreRoutes());
 app.onError(handleError);
 
 /**
- * SPA 壳的主题注入：把启用主题 id 写进 `window.__FI_THEME__`，前端在首屏渲染前读取，
- * 避免「先渲染默认主题再换肤」的闪烁，同时省掉一次 /api/theme/active 引导请求。
- * 注入失败（读壳失败/无 </head>）一律原样返回，主题引导会回落同名接口，不影响可用性。
+ * 中文字体子集路径（与 apps/web/src/styles/globals.css 的 @font-face 同源，改文件名须同步两处）。
+ * 仅中文界面预载：非中文界面根本不引用这套字体（见 globals.css 的 --font-app），预载会白下 454KB。
  */
-async function injectThemeId(res: Response, themeId: string): Promise<Response> {
+const CJK_FONT_URL = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v1.woff2';
+
+/**
+ * SPA 壳引导注入：在业务脚本之前写死「启用主题 id + 前台语言」，前端首帧即可用。
+ *
+ *  - `window.__FI_THEME__`：省掉一次 /api/theme/active 引导请求，也避免「先默认主题再换肤」的闪烁；
+ *  - `window.__FI_LANG__`：站点语言。前端据此**直接拉对应语言包**——此前首帧只能按
+ *    localStorage/DEFAULT_LOCALE(en-us) 猜，中文站点首访会先下 en-us 包、渲染一帧英文，
+ *    bootstrap 到达后再补下 zh-cn 包（实测同一页面下载两个词典 chunk）。
+ *  - `<html lang>`：同时落 CSS 用的语言标记，让 --font-app 从一开始就选中正确字体；
+ *    已存语言偏好（localStorage）优先级高于站点语言，这里一并对齐，避免先按站点语言下中文字体。
+ *  - 中文界面顺带预载字体：字体是首屏最大的单一资源，等 CSS 解析到 @font-face 才发起太晚。
+ *
+ * 注入失败（读壳失败/无 </head>）一律原样返回，前端会回落到「同名接口 + 默认主题 + 默认语言」。
+ */
+async function injectShell(res: Response, themeId: string, siteLang: string): Promise<Response> {
   try {
     const html = await res.text();
-    const script = `<script>window.__FI_THEME__=${JSON.stringify(themeId)}</script>`;
+    const script =
+      `<script>window.__FI_THEME__=${JSON.stringify(themeId)};` +
+      `window.__FI_LANG__=${JSON.stringify(siteLang)};` +
+      `document.documentElement.lang=${JSON.stringify(siteLang)};` +
+      `try{var p=localStorage.getItem("freeidx.lang");if(p)document.documentElement.lang=p}catch(e){}` +
+      `try{if(/^zh/.test(document.documentElement.lang)){var k=document.createElement("link");` +
+      `k.rel="preload";k.as="font";k.type="font/woff2";k.crossOrigin="";` +
+      `k.href=${JSON.stringify(CJK_FONT_URL)};document.head.appendChild(k)}}catch(e){}</script>`;
     // 优先注入 </head>（脚本在任何业务脚本之前求值）；无 head 时退化到 </body>；都没有则原样返回文本
     const out = html.includes('</head>')
       ? html.replace('</head>', `${script}</head>`)
@@ -303,7 +324,10 @@ app.notFound(async (c) => {
   if (!res.headers.get('content-type')?.includes('text/html')) return res;
   if (fileLike || bot) return handleNotFound(c);
   const themeId = await loadThemeId(c.get('cache'), c.get('db'));
-  return injectThemeId(res, themeId);
+  // 站点语言：非法/读取失败回落 DEFAULT_LOCALE（与改版前「无注入」时的行为一致）
+  const setting = await loadSetting(c.get('cache'), c.get('db')).catch(() => null);
+  const siteLang = setting && AVAILABLE_LOCALES.includes(setting.lang) ? setting.lang : DEFAULT_LOCALE;
+  return injectShell(res, themeId, siteLang);
 });
 
 export default {

@@ -47,13 +47,26 @@ function readLangPref(): string | null {
   }
 }
 
+declare global {
+  interface Window {
+    /** Worker 在 SPA 壳中注入的站点语言（见 apps/api 的 injectShell），首帧即可用 */
+    __FI_LANG__?: string;
+  }
+}
+
 /**
- * 首屏语言：bootstrap 到达前唯一可用的依据（用户偏好，非法值忽略 → 站点缺省 en-us）。
- * main.tsx 据此在渲染前预载词条，使首次渲染即拿到可用词典，不出现「先显示 key 再补文案」的闪烁。
+ * 首屏语言：bootstrap 到达前的依据，优先级 —— 用户偏好 > 壳注入的站点语言 > 默认 en-us。
+ *
+ * 第三个来源（`window.__FI_LANG__`）是性能关键：此前只能按 localStorage/默认值猜，
+ * 中文站点首访会先下 en-us 词条包、渲染一帧英文，等 bootstrap 到达后再补下 zh-cn 包
+ * （实测同一页面下两个词典 chunk）。拿到注入值后首帧即命中目标语言，少一个请求也不闪。
+ * main.tsx 据此在渲染前预载词条，使首次渲染就拿到可用词典，不出现「先显示 key 再补文案」。
  */
 export function initialLocale(): string {
   const pref = readLangPref();
-  return pref && AVAILABLE_LOCALES.includes(pref) ? pref : DEFAULT_LOCALE;
+  if (pref && AVAILABLE_LOCALES.includes(pref)) return pref;
+  const injected = typeof window === 'undefined' ? '' : (window.__FI_LANG__ ?? '');
+  return AVAILABLE_LOCALES.includes(injected) ? injected : DEFAULT_LOCALE;
 }
 
 interface LangPrefState {

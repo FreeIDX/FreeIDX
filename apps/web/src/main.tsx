@@ -10,6 +10,7 @@ import { queryClient } from './lib/query-client';
 import { useAuth } from './store/auth';
 import { ThemeProvider } from './lib/theme/provider';
 import { resolveActiveTheme } from './lib/theme/active';
+import { pageNameOfPath } from './lib/theme/page-of-path';
 import './styles/globals.css';
 
 /* 主题彩蛋：控制台版权输出（配色 #409EFF / #f2f3f5） */
@@ -49,10 +50,21 @@ void useAuth.getState().load();
  * 首屏预载：语言包（词典按需加载）与启用主题（外观层）并行取回后再挂载，
  * 保证首次渲染即有文案与正确外观（否则会先显示 key / 先闪默认主题再换肤）。
  * 两者失败都照常挂载：语言由 useLocaleBundle 回落，主题由 resolveActiveTheme 回落 light。
+ *
+ * 当前路径的**页面 chunk 也在这一步并行预取**（性能项 C4）：页面 chunk 原本要等 React
+ * 渲染到该路由才由 lazy 触发，于是首屏是「主包 → 词典 → 渲染 → chunk → 数据」四级串行。
+ * 主题模块（基底 light 为静态引入）一到位就按路径预取，chunk 与词典同批下载，少一个 RTT。
  */
 void (async () => {
+  const themePromise = resolveActiveTheme();
+  /* 后台是独立外壳（自带懒加载树），不参与前台页面 chunk 预取 */
+  if (!window.location.pathname.startsWith('/admin')) {
+    void themePromise
+      .then((t) => t.module.pages?.[pageNameOfPath(window.location.pathname)]?.preload?.())
+      .catch(() => undefined);
+  }
   const [theme] = await Promise.all([
-    resolveActiveTheme(),
+    themePromise,
     loadLocaleBundle(initialLocale()).catch(() => undefined),
   ]);
   createRoot(document.getElementById('root')!).render(

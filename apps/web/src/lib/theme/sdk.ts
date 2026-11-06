@@ -22,7 +22,27 @@ export type { ResolvedTheme, ThemeComponent, ThemeMeta, ThemeModule, ThemePageNa
 /**
  * 主题页懒加载：把 `import('./pages/X')` 包成可直接放进 `ThemeModule.pages` 的组件。
  * 保留路由级代码分割——未被渲染的页面 chunk 不会下载。
+ *
+ * 额外挂一个 `preload()`：页面 chunk 原本只有 React 渲染到该路由时才发起
+ * （首屏实测：主包执行完 → 词典到位 → 渲染 → 才开始下 chunk，白等一个 RTT）。
+ * 有了它，首屏可以在 boot 阶段按当前路径并行预取，站内链接也能在 hover 时提前取。
+ * loader 结果做记忆化，预取与 React.lazy 复用同一个 Promise，不会重复请求。
  */
 export function lazyPage(loader: () => Promise<{ default: ComponentType }>): ThemeComponent {
-  return lazy(loader) as unknown as ThemeComponent;
+  let pending: Promise<{ default: ComponentType }> | null = null;
+  const load = (): Promise<{ default: ComponentType }> => {
+    if (!pending) {
+      pending = loader().catch((e: unknown) => {
+        // 失败不缓存：留给真正的渲染时机重试（例如发版后旧 hash 失效 → preloadError 自愈）
+        pending = null;
+        throw e;
+      });
+    }
+    return pending;
+  };
+  const component = lazy(load) as unknown as ThemeComponent;
+  component.preload = () => {
+    void load().catch(() => undefined);
+  };
+  return component;
 }

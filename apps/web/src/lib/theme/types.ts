@@ -55,10 +55,16 @@ export interface ThemeMeta {
 }
 
 /** 主题页面组件：普通组件或经 `lazyPage()` 包装的懒加载组件（保留路由级分包）。
- *  统一声明可选 children，页面自身不取 props，布局外壳则接收路由内容。 */
-export type ThemeComponent =
+ *  统一声明可选 children，页面自身不取 props，布局外壳则接收路由内容。
+ *  `preload` 可选：懒加载组件由 `lazyPage()` 挂上，用于「渲染前就并行下载 chunk」
+ *  （首屏按当前路径预取、站内链接 hover 预取），不渲染也能提前取。 */
+export type ThemeComponent = (
   | ComponentType<{ children?: ReactNode }>
-  | LazyExoticComponent<ComponentType<{ children?: ReactNode }>>;
+  | LazyExoticComponent<ComponentType<{ children?: ReactNode }>>
+) & {
+  /** 触发该页面 chunk 的下载（幂等，重复调用复用同一个 Promise；失败静默，由真正渲染时重试） */
+  preload?: () => void;
+};
 
 /**
  * 主题模块（`themes/<id>/index.tsx` 的默认导出）。

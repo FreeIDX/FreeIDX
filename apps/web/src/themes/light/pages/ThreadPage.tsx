@@ -197,17 +197,19 @@ export function ThreadPage() {
   const [quickTs, setQuickTs] = useState('');
   const [quickNonce, setQuickNonce] = useState(0);
   const [quickErr, setQuickErr] = useState('');
-  /* 快速回复下拉（[默认语, ...# 分隔备选语]，首项 value=0 选中不动作） */
+  const { markRead } = useReadUnread();
+  const me = useAuth((s) => s.me);
+  /* 快速回复下拉（[默认语, ...# 分隔备选语]，首项 value=0 选中不动作）。
+   * 仅在登录态拉取（性能项）：回复框本身只对登录用户渲染，游客下载这份配置纯属浪费一个请求。 */
   const quickReplyMsg = useQuery({
     queryKey: ['quick-reply-message'],
     queryFn: fetchQuickReplyMessage,
     staleTime: 5 * 60_000,
+    enabled: Boolean(me),
   });
   const [quickSel, setQuickSel] = useState(0);
   const [opEditing, setOpEditing] = useState(false);
   const [opErr, setOpErr] = useState('');
-  const { markRead } = useReadUnread();
-  const me = useAuth((s) => s.me);
   const refresh = useAuth((s) => s.refresh);
   const forumlist = useAuth((s) => s.forumlist);
   const grouplist = useAuth((s) => s.grouplist);
@@ -275,16 +277,7 @@ export function ThreadPage() {
       void qc.invalidateQueries({ queryKey: ['hot-posts', tid] });
     },
   });
-  /* 帖子内「热门回复」卡：仅第 1 页且开启时拉取 */
-  const hotPosts = useQuery({
-    queryKey: ['hot-posts', tid, light.hotLikePostLowCount, light.hotLikePostSize, light.hotLikeIsFirst],
-    queryFn: () =>
-      apiGet<HotPostsData>(
-        `/api/threads/${tid}/hot-posts?limit=${light.hotLikePostSize}&threshold=${light.hotLikePostLowCount}&includeFirst=${light.hotLikeIsFirst ? 1 : 0}`,
-      ),
-    enabled: light.hotLikePost && page === 1,
-    staleTime: 30_000,
-  });
+  /* 帖子内「热门回复」卡：见下方（依赖帖子详情，故定义在 q 之后） */
   /** 楼层点赞回调（登录态才渲染按钮；未登录不显示） */
   const onLikePost = light.postLike && me ? (p: PostItem) => postLike.mutate(p) : undefined;
   /* 首帖编辑的收费设置（allowsell 组才出现，初值取主题现值） */
@@ -434,6 +427,18 @@ export function ThreadPage() {
     if (th?.subject) document.title = `${th.subject} - ${setting?.sitename || 'FreeIDX'}`;
   }, [th?.subject, setting?.sitename]);
   const perms = d?.perms;
+  /* 帖子内「热门回复」卡：仅第 1 页、功能开启且**帖子详情已到位**时拉取（性能项）。
+   * 原实现只要进页面就发，实测比 /api/threads/:tid 还早，白占首屏带宽与一个 D1 往返；
+   * 该卡片本身在正文下方，晚一拍出现不影响首屏。 */
+  const hotPosts = useQuery({
+    queryKey: ['hot-posts', tid, light.hotLikePostLowCount, light.hotLikePostSize, light.hotLikeIsFirst],
+    queryFn: () =>
+      apiGet<HotPostsData>(
+        `/api/threads/${tid}/hot-posts?limit=${light.hotLikePostSize}&threshold=${light.hotLikePostLowCount}&includeFirst=${light.hotLikeIsFirst ? 1 : 0}`,
+      ),
+    enabled: light.hotLikePost && page === 1 && Boolean(d),
+    staleTime: 30_000,
+  });
   const opUid = th?.uid ?? 0;
   const author = useQuery({
     queryKey: ['user', opUid],
