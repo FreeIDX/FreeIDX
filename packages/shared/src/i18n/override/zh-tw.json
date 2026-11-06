@@ -527,6 +527,8 @@
   "compose_muted_hint": "帳號處於禁言狀態，暫時無法發文或回覆。"
  },
  "admin": {
+  "site_text_i18n_title": "{field}多語言",
+  "site_text_i18n_hint": "按站點當前語言自動顯示對應內容；未填寫的語言回退到預設內容。",
   "nav_item_name_i18n_title": "導航項名稱多語言",
   "forum_name_i18n": "語言",
   "forum_name_i18n_title": "版塊名稱多語言",

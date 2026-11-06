@@ -527,6 +527,8 @@
   "compose_muted_hint": "Your account is muted; posting and replying are temporarily disabled."
  },
  "admin": {
+  "site_text_i18n_title": "{field} translations",
+  "site_text_i18n_hint": "Shows the content matching the current site language; fields left blank fall back to the default content.",
   "nav_item_name_i18n_title": "Navigation label translations",
   "forum_name_i18n": "Language",
   "forum_name_i18n_title": "Forum name translations",

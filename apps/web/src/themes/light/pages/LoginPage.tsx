@@ -1,7 +1,6 @@
 import { Link, useNavigate } from 'react-router';
-import { useAuth } from '../../../store/auth';
 import { LoginForm, AuthAnnouncement } from '../../../components/AuthForms';
-import { useT } from '../../../lib/i18n';
+import { useLocalizedSetting, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 
 /**
@@ -11,7 +10,8 @@ import { useLight } from '../../../store/theme';
  */
 export function LoginPage() {
   const navigate = useNavigate();
-  const setting = useAuth((s) => s.setting);
+  /* 站点名称等基础设置按当前界面语言取词 */
+  const setting = useLocalizedSetting();
   const t = useT();
   const light = useLight();
 
@@ -26,7 +26,11 @@ export function LoginPage() {
                 ? 'hidden w-1/2 bg-cover bg-center lg:block'
                 : 'hidden w-1/2 bg-[url(/theme-light/login_bg.webp)] bg-cover bg-center lg:block'
             }
-            style={light.loginPageBanner ? { backgroundImage: `url(${light.loginPageBanner})` } : undefined}
+            style={
+              light.loginPageBanner
+                ? { backgroundImage: `url(${light.loginPageBanner})` }
+                : undefined
+            }
             aria-hidden="true"
           />
           {/* 右栏：表单 */}
@@ -38,11 +42,21 @@ export function LoginPage() {
             />
             <div className="relative">
               {/* 站点 logo/站名，点击回首页 */}
-              <Link to="/" className="mb-6 flex items-center gap-2" aria-label={setting?.sitename || 'FreeIDX'}>
+              <Link
+                to="/"
+                className="mb-6 flex items-center gap-2"
+                aria-label={setting?.sitename || 'FreeIDX'}
+              >
                 {setting?.logo_url ? (
-                  <img src={String(setting.logo_url)} alt={setting.sitename} className="h-9 w-auto max-w-none" />
+                  <img
+                    src={String(setting.logo_url)}
+                    alt={setting.sitename}
+                    className="h-9 w-auto max-w-none"
+                  />
                 ) : (
-                  <span className="text-lg font-bold text-brand">{setting?.sitename || 'FreeIDX'}</span>
+                  <span className="text-lg font-bold text-brand">
+                    {setting?.sitename || 'FreeIDX'}
+                  </span>
                 )}
               </Link>
               <p className="text-sm text-lt-grey">{t('user_login')}</p>

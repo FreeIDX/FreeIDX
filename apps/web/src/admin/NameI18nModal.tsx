@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { AVAILABLE_LOCALES, NATIVE_LANG_NAMES } from '@freeidx/shared';
 import { useAdminT } from './t';
-import { Button, Field, Input, Modal } from './ui';
+import { Button, Field, Input, Modal, Textarea } from './ui';
 
 export function NameI18nModal({
   open,
@@ -17,6 +17,7 @@ export function NameI18nModal({
   title,
   hint,
   defaultLabel,
+  multiline,
   onSave,
   onClose,
 }: {
@@ -31,6 +32,8 @@ export function NameI18nModal({
   hint?: string;
   /** 「默认名称」字段的标签 */
   defaultLabel?: string;
+  /** 长文本（站点介绍/站点描述等）用多行输入 */
+  multiline?: boolean;
   onSave: (next: Record<string, string>, defaultName: string) => void;
   onClose: () => void;
 }) {
@@ -78,11 +81,20 @@ export function NameI18nModal({
           t('forum_name_i18n_hint', '按站点当前语言自动显示对应名称；未填写的语言回退到默认名称。')
         }
       >
-        <Input
-          id="name-i18n-default"
-          value={defaultName}
-          onChange={(e) => setDefaultName(e.target.value)}
-        />
+        {multiline ? (
+          <Textarea
+            id="name-i18n-default"
+            className="h-[88px] min-h-0"
+            value={defaultName}
+            onChange={(e) => setDefaultName(e.target.value)}
+          />
+        ) : (
+          <Input
+            id="name-i18n-default"
+            value={defaultName}
+            onChange={(e) => setDefaultName(e.target.value)}
+          />
+        )}
       </Field>
       <div className="grid max-h-[52vh] grid-cols-1 gap-x-4 gap-y-3 overflow-y-auto sm:grid-cols-2">
         {AVAILABLE_LOCALES.map((loc) => (
@@ -90,12 +102,22 @@ export function NameI18nModal({
             <label htmlFor={`name-i18n-${loc}`} className="mb-1 block text-sm text-muted">
               {NATIVE_LANG_NAMES[loc] ?? loc}
             </label>
-            <Input
-              id={`name-i18n-${loc}`}
-              value={map[loc] ?? ''}
-              placeholder={defaultName}
-              onChange={(e) => setMap((m) => ({ ...m, [loc]: e.target.value }))}
-            />
+            {multiline ? (
+              <Textarea
+                id={`name-i18n-${loc}`}
+                className="h-[72px] min-h-0"
+                value={map[loc] ?? ''}
+                placeholder={defaultName}
+                onChange={(e) => setMap((m) => ({ ...m, [loc]: e.target.value }))}
+              />
+            ) : (
+              <Input
+                id={`name-i18n-${loc}`}
+                value={map[loc] ?? ''}
+                placeholder={defaultName}
+                onChange={(e) => setMap((m) => ({ ...m, [loc]: e.target.value }))}
+              />
+            )}
           </div>
         ))}
       </div>

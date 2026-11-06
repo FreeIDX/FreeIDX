@@ -12,7 +12,7 @@ import { AppError } from '../middleware/envelope';
 import { readAdminToken } from '../core/auth/admin';
 import type { ApiT } from '../core/i18n';
 
-export type ReadEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT } };
+export type ReadEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT; lang?: string } };
 
 export function core(c: Context<ReadEnv>): { db: D1b; cache: Cache } {
   return { db: c.get('db'), cache: c.get('cache') };

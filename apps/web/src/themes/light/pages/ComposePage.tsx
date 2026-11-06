@@ -12,7 +12,7 @@ import { useAuth } from '../../../store/auth';
 import { useContentLangMode } from '../../../store/contentLang';
 import { useLight } from '../../../store/theme';
 import { useAuthModal } from '../../../store/authModal';
-import { useForumName, useT } from '../../../lib/i18n';
+import { useForumName, useLocalizedSetting, useT } from '../../../lib/i18n';
 
 /** 发帖页（§4.4，/new 或 /forum/:fid/new）：
  *  两栏 —— 左主表单卡（8/12 栅格：版块/标题 + Composer + 标签选择 + 收费设置）、
@@ -29,7 +29,8 @@ export function ComposePage() {
   const grouplist = useAuth((s) => s.grouplist);
   const me = useAuth((s) => s.me);
   const loaded = useAuth((s) => s.loaded);
-  const setting = useAuth((s) => s.setting);
+  /* 站点介绍等基础设置按当前界面语言取词 */
+  const setting = useLocalizedSetting();
   const openAuth = useAuthModal((s) => s.openAuth);
   const refresh = useAuth((s) => s.refresh);
   const light = useLight();

@@ -14,11 +14,13 @@ import {
   builtinGroupName,
   createFrontTranslator,
   DEFAULT_LOCALE,
+  localizedSetting,
   nameI18nOf,
   type ForumNameMap,
   type FrontKey,
   type LocaleBundles,
   type NameI18nMap,
+  type SiteSetting,
 } from '@freeidx/shared';
 import {
   EMPTY_BUNDLES,
@@ -154,6 +156,16 @@ export function useLocalizedName(): (base: string, map?: NameI18nMap | null) => 
     (base: string, map?: NameI18nMap | null) => nameI18nOf(base, map, lang),
     [lang],
   );
+}
+
+/**
+ * 前台设置视图：站点名称 / 站点介绍 / 关键词 / 站点描述 / 关闭原因 已按当前界面语言取词，
+ * 其余字段原样透传。消费方继续读 setting.sitename 等即可随语言切换即时更新。
+ */
+export function useLocalizedSetting(): SiteSetting | null {
+  const setting = useAuth((s) => s.setting);
+  const lang = useLang();
+  return useMemo(() => (setting ? localizedSetting(setting, lang) : setting), [setting, lang]);
 }
 
 /** 版块名取词：forum 节点自带 name + nameI18n（0027） */

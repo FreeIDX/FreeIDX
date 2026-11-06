@@ -6,7 +6,14 @@
  * sitemap/JSON-LD/OG/.htm 301 归 seo 插件（extensions/seo.ts）。
  */
 import { Hono } from 'hono';
-import { forumNameOf, normForumNameI18n, type PageMeta, type RobotsContribution, type SiteSetting } from '@freeidx/shared';
+import {
+  forumNameOf,
+  localizedSetting,
+  normForumNameI18n,
+  type PageMeta,
+  type RobotsContribution,
+  type SiteSetting,
+} from '@freeidx/shared';
 import type { D1b } from '../../core/db';
 import type { Cache } from '../../core/cache';
 import { BOT_HTML_TTL, SHARED_UA, edgeLookup, edgeStore, isPersonalRequest, maybeCtx } from '../../core/cache/edge';
@@ -70,6 +77,8 @@ export function newPageMeta(
   setting: SiteSetting,
   entity?: PageMeta['entity'],
 ): PageMeta {
+  /* 站点名称/描述等基础设置支持多语言：SEO 产物固定按站点语言取词 */
+  const site = localizedSetting(setting, setting.lang);
   const base: Omit<PageMeta, 'title' | 'description'> = { kind, canonical, lang: setting.lang, head: [], jsonLd: [], og: {}, entity };
   /* 站点图标/Logo（后台基础设置上传，site/ 前缀 R2 直链）：favicon 注入 head，logo 作 og:image（有站点网址则拼绝对地址） */
   const favicon = setting.favicon_url ? String(setting.favicon_url) : '';
@@ -78,19 +87,19 @@ export function newPageMeta(
   if (logo) base.og['og:image'] = setting.url ? `${setting.url.replace(/\/$/, '')}${logo}` : logo;
   switch (kind) {
     case 'index':
-      return { ...base, title: setting.sitename, description: setting.desc || setting.brief };
+      return { ...base, title: site.sitename, description: site.desc || site.brief };
     case 'forum':
       return {
         ...base,
-        title: entity?.seoTitle || setting.sitename,
-        description: setting.desc || setting.brief,
+        title: entity?.seoTitle || site.sitename,
+        description: site.desc || site.brief,
       };
     case 'thread':
-      return { ...base, title: entity?.seoTitle ?? setting.sitename, description: setting.desc || setting.brief };
+      return { ...base, title: entity?.seoTitle ?? site.sitename, description: site.desc || site.brief };
     case 'user':
-      return { ...base, title: `${setting.sitename}`, description: setting.desc || setting.brief, noindex: true };
+      return { ...base, title: `${site.sitename}`, description: site.desc || site.brief, noindex: true };
     default:
-      return { ...base, title: setting.sitename, description: setting.desc || setting.brief };
+      return { ...base, title: site.sitename, description: site.desc || site.brief };
   }
 }
 
@@ -230,7 +239,8 @@ async function buildFallback(
   const meta = newPageMeta('index', rt, setting);
   if (route.page && route.page > 1) meta.noindex = true; // 分页 noindex 保底（§16.2）
   const list = rows.results.map((t) => `<li><a href="/thread/${t.tid}">${escAttr(t.subject)}</a></li>`).join('');
-  return { meta, body: `<main><h1>${escAttr(setting.sitename)}</h1><p>${escAttr(setting.brief)}</p><ul>${list}</ul></main>` };
+  const site = localizedSetting(setting, setting.lang);
+  return { meta, body: `<main><h1>${escAttr(site.sitename)}</h1><p>${escAttr(site.brief)}</p><ul>${list}</ul></main>` };
 }
 
 /**

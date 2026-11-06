@@ -527,6 +527,8 @@
   "compose_muted_hint": "계정이 글쓰기 금지 상태여서 현재 글/댓글을 작성할 수 없습니다."
  },
  "admin": {
+  "site_text_i18n_title": "{field} 다국어",
+  "site_text_i18n_hint": "사이트의 현재 언어에 맞는 내용을 표시합니다. 입력하지 않은 언어는 기본 내용을 사용합니다.",
   "nav_item_name_i18n_title": "메뉴 항목 이름 다국어",
   "forum_name_i18n": "언어",
   "forum_name_i18n_title": "게시판 이름 다국어",

@@ -527,6 +527,8 @@
   "compose_muted_hint": "Tu cuenta está silenciada; publicar y responder están deshabilitados temporalmente."
  },
  "admin": {
+  "site_text_i18n_title": "{field} en varios idiomas",
+  "site_text_i18n_hint": "Muestra el contenido según el idioma actual del sitio; los idiomas vacíos usan el contenido predeterminado.",
   "nav_item_name_i18n_title": "Nombre del elemento de navegación en varios idiomas",
   "forum_name_i18n": "Idioma",
   "forum_name_i18n_title": "Nombre del foro en varios idiomas",

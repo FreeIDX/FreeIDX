@@ -1330,6 +1330,8 @@ export type AdminKey =
   | 'setting_view_count'
   | 'setting_view_count_hint'
   | 'settle'
+  | 'site_text_i18n_hint'
+  | 'site_text_i18n_title'
   | 'sitebrief'
   | 'sitebrief_tips'
   | 'sitename'

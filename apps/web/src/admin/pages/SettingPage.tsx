@@ -14,17 +14,41 @@
  *    （该串存的是 HTML 实体 `&lt;br&gt;`，回显前要解一次实体）。
  * 基础 7 个字段之外，`url/kw/desc`（SEO）、`runlevel_reason`、`forum_orderby`、`update_views_on`、
  * `upload_max_size` 是本项目要在后台可改的键，统一排在基础字段之后、提交按钮之前（§7 记账）。
+ *
+ * 多语言：站点名称 / 站点介绍 / 关闭原因 / 关键词 / 站点描述右侧各有「语言」按钮，
+ * 编辑 `sitename_i18n` 等 5 个 locale → 文本 映射（front 按界面语言取词，见 shared/site-text.ts）。
  */
 import { useEffect, useState, type ComponentProps } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AVAILABLE_LOCALES, RunLevel, type AdminKey } from '@freeidx/shared';
-import { getSetting, putSetting, uploadSiteLogo, deleteSiteLogo, uploadSiteFavicon, deleteSiteFavicon } from '../api';
+import { AVAILABLE_LOCALES, RunLevel, normNameI18n, type AdminKey } from '@freeidx/shared';
+import {
+  getSetting,
+  putSetting,
+  uploadSiteLogo,
+  deleteSiteLogo,
+  uploadSiteFavicon,
+  deleteSiteFavicon,
+} from '../api';
 import type { AdminSettingInput, AdminSettingMap } from '../types';
 import { useAdminT } from '../t';
+import { NameI18nModal } from '../NameI18nModal';
 import { useAdminAction } from '../use-action';
 import { useAuth } from '../../store/auth';
 import { SETTING_TABS } from '../tabs';
-import { Alert, Button, Card, ErrorState, Field as BaseField, Input, PageTitle, RadioGroup, Select, SubmitRow, TabBar, Textarea } from '../ui';
+import {
+  Alert,
+  Button,
+  Card,
+  ErrorState,
+  Field as BaseField,
+  Input,
+  PageTitle,
+  RadioGroup,
+  Select,
+  SubmitRow,
+  TabBar,
+  Textarea,
+} from '../ui';
 
 const str = (v: unknown, fb = ''): string => (v === undefined || v === null ? fb : String(v));
 const num = (v: unknown, fb = 0): number => (Number.isFinite(Number(v)) ? Number(v) : fb);
@@ -44,12 +68,18 @@ const LANG_NAMES: Record<string, AdminKey> = {
   'fr-fr': 'lang_fr_fr',
 };
 
-
 /**
  * 本页统一字段版式：标签栏定宽 85px；文本类控件（输入框/文本域/下拉）定宽 500px，
  * 说明文字排在控件右侧（hintInline 的单选组行仍走「控件流式 + 说明同行」）。
  */
-function SettingField({ hintInline, children, ...rest }: Omit<ComponentProps<typeof BaseField>, 'labelClass' | 'controlClass' | 'hintAfter'>) {
+/** 基础设置里可多语言的五个文本字段（对应 kv setting 的 `*_i18n` 键） */
+type SiteTextI18nKey = 'sitename' | 'brief' | 'kw' | 'desc' | 'runlevel_reason';
+
+function SettingField({
+  hintInline,
+  children,
+  ...rest
+}: Omit<ComponentProps<typeof BaseField>, 'labelClass' | 'controlClass' | 'hintAfter'>) {
   return (
     <BaseField
       {...rest}
@@ -95,6 +125,12 @@ export function SettingPage() {
       upload_max_size: num(raw.upload_max_size, 20 * 1024 * 1024),
       lang: str(raw.lang, 'en-us'),
       admin_lang: str(raw.admin_lang, str(raw.lang, 'en-us')),
+      /* 基础设置文案多语言（locale → 文本）：未配置 = 空对象，回退主字段 */
+      sitename_i18n: normNameI18n(raw.sitename_i18n),
+      brief_i18n: normNameI18n(raw.brief_i18n),
+      kw_i18n: normNameI18n(raw.kw_i18n),
+      desc_i18n: normNameI18n(raw.desc_i18n),
+      runlevel_reason_i18n: normNameI18n(raw.runlevel_reason_i18n),
     });
     setLogoUrl(str(raw.logo_url));
     setFaviconUrl(str(raw.favicon_url));
@@ -107,14 +143,59 @@ export function SettingPage() {
       await refresh(); // 前台 navbar/标题读的是规范化 setting，同步刷新全局态
       return r;
     },
-    { ok: t('setting_save_success', '保存成功，前台下次请求即生效（零部署）'), invalidate: [['admin', 'setting']] },
+    {
+      ok: t('setting_save_success', '保存成功，前台下次请求即生效（零部署）'),
+      invalidate: [['admin', 'setting']],
+    },
   );
-  const set = <K extends keyof AdminSettingInput>(k: K, v: AdminSettingInput[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
+  const set = <K extends keyof AdminSettingInput>(k: K, v: AdminSettingInput[K]) =>
+    setForm((f) => (f ? { ...f, [k]: v } : f));
+
+  /**
+   * 基础设置文案多语言（站点名称/站点介绍/关闭原因/关键词/站点描述）。
+   * 弹窗内编辑的是草稿，点「确定」才写回 form，随本页「确定」一起提交。
+   */
+  const [i18nEdit, setI18nEdit] = useState<{
+    key: SiteTextI18nKey;
+    title: string;
+    multiline: boolean;
+    name: string;
+    value: Record<string, string>;
+  } | null>(null);
+
+  /** 字段旁的「语言」按钮：显示已配置语言数，点开多语言弹窗 */
+  const i18nButton = (key: SiteTextI18nKey, label: string, multiline = false) => {
+    const count = Object.keys(form?.[`${key}_i18n`] ?? {}).length;
+    const title = t('site_text_i18n_title', '{field}多语言', { field: label });
+    return (
+      <Button
+        size="sm"
+        variant="default"
+        className="shrink-0"
+        title={title}
+        onClick={() =>
+          setI18nEdit({
+            key,
+            title,
+            multiline,
+            name: str(form?.[key]),
+            value: form?.[`${key}_i18n`] ?? {},
+          })
+        }
+      >
+        {t('forum_name_i18n', '语言')}
+        {count > 0 ? ` (${count})` : ''}
+      </Button>
+    );
+  };
 
   /** 站点 Logo / Favicon 上传（选图即传：data URL → PUT /api/admin/setting/:kind，服务端落 R2 并写 kv setting） */
   const uploadIcon = async (kind: 'logo' | 'favicon', file: File | undefined) => {
     if (!file) return;
-    const isIco = file.type === 'image/x-icon' || file.type === 'image/vnd.microsoft.icon' || /\.ico$/i.test(file.name);
+    const isIco =
+      file.type === 'image/x-icon' ||
+      file.type === 'image/vnd.microsoft.icon' ||
+      /\.ico$/i.test(file.name);
     if (!/^image\/(png|jpeg|gif|webp|bmp)$/.test(file.type) && !(kind === 'favicon' && isIco)) {
       setIconMsg(t('forum_icon_format_err', '图标仅支持 png / jpg / gif / webp / bmp 格式。'));
       return;
@@ -159,7 +240,14 @@ export function SettingPage() {
   if (q.isError) return <ErrorState error={q.error} />;
   if (!form) return <Card>{t('setting_loading', '设置加载中…')}</Card>;
 
-  const runlevelKeys = ['runlevel_0', 'runlevel_1', 'runlevel_2', 'runlevel_3', 'runlevel_4', 'runlevel_5'] as const;
+  const runlevelKeys = [
+    'runlevel_0',
+    'runlevel_1',
+    'runlevel_2',
+    'runlevel_3',
+    'runlevel_4',
+    'runlevel_5',
+  ] as const;
   const runlevelOptions = runlevelKeys.map((k, v) => ({ value: v, text: t(k, String(v)) }));
   const yesNo = [
     { value: 1, text: t('yes', '是') },
@@ -169,17 +257,43 @@ export function SettingPage() {
   return (
     <div className="space-y-3">
       <PageTitle>{t('admin_site_setting', '站点设置')}</PageTitle>
-      <TabBar active="base" items={SETTING_TABS.map((x) => ({ k: x.k, to: x.to, text: t(x.textKey, x.fallback) }))} />
+      <TabBar
+        active="base"
+        items={SETTING_TABS.map((x) => ({ k: x.k, to: x.to, text: t(x.textKey, x.fallback) }))}
+      />
       {save.flash && <Alert tone={save.flash.tone}>{save.flash.text}</Alert>}
       <Card>
-        <SettingField label={t('sitename', '站点名称')} htmlFor="s-sitename" hint={t('sitename_hint', '显示在浏览器标签页标题和页面顶栏')}>
-          <Input id="s-sitename" value={form.sitename ?? ''} onChange={(e) => set('sitename', e.target.value)} />
+        <SettingField
+          label={t('sitename', '站点名称')}
+          htmlFor="s-sitename"
+          hint={t('sitename_hint', '显示在浏览器标签页标题和页面顶栏')}
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              className="min-w-0 flex-1"
+              id="s-sitename"
+              value={form.sitename ?? ''}
+              onChange={(e) => set('sitename', e.target.value)}
+            />
+            {i18nButton('sitename', t('sitename', '站点名称'))}
+          </div>
         </SettingField>
         {/* Logo / Favicon：选图即传（上传即生效），恢复默认即时清空；错误提示两行共用 */}
-        <SettingField label={t('setting_logo', '前台 Logo')} hint={t('setting_logo_hint', '显示在页面顶栏、登录/注册页；建议透明底 PNG，高度不低于 40px')} hintInline>
+        <SettingField
+          label={t('setting_logo', '前台 Logo')}
+          hint={t(
+            'setting_logo_hint',
+            '显示在页面顶栏、登录/注册页；建议透明底 PNG，高度不低于 40px',
+          )}
+          hintInline
+        >
           <div className="flex flex-wrap items-center gap-3">
             {logoUrl ? (
-              <img src={logoUrl} alt={t('setting_logo', '前台 Logo')} className="h-10 max-w-[180px] rounded object-contain" />
+              <img
+                src={logoUrl}
+                alt={t('setting_logo', '前台 Logo')}
+                className="h-10 max-w-[180px] rounded object-contain"
+              />
             ) : (
               <span className="text-sm text-muted-2">{t('forum_icon_default', '内置默认图')}</span>
             )}
@@ -208,10 +322,21 @@ export function SettingPage() {
             )}
           </div>
         </SettingField>
-        <SettingField label={t('setting_favicon', '站点图标')} hint={t('setting_favicon_hint', '显示在浏览器标签页上；建议 64×64 以上正方形 PNG 或 ICO 图')} hintInline>
+        <SettingField
+          label={t('setting_favicon', '站点图标')}
+          hint={t(
+            'setting_favicon_hint',
+            '显示在浏览器标签页上；建议 64×64 以上正方形 PNG 或 ICO 图',
+          )}
+          hintInline
+        >
           <div className="flex flex-wrap items-center gap-3">
             {faviconUrl ? (
-              <img src={faviconUrl} alt={t('setting_favicon', '站点图标')} className="size-10 rounded object-contain" />
+              <img
+                src={faviconUrl}
+                alt={t('setting_favicon', '站点图标')}
+                className="size-10 rounded object-contain"
+              />
             ) : (
               <span className="text-sm text-muted-2">{t('forum_icon_default', '内置默认图')}</span>
             )}
@@ -244,34 +369,103 @@ export function SettingPage() {
         <SettingField
           label={t('sitebrief', '站点介绍')}
           htmlFor="s-brief"
-          hint={t('sitebrief_tips', '注：支持 HTML 标签，换行请使用 <br>').replace(/&lt;/g, '<').replace(/&gt;/g, '>')}
+          hint={t('sitebrief_tips', '注：支持 HTML 标签，换行请使用 <br>')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')}
         >
-          <Textarea id="s-brief" className="h-[100px] min-h-0" value={form.brief ?? ''} onChange={(e) => set('brief', e.target.value)} />
+          <div className="flex items-start gap-2">
+            <Textarea
+              id="s-brief"
+              className="h-[100px] min-h-0 min-w-0 flex-1"
+              value={form.brief ?? ''}
+              onChange={(e) => set('brief', e.target.value)}
+            />
+            {i18nButton('brief', t('sitebrief', '站点介绍'), true)}
+          </div>
         </SettingField>
-        <SettingField label={t('runlevel', '站点访问')} hint={t('runlevel_hint', '选择「所有人可读写」以外的级别时，权限不足的访客将被限制访问')} hintInline>
-          <RadioGroup name="runlevel" value={form.runlevel ?? RunLevel.NORMAL} options={runlevelOptions} onChange={(v) => set('runlevel', Number(v))} />
+        <SettingField
+          label={t('runlevel', '站点访问')}
+          hint={t('runlevel_hint', '选择「所有人可读写」以外的级别时，权限不足的访客将被限制访问')}
+          hintInline
+        >
+          <RadioGroup
+            name="runlevel"
+            value={form.runlevel ?? RunLevel.NORMAL}
+            options={runlevelOptions}
+            onChange={(v) => set('runlevel', Number(v))}
+          />
         </SettingField>
         <SettingField label={t('user_create_on', '开启注册')}>
-          <RadioGroup name="user_create_on" value={form.user_create_on ?? 1} options={yesNo} onChange={(v) => set('user_create_on', Number(v))} />
+          <RadioGroup
+            name="user_create_on"
+            value={form.user_create_on ?? 1}
+            options={yesNo}
+            onChange={(v) => set('user_create_on', Number(v))}
+          />
         </SettingField>
         <SettingField label={t('user_create_email_on', '邮箱验证')}>
-          <RadioGroup name="user_create_email_on" value={form.user_create_email_on ?? 0} options={yesNo} onChange={(v) => set('user_create_email_on', Number(v))} />
+          <RadioGroup
+            name="user_create_email_on"
+            value={form.user_create_email_on ?? 0}
+            options={yesNo}
+            onChange={(v) => set('user_create_email_on', Number(v))}
+          />
         </SettingField>
         <SettingField label={t('user_resetpw_on', '找回密码')}>
-          <RadioGroup name="user_resetpw_on" value={form.user_resetpw_on ?? 1} options={yesNo} onChange={(v) => set('user_resetpw_on', Number(v))} />
+          <RadioGroup
+            name="user_resetpw_on"
+            value={form.user_resetpw_on ?? 1}
+            options={yesNo}
+            onChange={(v) => set('user_resetpw_on', Number(v))}
+          />
         </SettingField>
         {/* 设备访问三开关：控制手机/平板/电视端能否打开前台（后台 /admin 不受限） */}
-        <SettingField label={t('setting_device_phone', '手机访问')} hint={t('setting_device_phone_hint', '关闭后，手机设备访问前台时将显示受限提示页')} hintInline>
-          <RadioGroup name="device_phone_on" value={form.device_phone_on ?? 1} options={yesNo} onChange={(v) => set('device_phone_on', Number(v))} />
+        <SettingField
+          label={t('setting_device_phone', '手机访问')}
+          hint={t('setting_device_phone_hint', '关闭后，手机设备访问前台时将显示受限提示页')}
+          hintInline
+        >
+          <RadioGroup
+            name="device_phone_on"
+            value={form.device_phone_on ?? 1}
+            options={yesNo}
+            onChange={(v) => set('device_phone_on', Number(v))}
+          />
         </SettingField>
-        <SettingField label={t('setting_device_tablet', '平板访问')} hint={t('setting_device_tablet_hint', '关闭后，平板设备访问前台时将显示受限提示页')} hintInline>
-          <RadioGroup name="device_tablet_on" value={form.device_tablet_on ?? 1} options={yesNo} onChange={(v) => set('device_tablet_on', Number(v))} />
+        <SettingField
+          label={t('setting_device_tablet', '平板访问')}
+          hint={t('setting_device_tablet_hint', '关闭后，平板设备访问前台时将显示受限提示页')}
+          hintInline
+        >
+          <RadioGroup
+            name="device_tablet_on"
+            value={form.device_tablet_on ?? 1}
+            options={yesNo}
+            onChange={(v) => set('device_tablet_on', Number(v))}
+          />
         </SettingField>
-        <SettingField label={t('setting_device_tv', '电视访问')} hint={t('setting_device_tv_hint', '关闭后，电视设备访问前台时将显示受限提示页')} hintInline>
-          <RadioGroup name="device_tv_on" value={form.device_tv_on ?? 1} options={yesNo} onChange={(v) => set('device_tv_on', Number(v))} />
+        <SettingField
+          label={t('setting_device_tv', '电视访问')}
+          hint={t('setting_device_tv_hint', '关闭后，电视设备访问前台时将显示受限提示页')}
+          hintInline
+        >
+          <RadioGroup
+            name="device_tv_on"
+            value={form.device_tv_on ?? 1}
+            options={yesNo}
+            onChange={(v) => set('device_tv_on', Number(v))}
+          />
         </SettingField>
-        <SettingField label={t('setting_front_lang', '前台语言')} htmlFor="s-lang" hint={t('lang_hint', '界面上缺少翻译的词条会自动使用简体中文')}>
-          <Select id="s-lang" value={form.lang ?? 'en-us'} onChange={(e) => set('lang', e.target.value)}>
+        <SettingField
+          label={t('setting_front_lang', '前台语言')}
+          htmlFor="s-lang"
+          hint={t('lang_hint', '界面上缺少翻译的词条会自动使用简体中文')}
+        >
+          <Select
+            id="s-lang"
+            value={form.lang ?? 'en-us'}
+            onChange={(e) => set('lang', e.target.value)}
+          >
             {AVAILABLE_LOCALES.map((l) => (
               <option key={l} value={l}>
                 {t(LANG_NAMES[l] ?? (l as AdminKey), l)}
@@ -280,8 +474,16 @@ export function SettingPage() {
           </Select>
         </SettingField>
         {/* 后台语言与前台站点语言相互独立（admin_lang；未配置时跟随上面的站点语言） */}
-        <SettingField label={t('setting_admin_lang', '后台语言')} htmlFor="s-admin-lang" hint={t('setting_admin_lang_hint', '管理后台界面语言，与前台站点语言相互独立')}>
-          <Select id="s-admin-lang" value={form.admin_lang ?? 'en-us'} onChange={(e) => set('admin_lang', e.target.value)}>
+        <SettingField
+          label={t('setting_admin_lang', '后台语言')}
+          htmlFor="s-admin-lang"
+          hint={t('setting_admin_lang_hint', '管理后台界面语言，与前台站点语言相互独立')}
+        >
+          <Select
+            id="s-admin-lang"
+            value={form.admin_lang ?? 'en-us'}
+            onChange={(e) => set('admin_lang', e.target.value)}
+          >
             {AVAILABLE_LOCALES.map((l) => (
               <option key={l} value={l}>
                 {t(LANG_NAMES[l] ?? (l as AdminKey), l)}
@@ -291,19 +493,66 @@ export function SettingPage() {
         </SettingField>
 
         {/* 以下四项是本项目要暴露的运行/SEO 开关（§7） */}
-        <SettingField label={t('setting_close_reason', '关闭原因')} htmlFor="s-runlevel_reason" hint={t('setting_close_reason_hint', '站点关闭或仅管理员可访问时，显示给访客的提示文字')}>
-          <Input id="s-runlevel_reason" value={form.runlevel_reason ?? ''} onChange={(e) => set('runlevel_reason', e.target.value)} />
+        <SettingField
+          label={t('setting_close_reason', '关闭原因')}
+          htmlFor="s-runlevel_reason"
+          hint={t('setting_close_reason_hint', '站点关闭或仅管理员可访问时，显示给访客的提示文字')}
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              className="min-w-0 flex-1"
+              id="s-runlevel_reason"
+              value={form.runlevel_reason ?? ''}
+              onChange={(e) => set('runlevel_reason', e.target.value)}
+            />
+            {i18nButton('runlevel_reason', t('setting_close_reason', '关闭原因'))}
+          </div>
         </SettingField>
-        <SettingField label={t('setting_site_url', '站点网址')} htmlFor="s-url" hint={t('setting_site_url_hint', '绑定了多个域名时填主域名（https:// 开头，只填域名，不带路径）。其他域名访问页面会自动 301 到这里；邮件链接、SEO 规范链接与站点地图、支付回跳也使用此地址。留空则使用当前访问域名')}>
-          <Input id="s-url" value={form.url ?? ''} onChange={(e) => set('url', e.target.value)} placeholder="https://www.example.com" />
+        <SettingField
+          label={t('setting_site_url', '站点网址')}
+          htmlFor="s-url"
+          hint={t(
+            'setting_site_url_hint',
+            '绑定了多个域名时填主域名（https:// 开头，只填域名，不带路径）。其他域名访问页面会自动 301 到这里；邮件链接、SEO 规范链接与站点地图、支付回跳也使用此地址。留空则使用当前访问域名',
+          )}
+        >
+          <Input
+            id="s-url"
+            value={form.url ?? ''}
+            onChange={(e) => set('url', e.target.value)}
+            placeholder="https://www.example.com"
+          />
         </SettingField>
         <SettingField label={t('keyword', '关键词')} htmlFor="s-kw">
-          <Input id="s-kw" value={form.kw ?? ''} onChange={(e) => set('kw', e.target.value)} />
+          <div className="flex items-center gap-2">
+            <Input
+              className="min-w-0 flex-1"
+              id="s-kw"
+              value={form.kw ?? ''}
+              onChange={(e) => set('kw', e.target.value)}
+            />
+            {i18nButton('kw', t('keyword', '关键词'))}
+          </div>
         </SettingField>
         <SettingField label={t('setting_site_desc', '站点描述')} htmlFor="s-desc">
-          <Textarea id="s-desc" value={form.desc ?? ''} onChange={(e) => set('desc', e.target.value)} />
+          <div className="flex items-start gap-2">
+            <Textarea
+              className="min-w-0 flex-1"
+              id="s-desc"
+              value={form.desc ?? ''}
+              onChange={(e) => set('desc', e.target.value)}
+            />
+            {i18nButton('desc', t('setting_site_desc', '站点描述'), true)}
+          </div>
         </SettingField>
-        <SettingField label={t('setting_forum_orderby', '主题排序')} hint={t('setting_forum_orderby_hint', '按顶贴时间：有新回复的主题排到前面（默认）；按发帖时间：新发布的主题排在前面')} hintInline>
+        <SettingField
+          label={t('setting_forum_orderby', '主题排序')}
+          hint={t(
+            'setting_forum_orderby_hint',
+            '按顶贴时间：有新回复的主题排到前面（默认）；按发帖时间：新发布的主题排在前面',
+          )}
+          hintInline
+        >
           <RadioGroup
             name="forum_orderby"
             value={form.forum_orderby ?? 0}
@@ -314,7 +563,11 @@ export function SettingPage() {
             onChange={(v) => set('forum_orderby', Number(v))}
           />
         </SettingField>
-        <SettingField label={t('setting_view_count', '浏览统计')} hint={t('setting_view_count_hint', '关闭后不再统计主题浏览次数，可减少数据库写入')} hintInline>
+        <SettingField
+          label={t('setting_view_count', '浏览统计')}
+          hint={t('setting_view_count_hint', '关闭后不再统计主题浏览次数，可减少数据库写入')}
+          hintInline
+        >
           <RadioGroup
             name="update_views_on"
             value={form.update_views_on ?? 1}
@@ -325,7 +578,10 @@ export function SettingPage() {
         {/* 内容语言分区：0=关闭（默认，行为不变） 1=开启默认全部 2=开启默认跟随界面语言 */}
         <SettingField
           label={t('setting_content_lang', '内容语言分区')}
-          hint={t('setting_content_lang_hint', '按帖子内容语言过滤主题列表。关闭时行为与升级前完全一致；开启后前台出现语言筛选条，发帖时自动识别并可手动修改。存量帖需先在「数据库维护」中回填语言后才会参与过滤')}
+          hint={t(
+            'setting_content_lang_hint',
+            '按帖子内容语言过滤主题列表。关闭时行为与升级前完全一致；开启后前台出现语言筛选条，发帖时自动识别并可手动修改。存量帖需先在「数据库维护」中回填语言后才会参与过滤',
+          )}
         >
           <RadioGroup
             name="content_lang"
@@ -338,7 +594,13 @@ export function SettingPage() {
             onChange={(v) => set('content_lang', Number(v))}
           />
         </SettingField>
-        <SettingField label={t('setting_upload_limit', '附件上限')} htmlFor="s-upload" hint={t('setting_upload_limit_hint', '{size} MB（填写单位为字节，最大不超过 100 MB）', { size: ((form.upload_max_size ?? 0) / 1024 / 1024).toFixed(1) })}>
+        <SettingField
+          label={t('setting_upload_limit', '附件上限')}
+          htmlFor="s-upload"
+          hint={t('setting_upload_limit_hint', '{size} MB（填写单位为字节，最大不超过 100 MB）', {
+            size: ((form.upload_max_size ?? 0) / 1024 / 1024).toFixed(1),
+          })}
+        >
           <Input
             id="s-upload"
             type="number"
@@ -356,6 +618,26 @@ export function SettingPage() {
           </Button>
         </SubmitRow>
       </Card>
+
+      <NameI18nModal
+        open={i18nEdit !== null}
+        name={i18nEdit?.name ?? ''}
+        value={i18nEdit?.value}
+        title={i18nEdit?.title ?? ''}
+        hint={t(
+          'site_text_i18n_hint',
+          '按站点当前语言自动显示对应内容；未填写的语言回退到默认内容。',
+        )}
+        multiline={i18nEdit?.multiline}
+        onSave={(next, defaultName) => {
+          if (!i18nEdit) return;
+          const { key } = i18nEdit;
+          set(key, defaultName);
+          set(`${key}_i18n`, next);
+          setI18nEdit(null);
+        }}
+        onClose={() => setI18nEdit(null)}
+      />
     </div>
   );
 }

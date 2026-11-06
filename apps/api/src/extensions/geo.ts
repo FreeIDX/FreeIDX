@@ -13,7 +13,7 @@ import { forumListAccessFilter } from '../core/access';
 import type { D1b } from '../core/db';
 import type { Cache } from '../core/cache';
 import { SHARED_UA, edgeLookup, edgeStore, isPersonalRequest, maybeCtx } from '../core/cache/edge';
-import type { ExtSchema } from '@freeidx/shared';
+import { localizedSetting, type ExtSchema } from '@freeidx/shared';
 import type { ExtensionApi, ExtensionModule } from '../core/extensions/registry';
 import { L } from '../core/i18n';
 import { POLICY_CRAWLERS, matchPolicyCrawler, type PolicyCrawler } from '../core/crawler';
@@ -268,8 +268,10 @@ function makeLlmsHandler(contentLicense: string) {
       )
       .all();
 
-    const out: string[] = [`# ${setting.sitename || 'Site'}`, ''];
-    const intro = (setting.brief || setting.desc || '').trim();
+    /* 站点名称/介绍支持多语言：llms.txt 固定按站点语言取词 */
+    const site = localizedSetting(setting, setting.lang);
+    const out: string[] = [`# ${site.sitename || 'Site'}`, ''];
+    const intro = (site.brief || site.desc || '').trim();
     if (intro) out.push(`> ${intro.replace(/\r?\n/g, ' ')}`, '');
 
     out.push('## Forums', '');

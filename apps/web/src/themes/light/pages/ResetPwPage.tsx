@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { useAuth } from '../../../store/auth';
 import { confirmPasswordReset, requestPasswordReset } from '../../../lib/api';
 import { apiErrorMessage } from '../../../lib/errors';
 import { md5Hex } from '@freeidx/shared';
@@ -8,7 +7,7 @@ import { Turnstile } from '../../../components/Turnstile';
 import { authSubmitCls, AuthAnnouncement } from '../../../components/AuthForms';
 import { IconInput } from '../../../components/ui';
 import { Icon } from '../../../components/icons';
-import { useT } from '../../../lib/i18n';
+import { useLocalizedSetting, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 
 /**
@@ -21,7 +20,8 @@ export function ResetPwPage() {
   const t = useT();
   const light = useLight();
   const [params] = useSearchParams();
-  const setting = useAuth((s) => s.setting);
+  /* 站点名称等基础设置按当前界面语言取词 */
+  const setting = useLocalizedSetting();
   const emailFromLink = params.get('email') ?? '';
   const token = params.get('token') ?? '';
   const isConfirmStep = emailFromLink !== '' && token !== '';
@@ -92,7 +92,11 @@ export function ResetPwPage() {
                 ? 'hidden w-1/2 bg-cover bg-center lg:block'
                 : 'hidden w-1/2 bg-[url(/theme-light/login_bg.webp)] bg-cover bg-center lg:block'
             }
-            style={light.loginPageBanner ? { backgroundImage: `url(${light.loginPageBanner})` } : undefined}
+            style={
+              light.loginPageBanner
+                ? { backgroundImage: `url(${light.loginPageBanner})` }
+                : undefined
+            }
             aria-hidden="true"
           />
           {/* 右栏：表单 */}
@@ -104,11 +108,21 @@ export function ResetPwPage() {
             />
             <div className="relative">
               {/* 站点 logo/站名，点击回首页 */}
-              <Link to="/" className="mb-6 flex items-center gap-2" aria-label={setting?.sitename || 'FreeIDX'}>
+              <Link
+                to="/"
+                className="mb-6 flex items-center gap-2"
+                aria-label={setting?.sitename || 'FreeIDX'}
+              >
                 {setting?.logo_url ? (
-                  <img src={String(setting.logo_url)} alt={setting.sitename} className="h-9 w-auto max-w-none" />
+                  <img
+                    src={String(setting.logo_url)}
+                    alt={setting.sitename}
+                    className="h-9 w-auto max-w-none"
+                  />
                 ) : (
-                  <span className="text-lg font-bold text-brand">{setting?.sitename || 'FreeIDX'}</span>
+                  <span className="text-lg font-bold text-brand">
+                    {setting?.sitename || 'FreeIDX'}
+                  </span>
                 )}
               </Link>
               <p className="text-sm text-lt-grey">{t('resetpw')}</p>
@@ -125,10 +139,19 @@ export function ResetPwPage() {
                 </>
               ) : isConfirmStep ? (
                 <>
-                  <h2 className="mt-2 text-xl font-bold text-foreground">{t('set_new_password_for', { email: emailFromLink })}</h2>
+                  <h2 className="mt-2 text-xl font-bold text-foreground">
+                    {t('set_new_password_for', { email: emailFromLink })}
+                  </h2>
                   <form className="mt-5 mb-6 space-y-3" onSubmit={(e) => void submit(e)}>
                     {/* 邮箱只读 */}
-                    <IconInput icon="envelope" id="reset-email-ro" type="email" value={emailFromLink} readOnly disabled />
+                    <IconInput
+                      icon="envelope"
+                      id="reset-email-ro"
+                      type="email"
+                      value={emailFromLink}
+                      readOnly
+                      disabled
+                    />
                     <IconInput
                       icon="lock"
                       id="reset-new-pw"
@@ -158,7 +181,9 @@ export function ResetPwPage() {
                 </>
               ) : (
                 <>
-                  <h2 className="mt-2 text-xl font-bold text-foreground">{t('input_email_send_link')}</h2>
+                  <h2 className="mt-2 text-xl font-bold text-foreground">
+                    {t('input_email_send_link')}
+                  </h2>
                   <form className="mt-5 mb-6 space-y-3" onSubmit={(e) => void submit(e)}>
                     <IconInput
                       icon="envelope"

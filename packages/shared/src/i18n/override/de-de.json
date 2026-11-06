@@ -527,6 +527,8 @@
   "compose_muted_hint": "Ihr Konto ist stummgeschaltet; Beiträge und Antworten sind vorübergehend deaktiviert."
  },
  "admin": {
+  "site_text_i18n_title": "{field} in mehreren Sprachen",
+  "site_text_i18n_hint": "Zeigt den Inhalt in der aktuellen Sprache der Website; leere Sprachen verwenden den Standardinhalt.",
   "nav_item_name_i18n_title": "Menüpunktname in mehreren Sprachen",
   "forum_name_i18n": "Sprache",
   "forum_name_i18n_title": "Forenname in mehreren Sprachen",

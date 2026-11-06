@@ -66,7 +66,7 @@ registerCard();
 registerStripe();
 registerPaypal();
 
-type AppEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT } };
+type AppEnv = { Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT; lang?: string } };
 
 const app = new Hono<AppEnv>();
 
@@ -132,6 +132,8 @@ app.use('*', async (c, next) => {
         ? setting.adminLang || setting.lang
         : (cookieLangOf(c.req.header('cookie')) ?? setting.lang);
       c.set('t', createApiT(lang));
+      /* 供 runlevel 等后续中间件按同一口径取用（如站点关闭原因的多语言文案） */
+      c.set('lang', lang);
     } catch {
       c.set('t', t0);
     }

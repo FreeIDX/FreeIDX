@@ -7,7 +7,7 @@
  *  挂载在 adminGuard 之后（app.use('/api/admin/*') 已先注册，守卫覆盖本模块所有路由）。
  */
 import { Hono, type Context } from 'hono';
-import { Code, RunLevel } from '@freeidx/shared';
+import { Code, RunLevel, normNameI18n } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { ApiT } from '../../core/i18n';
 import type { D1b } from '../../core/db';
@@ -18,28 +18,74 @@ type Ctx = Context<ReadEnv>;
 
 /** 允许后台编辑的键（其余键如自定义扩展设置原样保留，避免误删） */
 const EDITABLE: readonly string[] = [
-  'sitename', 'brief', 'url', 'kw', 'desc',
-  'runlevel', 'runlevel_reason',
-  'user_create_on', 'user_create_email_on', 'user_resetpw_on',
-  'forum_orderby', 'update_views_on', 'upload_max_size', 'lang', 'admin_lang',
+  'sitename',
+  'brief',
+  'url',
+  'kw',
+  'desc',
+  'runlevel',
+  'runlevel_reason',
+  'user_create_on',
+  'user_create_email_on',
+  'user_resetpw_on',
+  'forum_orderby',
+  'update_views_on',
+  'upload_max_size',
+  'lang',
+  'admin_lang',
   /* 积分奖励三键（本项目新增「积分」后台页；grantForPost 读 creditThread/Reply/DailyFirst） */
-  'credit_thread', 'credit_reply', 'credit_daily_first',
+  'credit_thread',
+  'credit_reply',
+  'credit_daily_first',
   /* 内容审核两开关（tt_check：注册审核 user_check / 回收站 recycle；矩阵在 admin/check 模块单独保存） */
-  'user_check', 'recycle',
+  'user_check',
+  'recycle',
   /* 设备访问三开关（本项目新增：手机/平板/电视端是否允许访问前台） */
-  'device_phone_on', 'device_tablet_on', 'device_tv_on',
+  'device_phone_on',
+  'device_tablet_on',
+  'device_tv_on',
   /* 顶部导航栏自定义项（本项目新增「导航栏设置」；validate 特殊处理为 JSON 字符串） */
   'nav',
   /* 内容语言分区模式（0=关闭 1=开启默认全部 2=开启默认跟随界面语言） */
   'content_lang',
+  /* 基础设置五个文本的多语言覆盖（sitename/brief/kw/desc/runlevel_reason；值为 locale → 文本 对象） */
+  'sitename_i18n',
+  'brief_i18n',
+  'kw_i18n',
+  'desc_i18n',
+  'runlevel_reason_i18n',
 ];
+
+/** 基础设置文案多语言键：validate 存对象（空映射删除该键） */
+const I18N_KEYS = new Set([
+  'sitename_i18n',
+  'brief_i18n',
+  'kw_i18n',
+  'desc_i18n',
+  'runlevel_reason_i18n',
+]);
 
 /** 非负整数键（积分奖励值，0=关闭） */
 const INT_KEYS = new Set(['credit_thread', 'credit_reply', 'credit_daily_first', 'content_lang']);
-const BOOL_KEYS = new Set(['user_create_on', 'user_create_email_on', 'user_resetpw_on', 'update_views_on', 'user_check', 'recycle', 'device_phone_on', 'device_tablet_on', 'device_tv_on']);
-const asBool01 = (v: unknown): number => (v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0);
+const BOOL_KEYS = new Set([
+  'user_create_on',
+  'user_create_email_on',
+  'user_resetpw_on',
+  'update_views_on',
+  'user_check',
+  'recycle',
+  'device_phone_on',
+  'device_tablet_on',
+  'device_tv_on',
+]);
+const asBool01 = (v: unknown): number =>
+  v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0;
 
-function validate(input: Record<string, unknown>, cur: Record<string, unknown>, t: ApiT): Record<string, unknown> {
+function validate(
+  input: Record<string, unknown>,
+  cur: Record<string, unknown>,
+  t: ApiT,
+): Record<string, unknown> {
   const out = { ...cur };
   for (const k of EDITABLE) {
     if (!(k in input)) continue;
@@ -52,7 +98,8 @@ function validate(input: Record<string, unknown>, cur: Record<string, unknown>, 
       out.runlevel = n;
     } else if (k === 'upload_max_size') {
       const n = Number(v);
-      if (!Number.isFinite(n) || n < 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.uploadMaxInvalid'));
+      if (!Number.isFinite(n) || n < 0)
+        throw new AppError(Code.VALIDATION_ERROR, t('admin.uploadMaxInvalid'));
       out.upload_max_size = n;
     } else if (k === 'forum_orderby') {
       out.forum_orderby = Number(v) === 1 ? 1 : 0;
@@ -74,9 +121,20 @@ function validate(input: Record<string, unknown>, cur: Record<string, unknown>, 
         const label = String(o.label ?? '').trim();
         const url = String(o.url ?? '').trim();
         if (!label || !url) continue;
-        items.push({ label, url, sort: Number(o.sort ?? 0) || 0, on: o.on === 0 || o.on === '0' ? 0 : 1 });
+        items.push({
+          label,
+          url,
+          sort: Number(o.sort ?? 0) || 0,
+          on: o.on === 0 || o.on === '0' ? 0 : 1,
+        });
       }
       out.nav = JSON.stringify(items);
+    } else if (I18N_KEYS.has(k)) {
+      /* 基础设置文案多语言：接受对象或 JSON 字符串，归一化为「仅受支持语言 + 非空值」的对象；
+         全部为空 = 未配置 → 删除该键（前台回退主字段） */
+      const map = normNameI18n(v);
+      if (Object.keys(map).length) out[k] = map;
+      else delete out[k];
     } else if (k === 'url') {
       /* 主域名（多域名绑定时唯一对外地址）：必须 https，只保留 origin（路径/查询/尾斜杠一律丢弃）；
          留空表示未配置 —— 对外地址回落 SITE_URL，再回落当前请求域 */
@@ -90,12 +148,14 @@ function validate(input: Record<string, unknown>, cur: Record<string, unknown>, 
         } catch {
           u = null;
         }
-        if (!u || u.protocol !== 'https:') throw new AppError(Code.VALIDATION_ERROR, t('admin.siteUrlInvalid'));
+        if (!u || u.protocol !== 'https:')
+          throw new AppError(Code.VALIDATION_ERROR, t('admin.siteUrlInvalid'));
         out.url = u.origin;
       }
     } else if (INT_KEYS.has(k)) {
       const n = Number(v);
-      if (!Number.isInteger(n) || n < 0) throw new AppError(Code.VALIDATION_ERROR, t('admin.fieldNonNegative', { k }));
+      if (!Number.isInteger(n) || n < 0)
+        throw new AppError(Code.VALIDATION_ERROR, t('admin.fieldNonNegative', { k }));
       out[k] = n;
     } else if (BOOL_KEYS.has(k)) {
       out[k] = asBool01(v);
@@ -108,7 +168,10 @@ function validate(input: Record<string, unknown>, cur: Record<string, unknown>, 
 
 /** 读 kv 'setting' 存储态 JSON（解析失败视为空对象） */
 async function readSettingRaw(db: D1b): Promise<Record<string, unknown>> {
-  const row = await db.prepare<{ v: string }>('SELECT v FROM bbs_kv WHERE k = ?').bind('setting').first<{ v: string }>();
+  const row = await db
+    .prepare<{ v: string }>('SELECT v FROM bbs_kv WHERE k = ?')
+    .bind('setting')
+    .first<{ v: string }>();
   try {
     return JSON.parse(row?.v ?? '{}') as Record<string, unknown>;
   } catch {
@@ -130,17 +193,30 @@ const SITE_ICON_MIME: Record<string, string> = {
 };
 
 /** data URL（data:image/…;base64,xxx）→ { bytes, ext }；favicon 额外放行 ico。非白名单格式/解码失败抛错 */
-function decodeSiteIcon(raw: string, t: ApiT, allowIco: boolean): { bytes: Uint8Array; ext: string } {
-  const m = new RegExp(`^data:image\\/(png|jpe?g|gif|webp|bmp${allowIco ? '|x-icon|vnd\\.microsoft\\.icon' : ''});base64,(.+)$`, 'is').exec(raw.trim());
+function decodeSiteIcon(
+  raw: string,
+  t: ApiT,
+  allowIco: boolean,
+): { bytes: Uint8Array; ext: string } {
+  const m = new RegExp(
+    `^data:image\\/(png|jpe?g|gif|webp|bmp${allowIco ? '|x-icon|vnd\\.microsoft\\.icon' : ''});base64,(.+)$`,
+    'is',
+  ).exec(raw.trim());
   if (!m) throw new AppError(Code.VALIDATION_ERROR, t('admin.iconFormat'));
   const rawExt = m[1]!.toLowerCase();
-  const ext = rawExt === 'jpeg' ? 'jpg' : rawExt === 'x-icon' || rawExt === 'vnd.microsoft.icon' ? 'ico' : rawExt;
+  const ext =
+    rawExt === 'jpeg'
+      ? 'jpg'
+      : rawExt === 'x-icon' || rawExt === 'vnd.microsoft.icon'
+        ? 'ico'
+        : rawExt;
   try {
     const bin = atob(m[2]!);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     if (!bytes.length) throw new Error('empty');
-    if (bytes.length > SITE_ICON_MAX_BYTES) throw new AppError(Code.FORM_FILE_TOO_LARGE, t('admin.iconTooLarge'), { size: bytes.length });
+    if (bytes.length > SITE_ICON_MAX_BYTES)
+      throw new AppError(Code.FORM_FILE_TOO_LARGE, t('admin.iconTooLarge'), { size: bytes.length });
     return { bytes, ext };
   } catch (e) {
     if (e instanceof AppError) throw e;
@@ -174,7 +250,10 @@ async function putSiteIcon(c: Ctx, kind: SiteIconKind) {
   await bucket.put(key, bytes, { httpMetadata: { contentType: SITE_ICON_MIME[ext] } });
 
   const next = { ...cur, [field]: `/files/${key}?v=${Math.floor(Date.now() / 1000)}` };
-  await db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind('setting', JSON.stringify(next)).run();
+  await db
+    .prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)')
+    .bind('setting', JSON.stringify(next))
+    .run();
   await cache.del('setting'); // 前台 bootstrap / SEO 读路径下次即取新值
   return ok(c, t('common.saved'), { data: next });
 }
@@ -186,9 +265,15 @@ async function deleteSiteIcon(c: Ctx, kind: SiteIconKind) {
   const cur = await readSettingRaw(db);
   const field = SITE_ICON_FIELDS[kind];
   const oldKey = siteIconR2Key(String(cur[field] ?? ''));
-  if (oldKey) await filesBucket(c.env).delete(oldKey).catch(() => undefined);
+  if (oldKey)
+    await filesBucket(c.env)
+      .delete(oldKey)
+      .catch(() => undefined);
   const next = { ...cur, [field]: '' };
-  await db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind('setting', JSON.stringify(next)).run();
+  await db
+    .prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)')
+    .bind('setting', JSON.stringify(next))
+    .run();
   await cache.del('setting');
   return ok(c, t('admin.iconReset'), { data: next });
 }

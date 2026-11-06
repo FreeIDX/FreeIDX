@@ -171,6 +171,14 @@ export async function loadSetting(cache: Cache, db: D1b): Promise<SiteSetting> {
       url: String(raw.url ?? ''),
       kw: String(raw.kw ?? ''),
       desc: String(raw.desc ?? ''),
+      /* 关闭原因（runlevel 0/1 给访客的文案；缺省用内置词条，见 middleware/runlevel.ts） */
+      runlevelReason: String(raw.runlevel_reason ?? ''),
+      /* 基础设置五个文本的多语言覆盖：归一化为「仅受支持语言 + 非空值」，未配置 = 空对象 */
+      sitenameI18n: normNameI18n(raw.sitename_i18n),
+      briefI18n: normNameI18n(raw.brief_i18n),
+      kwI18n: normNameI18n(raw.kw_i18n),
+      descI18n: normNameI18n(raw.desc_i18n),
+      runlevelReasonI18n: normNameI18n(raw.runlevel_reason_i18n),
       userCreateOn: !!raw.user_create_on,
       userCreateEmailOn: !!raw.user_create_email_on,
       userResetpwOn: !!raw.user_resetpw_on,

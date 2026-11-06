@@ -439,6 +439,12 @@ export interface AdminSettingInput {
   desc?: string;
   runlevel?: number;
   runlevel_reason?: string;
+  /** 基础设置文案多语言（locale → 文本；未配置的语言回退主字段；空对象 = 未配置） */
+  sitename_i18n?: Record<string, string>;
+  brief_i18n?: Record<string, string>;
+  kw_i18n?: Record<string, string>;
+  desc_i18n?: Record<string, string>;
+  runlevel_reason_i18n?: Record<string, string>;
   user_create_on?: number;
   user_create_email_on?: number;
   user_resetpw_on?: number;

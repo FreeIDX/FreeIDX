@@ -527,6 +527,8 @@
   "compose_muted_hint": "账号处于禁言状态，暂时无法发帖或回帖。"
  },
  "admin": {
+  "site_text_i18n_title": "{field}多语言",
+  "site_text_i18n_hint": "按站点当前语言自动显示对应内容；未填写的语言回退到默认内容。",
   "nav_item_name_i18n_title": "导航项名称多语言",
   "forum_name_i18n": "语言",
   "forum_name_i18n_title": "版块名称多语言",

@@ -21,6 +21,7 @@ import {
   useGroupName,
   useForumName,
   useLocalizedName,
+  useLocalizedSetting,
 } from '../../lib/i18n';
 import { Avatar } from '../../components/Avatar';
 import { Icon, type IconName } from '../../components/icons';
@@ -374,7 +375,8 @@ function UserMenu() {
 }
 
 export function Layout({ children }: { children?: ReactNode }) {
-  const setting = useAuth((s) => s.setting);
+  /* 站点名称/介绍/描述按当前界面语言取词（标题、页脚、meta） */
+  const setting = useLocalizedSetting();
   const forumlist = useAuth((s) => s.forumlist);
   const me = useAuth((s) => s.me);
   const load = useAuth((s) => s.load);

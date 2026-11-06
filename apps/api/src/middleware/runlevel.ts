@@ -12,7 +12,7 @@
  *            站点关闭/只读拒写 → RUNLEVEL_CLOSED(-5)。
  */
 import { createMiddleware } from 'hono/factory';
-import { Code, RunLevel, type SiteSetting } from '@freeidx/shared';
+import { Code, RunLevel, localizedSetting } from '@freeidx/shared';
 import type { Env } from '../types/env';
 import { D1b } from '../core/db';
 import { Cache } from '../core/cache';
@@ -22,8 +22,8 @@ import { AppError } from './envelope';
 
 export const runlevel = createMiddleware<{
   Bindings: Env;
-  Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT };
-}>((async (c, next) => {
+  Variables: { db: D1b; cache: Cache; runlevel: number; t: ApiT; lang?: string };
+}>(async (c, next) => {
   // 健康检查与静态探测不查库
   if (c.req.path === '/api/health') return next();
   /**
@@ -37,10 +37,12 @@ export const runlevel = createMiddleware<{
   let level: number = RunLevel.NORMAL;
   let reason = '';
   try {
-    // loadSetting 读穿缓存（与 i18n 中间件同一条，命中零 D1）；runlevel_reason 为管理员自定义文案，透传不译
+    // loadSetting 读穿缓存（与 i18n 中间件同一条，命中零 D1）；
+    // 关闭原因支持多语言（0027 后续）：按本次请求协商出的语言取词，未配置回退主文案/内置词条
     const setting = await loadSetting(c.get('cache'), db);
     level = Number(setting.runlevel ?? RunLevel.NORMAL);
-    reason = String((setting as Partial<SiteSetting> & { runlevel_reason?: string }).runlevel_reason ?? t('runlevel.closed'));
+    const site = localizedSetting(setting, c.get('lang') ?? setting.lang);
+    reason = site.runlevelReason || t('runlevel.closed');
   } catch {
     level = RunLevel.NORMAL;
   }
@@ -79,4 +81,4 @@ export const runlevel = createMiddleware<{
       break; // 未知档位按正常放行
   }
   return next();
-}));
+});

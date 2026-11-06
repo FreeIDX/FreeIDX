@@ -21,7 +21,7 @@ import { Alert, Breadcrumb, Button, Card, Modal, TagBadge, cx } from '../../../c
 import { useReadUnread } from '../../../hooks/useReadUnread';
 import { useAuth } from '../../../store/auth';
 import { useAuthModal } from '../../../store/authModal';
-import { useT, useGroupName, useForumName } from '../../../lib/i18n';
+import { useT, useGroupName, useForumName, useLocalizedSetting } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 import type { UserProfile } from './UserPage';
 
@@ -211,7 +211,8 @@ export function ThreadPage() {
   const refresh = useAuth((s) => s.refresh);
   const forumlist = useAuth((s) => s.forumlist);
   const grouplist = useAuth((s) => s.grouplist);
-  const setting = useAuth((s) => s.setting);
+  /* 站点名称/介绍按当前界面语言取词（浏览器标题、分享文案等） */
+  const setting = useLocalizedSetting();
   /* 编辑器 chunk 空闲预热（C3）：把 400KB 下载移出首帧关键路径，又不让「高级回复」点击等下载。
      仅登录用户需要（游客没有回复框，预热纯属浪费流量）；me 由 bootstrap 异步到达，故依赖它。
      空闲回调不可用时退化为 2.5s 定时（仍晚于首屏），失败由 lazy 真正渲染时重试。 */
