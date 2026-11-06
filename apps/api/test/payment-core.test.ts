@@ -170,8 +170,26 @@ describe('applyProviderEvent → 状态机落账', () => {
   });
 
   it('refunded：refundOrder', async () => {
-    const paidByNo: SqlRule = { test: /FROM bbs_order WHERE order_no = \?/, first: () => ({ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'paid', provider: 'stripe', provider_ref: 'REF-1', created_date: 1, paid_date: 1, fulfilled_date: 0 }) };
-    const { core, calls } = makeCore([byRef, paidByNo, { ...paidByNo, first: () => ({ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'refunded', provider: 'stripe', provider_ref: 'REF-1', created_date: 1, paid_date: 1, fulfilled_date: 0 }) }, updOrder]);
+    /* 首次 getOrder 看到 paid（可迁移），退款落库后的重查看到 refunded */
+    let seq = 0;
+    const paidByNo: SqlRule = {
+      test: /FROM bbs_order WHERE order_no = \?/,
+      first: () => ({
+        order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY',
+        status: seq++ === 0 ? 'paid' : 'refunded',
+        provider: 'stripe', provider_ref: 'REF-1', created_date: 1, paid_date: 1, fulfilled_date: 0,
+      }),
+    };
+    /* 退款要回滚权益（按计划时长扣回 VIP + 会员过期回落原组），这两条 batch 语句必须可落账，
+     * 否则整批失败会回滚状态并抛错，事件被吞成 ignored。 */
+    const { core, calls } = makeCore([
+      byRef,
+      paidByNo,
+      planRule,
+      updVip,
+      { test: /UPDATE bbs_user SET gid = vip_from_gid/, rows: [] },
+      updOrder,
+    ]);
     const out = await applyProviderEvent(core, { providerRef: 'REF-1', status: 'refunded' }, 1);
     expect(out).toMatchObject({ action: 'refunded' });
     expect(calls.some((c) => /UPDATE bbs_order SET status = \?/.test(c.sql))).toBe(true);

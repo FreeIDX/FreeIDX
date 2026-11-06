@@ -1218,6 +1218,27 @@
   "ban_batch": "Mehrfachsperre",
   "ban_unban_confirm": "Diesen Benutzer entsperren?",
   "ban_no_selection": "Bitte zuerst Benutzer auswählen",
-  "ban_scope_required": "Bitte mindestens einen Sperrumfang wählen"
+  "ban_scope_required": "Bitte mindestens einen Sperrumfang wählen",
+  "mcp_new_token": "Neues Token (nur einmal sichtbar)",
+  "mcp_copy_now": "Nach Schließen oder Neuladen nicht mehr sichtbar – jetzt kopieren und in die KI-Client-Konfiguration einfügen.",
+  "mcp_copy": "Kopieren",
+  "mcp_endpoint_hint": "Endpunkt: /mcp dieser Site · Header: Authorization: Bearer <Token>",
+  "mcp_tokens": "Zugriffstoken",
+  "mcp_scope_note": "Die Token-Stufe ist die Obergrenze; die in der Site freigegebenen Stufen gelten zusätzlich (Schnittmenge).",
+  "mcp_token_name": "Name",
+  "mcp_token_name_ph": "z. B. Claude Desktop",
+  "mcp_scopes": "Stufen",
+  "mcp_expire_days": "Gültige Tage",
+  "mcp_token_prefix": "Präfix",
+  "mcp_expire_at": "Läuft ab",
+  "mcp_last_used": "Zuletzt verwendet",
+  "mcp_never": "Nie",
+  "mcp_revoked": "Widerrufen",
+  "mcp_revoke": "Widerrufen",
+  "mcp_auth_note": "Jeder Aufruf wird nach den echten Forenrechten, dem Moderationsstatus und der Bezahlschranke des Token-Inhabers gefiltert; ist die Site geschlossen oder schreibgeschützt, sind KI-Clients ebenfalls schreibgeschützt.",
+  "mcp_token_created": "Token erstellt – jetzt kopieren",
+  "mcp_scope_read_hint": "Foren, Themen, Antworten auflisten und lesen, Suche",
+  "mcp_scope_write_hint": "Themen und Antworten erstellen (Foren-Moderation gilt weiter)",
+  "mcp_scope_admin_hint": "Moderation: anpinnen, schließen, löschen"
  }
 }

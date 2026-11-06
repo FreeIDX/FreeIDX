@@ -1,6 +1,7 @@
 /**
- * 路由表（§10.2）：前台读页 + 登录/发帖/版务在 Layout 里；后台是**独立外壳**（暗色 navbar、单列容器、自己的闸门），
- * 因此 /admin 前缀整体走 AdminRoutes，不套前台 Layout——前台/后台模板本就分属两个 view 目录。
+ * 路由表（§10.2）：前台全部路由由启用主题渲染（`ThemeRoute` 取主题 `pages.<name>`），
+ * 后台是**独立外壳**（暗色 navbar、单列容器、自己的闸门），因此 /admin 前缀整体走 AdminRoutes，
+ * 不套前台布局——前台/后台模板本就分属两个 view 目录。
  */
 import { Link, Route, Routes, useLocation } from 'react-router';
 import { Suspense, lazy, useEffect, useMemo, type ReactNode } from 'react';
@@ -8,40 +9,25 @@ import { useT } from './lib/i18n';
 import { useAuth } from './store/auth';
 import { detectDevice } from './lib/device';
 import { Icon } from './components/icons';
-import { Layout } from './components/Layout';
 import { PageLoading } from './components/PageLoading';
+import { ThemeLayout } from './lib/theme/layout';
+import { ThemeRoute } from './lib/theme/route';
 
-/**
- * 路由级代码分割（§10.2）：页面按路由懒加载。
- * 此前 15 个前台页 + 23 个后台页 + TiPTap 富文本编辑器全部静态导入，首屏被迫下载约 1.82MiB 主包；
- * 拆为动态导入后，普通访客只下载当前页 chunk（后台页与编辑器 chunk 永不进入首屏）。
- * 产物落在 /assets/*，由静态资源层直接应答，不计 Worker 请求、不消耗免费额度。
- * 页面模块均为具名导出，故经 .then 映射为 React.lazy 需要的 default 导出。
+/*
+ * 路由级代码分割（§10.2）：前台页面已随「简蓝主题」迁至 apps/web/src/themes/light/pages/，
+ * 由主题入口 themes/light/index.tsx 经 lazyPage() 注册（保持每页独立 chunk）；
+ * 后台页在此处懒加载：普通访客只下载当前页 chunk，后台页与富文本编辑器 chunk 永不进入首屏。
  */
-const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
-const ForumPage = lazy(() => import('./pages/ForumPage').then((m) => ({ default: m.ForumPage })));
-const ThreadPage = lazy(() => import('./pages/ThreadPage').then((m) => ({ default: m.ThreadPage })));
-const UserPage = lazy(() => import('./pages/UserPage').then((m) => ({ default: m.UserPage })));
-const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
-const RegisterPage = lazy(() => import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })));
-const ResetPwPage = lazy(() => import('./pages/ResetPwPage').then((m) => ({ default: m.ResetPwPage })));
-const MePage = lazy(() => import('./pages/MePage').then((m) => ({ default: m.MePage })));
-const PaylistPage = lazy(() => import('./pages/PaylistPage').then((m) => ({ default: m.PaylistPage })));
-const ComposePage = lazy(() => import('./pages/ComposePage').then((m) => ({ default: m.ComposePage })));
-const SearchPage = lazy(() => import('./pages/SearchPage').then((m) => ({ default: m.SearchPage })));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
-const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage').then((m) => ({ default: m.DiscoveryPage })));
-const RankListPage = lazy(() => import('./pages/RankListPage').then((m) => ({ default: m.RankListPage })));
-const ModPage = lazy(() => import('./pages/ModPage').then((m) => ({ default: m.ModPage })));
-/* VIP 收银台两页（§15 前台接线）：套餐浏览/下单 + 订单收银台（轮询/卡密/跳转三方） */
-const VipPage = lazy(() => import('./pages/VipPage').then((m) => ({ default: m.VipPage })));
-const OrderPage = lazy(() => import('./pages/OrderPage').then((m) => ({ default: m.OrderPage })));
 
 /* 后台是独立外壳（自带 Layout 与闸门），整块懒加载：普通访客完全不下发后台代码 */
 const AdminLayout = lazy(() => import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
 const AdminIndexPage = lazy(() => import('./admin/pages/AdminIndexPage').then((m) => ({ default: m.AdminIndexPage })));
-const AboutPage = lazy(() => import('./admin/pages/AboutPage').then((m) => ({ default: m.AboutPage })));
+const VersionUpdatePage = lazy(() =>
+  import('./admin/pages/VersionUpdatePage').then((m) => ({ default: m.VersionUpdatePage })),
+);
 const SettingPage = lazy(() => import('./admin/pages/SettingPage').then((m) => ({ default: m.SettingPage })));
+/* 主题管理：启用/切换内置主题（清单由 lib/theme/registry 构建期自动发现，后端只存启用 id） */
+const ThemePage = lazy(() => import('./admin/pages/ThemePage').then((m) => ({ default: m.ThemePage })));
 const NavBarSettingPage = lazy(() => import('./admin/pages/NavBarSettingPage').then((m) => ({ default: m.NavBarSettingPage })));
 const EmailSettingPage = lazy(() => import('./admin/pages/EmailSettingPage').then((m) => ({ default: m.EmailSettingPage })));
 const ForumListPage = lazy(() => import('./admin/pages/ForumListPage').then((m) => ({ default: m.ForumListPage })));
@@ -51,7 +37,12 @@ const GroupListPage = lazy(() => import('./admin/pages/GroupListPage').then((m) 
 const GroupEditPage = lazy(() => import('./admin/pages/GroupEditPage').then((m) => ({ default: m.GroupEditPage })));
 const UserListPage = lazy(() => import('./admin/pages/UserListPage').then((m) => ({ default: m.UserListPage })));
 const UserEditPage = lazy(() => import('./admin/pages/UserEditPage').then((m) => ({ default: m.UserEditPage })));
+/* 小黑屋名单（0025）：生效中的封禁与解封入口，挂在「用户」分组的 USER_TABS 上 */
+const BannedPage = lazy(() => import('./admin/pages/BannedPage').then((m) => ({ default: m.BannedPage })));
 const OtherPage = lazy(() => import('./admin/pages/OtherPage').then((m) => ({ default: m.OtherPage })));
+/* 运行维护两个 tab（OTHER_TABS）：数据库孤儿行清理 / R2 未引用对象清理 */
+const DbMaintenancePage = lazy(() => import('./admin/pages/DbMaintenancePage').then((m) => ({ default: m.DbMaintenancePage })));
+const R2MaintenancePage = lazy(() => import('./admin/pages/R2MaintenancePage').then((m) => ({ default: m.R2MaintenancePage })));
 const ModlogPage = lazy(() => import('./admin/pages/ModlogPage').then((m) => ({ default: m.ModlogPage })));
 const ExtensionPage = lazy(() => import('./admin/pages/ExtensionPage').then((m) => ({ default: m.ExtensionPage })));
 const ExtensionEditPage = lazy(() => import('./admin/pages/ExtensionEditPage').then((m) => ({ default: m.ExtensionEditPage })));
@@ -87,6 +78,8 @@ function AdminRoutes() {
           <Route index element={<AdminIndexPage />} />
           <Route path="setting" element={<SettingPage />} />
           <Route path="setting/email" element={<EmailSettingPage />} />
+          {/* 主题管理（系统分组）：启用/切换内置主题，整页刷新后生效 */}
+          <Route path="themes" element={<ThemePage />} />
           {/* 导航栏设置（主页菜单下）：配置前台顶栏自定义导航项 */}
           <Route path="nav" element={<NavBarSettingPage />} />
           <Route path="forums" element={<ForumListPage />} />
@@ -98,7 +91,12 @@ function AdminRoutes() {
           <Route path="users" element={<UserListPage />} />
           <Route path="users/new" element={<UserEditPage />} />
           <Route path="users/:uid/edit" element={<UserEditPage />} />
+          {/* 小黑屋：生效中的封禁名单与解封入口（对应 USER_TABS 的「黑名单」tab） */}
+          <Route path="banned" element={<BannedPage />} />
           <Route path="other" element={<OtherPage />} />
+          {/* 运行维护：数据库孤儿清理 / R2 未引用对象清理（对应 OTHER_TABS 的两个 tab） */}
+          <Route path="maintenance/db" element={<DbMaintenancePage />} />
+          <Route path="maintenance/r2" element={<R2MaintenancePage />} />
           <Route path="modlogs" element={<ModlogPage />} />
           <Route path="extensions" element={<ExtensionPage />} />
           <Route path="extensions/:id" element={<ExtensionEditPage />} />
@@ -113,7 +111,8 @@ function AdminRoutes() {
           <Route path="check/*" element={<CheckPage />} />
           {/* 加V认证四档：待审核 / 已通过 / 手动加V / 收费设置 */}
           <Route path="v/*" element={<AdminVPage />} />
-          <Route path="about" element={<AboutPage />} />
+          {/* 版本更新（系统分组最后一项）：路径用 update，勿再用 about（前台「关于」语义） */}
+          <Route path="update" element={<VersionUpdatePage />} />
           <Route path="*" element={<ComingSoon label={t('admin_page_not_found')} />} />
         </Route>
       </Routes>
@@ -168,39 +167,40 @@ export function App() {
 
   return (
     <DeviceGate>
-      <Layout>
+      <ThemeLayout>
         {/* Suspense 内层化：页面 chunk 首次加载时顶栏/页脚保持在场，仅内容区显示回落，避免整页闪烁 */}
         <Suspense fallback={<PageLoading />}>
           <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/page/:n" element={<HomePage />} />
-            <Route path="/forum/:fid" element={<ForumPage />} />
-            <Route path="/thread/:tid" element={<ThreadPage />} />
-            <Route path="/thread/:tid/p/:page" element={<ThreadPage />} />
+            {/* 前台每个路由交给主题的整页实现（基底主题 light 提供全部页面，见 themes/light/index.tsx） */}
+            <Route path="/" element={<ThemeRoute name="home" />} />
+            <Route path="/page/:n" element={<ThemeRoute name="home" />} />
+            <Route path="/forum/:fid" element={<ThemeRoute name="forum" />} />
+            <Route path="/thread/:tid" element={<ThemeRoute name="thread" />} />
+            <Route path="/thread/:tid/p/:page" element={<ThemeRoute name="thread" />} />
             {/* 购买记录（thread-sPay） */}
-            <Route path="/thread/:tid/paylist" element={<PaylistPage />} />
-            <Route path="/thread/:tid/paylist/p/:page" element={<PaylistPage />} />
-            <Route path="/user/:uid" element={<UserPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/resetpw" element={<ResetPwPage />} />
-            <Route path="/reset-password" element={<ResetPwPage />} />
-            <Route path="/me" element={<MePage />} />
-            <Route path="/new" element={<ComposePage />} />
-            <Route path="/forum/:fid/new" element={<ComposePage />} />
-            <Route path="/search" element={<SearchPage />} />
+            <Route path="/thread/:tid/paylist" element={<ThemeRoute name="paylist" />} />
+            <Route path="/thread/:tid/paylist/p/:page" element={<ThemeRoute name="paylist" />} />
+            <Route path="/user/:uid" element={<ThemeRoute name="user" />} />
+            <Route path="/login" element={<ThemeRoute name="login" />} />
+            <Route path="/register" element={<ThemeRoute name="register" />} />
+            <Route path="/resetpw" element={<ThemeRoute name="resetpw" />} />
+            <Route path="/reset-password" element={<ThemeRoute name="resetpw" />} />
+            <Route path="/me" element={<ThemeRoute name="me" />} />
+            <Route path="/new" element={<ThemeRoute name="compose" />} />
+            <Route path="/forum/:fid/new" element={<ThemeRoute name="compose" />} />
+            <Route path="/search" element={<ThemeRoute name="search" />} />
             {/* 发现页（聚合页）+ 排行榜页 */}
-            <Route path="/discovery" element={<DiscoveryPage />} />
-            <Route path="/rank" element={<RankListPage />} />
-            <Route path="/mod/:fid" element={<ModPage />} />
+            <Route path="/discovery" element={<ThemeRoute name="discovery" />} />
+            <Route path="/rank" element={<ThemeRoute name="rank" />} />
+            <Route path="/mod/:fid" element={<ThemeRoute name="mod" />} />
             {/* VIP 收银台（§15）：套餐页公开可浏览；订单页需登录（收银台/卡密/轮询） */}
-            <Route path="/vip" element={<VipPage />} />
-            <Route path="/order/:no" element={<OrderPage />} />
+            <Route path="/vip" element={<ThemeRoute name="vip" />} />
+            <Route path="/order/:no" element={<ThemeRoute name="order" />} />
             {/* 404 页：未匹配路由 → 专门 404 页 */}
-            <Route path="*" element={<NotFoundPage />} />
+            <Route path="*" element={<ThemeRoute name="notfound" />} />
           </Routes>
         </Suspense>
-      </Layout>
+      </ThemeLayout>
     </DeviceGate>
   );
 }

@@ -11,9 +11,9 @@
 --   pnpm --filter @freeidx/api db:apply && pnpm --filter @freeidx/api db:schema:dump
 -- 并把 migrations/ 与 schema.sql 一起提交。
 --
--- 对象统计：33 表 / 74 索引
+-- 对象统计：35 表 / 78 索引
 
--- ===== 表（33）=====
+-- ===== 表（35）=====
 CREATE TABLE bbs_ad_slot (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   position TEXT NOT NULL DEFAULT '',
@@ -177,6 +177,31 @@ CREATE TABLE bbs_kv (
 CREATE TABLE bbs_like (
   uid INTEGER NOT NULL DEFAULT 0,
   tid INTEGER NOT NULL DEFAULT 0,
+  create_date INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE bbs_mcp_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid INTEGER NOT NULL DEFAULT 0,
+  token_id INTEGER NOT NULL DEFAULT 0,
+  tool TEXT NOT NULL DEFAULT '',
+  ok INTEGER NOT NULL DEFAULT 0,
+  ms INTEGER NOT NULL DEFAULT 0,
+  ip_hash TEXT NOT NULL DEFAULT '',
+  create_date INTEGER NOT NULL DEFAULT 0
+);
+DELETE FROM sqlite_sequence;
+
+CREATE TABLE bbs_mcp_token (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  token_prefix TEXT NOT NULL DEFAULT '',
+  token_hash TEXT NOT NULL,
+  scopes TEXT NOT NULL DEFAULT 'read',
+  expire_at INTEGER NOT NULL DEFAULT 0,
+  last_used_at INTEGER NOT NULL DEFAULT 0,
+  revoked INTEGER NOT NULL DEFAULT 0,
   create_date INTEGER NOT NULL DEFAULT 0
 );
 
@@ -389,7 +414,6 @@ CREATE TABLE bbs_user_ban (
   lifted_at INTEGER NOT NULL DEFAULT 0,
   lifted_by INTEGER NOT NULL DEFAULT 0
 );
-DELETE FROM sqlite_sequence;
 
 CREATE TABLE bbs_user_pay (
   cid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -427,7 +451,7 @@ CREATE TABLE bbs_vip_plan (
   gid INTEGER NOT NULL DEFAULT 0
 );
 
--- ===== 索引（74）=====
+-- ===== 索引（78）=====
 CREATE INDEX bbs_ad_slot_position ON bbs_ad_slot (position, enabled, sort);
 
 CREATE INDEX bbs_announcement_isshow ON bbs_announcement (isshow, aid);
@@ -463,6 +487,14 @@ CREATE INDEX bbs_forum_rank ON bbs_forum (rank);
 CREATE INDEX bbs_like_tid ON bbs_like (tid);
 
 CREATE UNIQUE INDEX bbs_like_uid_tid ON bbs_like (uid, tid);
+
+CREATE INDEX bbs_mcp_audit_date ON bbs_mcp_audit (create_date DESC);
+
+CREATE INDEX bbs_mcp_audit_tool ON bbs_mcp_audit (tool, create_date DESC);
+
+CREATE UNIQUE INDEX bbs_mcp_token_hash ON bbs_mcp_token (token_hash);
+
+CREATE INDEX bbs_mcp_token_uid ON bbs_mcp_token (uid, create_date DESC);
 
 CREATE INDEX bbs_modlog_tid ON bbs_modlog (tid);
 

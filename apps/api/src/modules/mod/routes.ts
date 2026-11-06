@@ -15,7 +15,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
 import { forumAccessMod } from '../../core/access';
-import { loadForumlist, loadGrouplist, loadSetting, loadViewer, makeAccessCtx, type ForumRow } from '../../core/loaders';
+import { forumLangOf, loadForumlist, loadGrouplist, loadSetting, loadViewer, makeAccessCtx, type ForumRow } from '../../core/loaders';
 import { CheckStatus, hasSeeCheck } from '../../core/check';
 import { attachKeysByTid, attachKeysForUserPurge, purgeR2Objects, threadPurgeStmts, userPurgeStmts } from '../../core/purge';
 import { getExtensions } from '../../core/extensions';
@@ -239,6 +239,15 @@ export function modRoutes(): Hono<ReadEnv> {
           db.prepare('UPDATE bbs_forum SET threads = threads - 1 WHERE fid = ?').bind(fid) as unknown as Stmt,
           db.prepare('UPDATE bbs_thread_top SET fid = ? WHERE tid = ?').bind(newFid, tid) as unknown as Stmt,
         );
+        /* 0024 强一致：目标版块绑定内容语言时，移入的主题必须对齐该语言，
+         * 否则版块内会残留不匹配语言的内容，且发帖侧锁定语言与列表过滤口径对不上。
+         * 生效语言走 forumLangOf（含二级版块继承父版块、哨兵解除继承的解析）。 */
+        const targetLang = forumLangOf(forumlist, newFid);
+        if (targetLang) {
+          stmts.push(
+            db.prepare('UPDATE bbs_thread SET lang = ? WHERE tid = ?').bind(targetLang, tid) as unknown as Stmt,
+          );
+        }
         touchedForumlist = true;
 
         modlogs.push(logRow(v.uid, thread, 'move', ts));

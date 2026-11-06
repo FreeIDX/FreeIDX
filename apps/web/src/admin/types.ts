@@ -541,6 +541,41 @@ export interface AdSlotInput {
   end_date: number;
 }
 
+/** MCP 访问令牌行（GET /api/admin/mcp/tokens）：只回前缀，明文永不回显 */
+export interface McpTokenRow {
+  id: number;
+  uid: number;
+  username: string;
+  name: string;
+  tokenPrefix: string;
+  scopes: string;
+  /** 0 = 永不过期 */
+  expireAt: number;
+  lastUsedAt: number;
+  revoked: boolean;
+  createDate: number;
+}
+
+/** POST /api/admin/mcp/tokens 输入；uid 缺省 = 当前管理员本人 */
+export interface McpTokenInput {
+  name: string;
+  scopes: string;
+  /** 0 = 永不过期 */
+  expireDays: number;
+  uid?: number;
+}
+
+/** POST 响应：token 是本项目里唯一一次明文下发，前端必须提示立即复制 */
+export interface McpTokenCreated {
+  id: number;
+  uid: number;
+  name: string;
+  scopes: string;
+  expireAt: number;
+  token: string;
+  endpoint: string;
+}
+
 /* ------------------------------------------------------------------ *
  * 支付管理（T5-7，§15.4）行类型
  * 逐字对齐 apps/api/src/modules/admin/payment.ts 的显式投影（planDto/orderDto 与 CardOut）。

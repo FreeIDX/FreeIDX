@@ -1219,6 +1219,27 @@
   "ban_batch": "一括制限",
   "ban_unban_confirm": "このユーザーの制限を解除しますか？",
   "ban_no_selection": "先にユーザーを選択してください",
-  "ban_scope_required": "制限範囲を 1 つ以上選択してください"
+  "ban_scope_required": "制限範囲を 1 つ以上選択してください",
+  "mcp_new_token": "新しいトークン（表示は1回のみ）",
+  "mcp_copy_now": "閉じるか再読み込みすると再表示できません。今すぐコピーして AI クライアントの設定に貼り付けてください。",
+  "mcp_copy": "コピー",
+  "mcp_endpoint_hint": "エンドポイント: 本サイトの /mcp · ヘッダー: Authorization: Bearer <トークン>",
+  "mcp_tokens": "アクセストークン",
+  "mcp_scope_note": "トークンのレベルは上限で、サイト設定で公開したレベルも適用されます（両方の積集合）。",
+  "mcp_token_name": "名前",
+  "mcp_token_name_ph": "例: Claude Desktop",
+  "mcp_scopes": "レベル",
+  "mcp_expire_days": "有効日数",
+  "mcp_token_prefix": "プレフィックス",
+  "mcp_expire_at": "有効期限",
+  "mcp_last_used": "最終使用",
+  "mcp_never": "無期限",
+  "mcp_revoked": "取消済み",
+  "mcp_revoke": "取り消す",
+  "mcp_auth_note": "すべての呼び出しはトークン所有者の実際のフォーラム権限・審査状態・ペイウォールで絞り込まれます。サイトが閉鎖または読み取り専用のときは AI クライアントも読み取り専用です。",
+  "mcp_token_created": "トークンを作成しました。すぐにコピーしてください",
+  "mcp_scope_read_hint": "フォーラム・スレッド・返信の一覧/閲覧、検索",
+  "mcp_scope_write_hint": "スレッド作成と返信（フォーラム審査は従来どおり）",
+  "mcp_scope_admin_hint": "モデレーション（ピン留め・閉鎖・削除など）"
  }
 }

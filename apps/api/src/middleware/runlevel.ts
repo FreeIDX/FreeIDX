@@ -26,6 +26,12 @@ export const runlevel = createMiddleware<{
 }>((async (c, next) => {
   // 健康检查与静态探测不查库
   if (c.req.path === '/api/health') return next();
+  /**
+   * MCP 端点（/mcp）：机器客户端不带 Cookie，这里 loadViewer 恒判成游客，
+   * 会员档位下会被当「游客拒读」误杀。档位语义改由 extensions/mcp/auth.ts 的
+   * runlevelDeny 按令牌持有者复刻（站点关闭/只读时 AI 同样写不进来），此处只放行。
+   */
+  if (c.req.path === '/mcp') return next();
   const db = c.get('db');
   const t = c.get('t');
   let level: number = RunLevel.NORMAL;

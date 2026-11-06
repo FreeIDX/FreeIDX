@@ -1218,6 +1218,27 @@
   "ban_batch": "批次封禁",
   "ban_unban_confirm": "確定解除該使用者的封禁？",
   "ban_no_selection": "請先勾選使用者",
-  "ban_scope_required": "請至少選擇一種封禁範圍"
+  "ban_scope_required": "請至少選擇一種封禁範圍",
+  "mcp_new_token": "新權杖（僅顯示這一次）",
+  "mcp_copy_now": "關閉或重新整理後無法再次查看，請立即複製並填入 AI 用戶端設定。",
+  "mcp_copy": "複製",
+  "mcp_endpoint_hint": "存取位址：本站 /mcp · 標頭：Authorization: Bearer <權杖>",
+  "mcp_tokens": "存取權杖",
+  "mcp_scope_note": "權杖檔位是上限，站點設定的開放檔位同樣生效（兩者取交集）。",
+  "mcp_token_name": "名稱",
+  "mcp_token_name_ph": "如 Claude Desktop",
+  "mcp_scopes": "檔位",
+  "mcp_expire_days": "有效天數",
+  "mcp_token_prefix": "前綴",
+  "mcp_expire_at": "過期",
+  "mcp_last_used": "最近使用",
+  "mcp_never": "永不過期",
+  "mcp_revoked": "已撤銷",
+  "mcp_revoke": "撤銷",
+  "mcp_auth_note": "所有呼叫依權杖持有者的真實版塊權限、審核狀態與付費牆過濾；站點關閉或唯讀時 AI 用戶端同樣唯讀。",
+  "mcp_token_created": "權杖已建立，請立即複製",
+  "mcp_scope_read_hint": "列出/閱讀版塊、主題、回覆、搜尋",
+  "mcp_scope_write_hint": "發帖與回帖（版塊審核照常生效）",
+  "mcp_scope_admin_hint": "置頂/關閉/刪除等版務動作"
  }
 }

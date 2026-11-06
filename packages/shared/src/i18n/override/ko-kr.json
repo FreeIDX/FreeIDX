@@ -1218,6 +1218,27 @@
   "ban_batch": "일괄 제한",
   "ban_unban_confirm": "이 사용자의 제한을 해제할까요?",
   "ban_no_selection": "먼저 사용자를 선택하세요",
-  "ban_scope_required": "제한 범위를 하나 이상 선택하세요"
+  "ban_scope_required": "제한 범위를 하나 이상 선택하세요",
+  "mcp_new_token": "새 토큰(한 번만 표시)",
+  "mcp_copy_now": "닫거나 새로 고치면 다시 볼 수 없습니다. 지금 복사하여 AI 클라이언트 설정에 붙여넣으세요.",
+  "mcp_copy": "복사",
+  "mcp_endpoint_hint": "엔드포인트: 이 사이트의 /mcp · 헤더: Authorization: Bearer <토큰>",
+  "mcp_tokens": "액세스 토큰",
+  "mcp_scope_note": "토큰 범위는 상한이며 사이트 설정에서 허용한 범위도 함께 적용됩니다(교집합).",
+  "mcp_token_name": "이름",
+  "mcp_token_name_ph": "예: Claude Desktop",
+  "mcp_scopes": "범위",
+  "mcp_expire_days": "유효 일수",
+  "mcp_token_prefix": "접두사",
+  "mcp_expire_at": "만료",
+  "mcp_last_used": "최근 사용",
+  "mcp_never": "만료 없음",
+  "mcp_revoked": "폐기됨",
+  "mcp_revoke": "폐기",
+  "mcp_auth_note": "모든 호출은 토큰 소유자의 실제 게시판 권한, 심사 상태, 유료 장벽으로 필터링됩니다. 사이트가 닫히거나 읽기 전용이면 AI 클라이언트도 읽기 전용입니다.",
+  "mcp_token_created": "토큰이 생성되었습니다. 지금 복사하세요",
+  "mcp_scope_read_hint": "게시판·스레드·답글 목록/읽기, 검색",
+  "mcp_scope_write_hint": "스레드 작성 및 답글 (게시판 심사는 그대로 적용)",
+  "mcp_scope_admin_hint": "관리 동작(고정, 닫기, 삭제 등)"
  }
 }

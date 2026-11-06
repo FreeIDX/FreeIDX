@@ -54,6 +54,7 @@ import { adminPaymentRoutes } from './modules/admin/payment';
 import { adminPointRoutes } from './modules/admin/points';
 import { adminNoticeRoutes } from './modules/admin/notices';
 import { adminVRoutes } from './modules/admin/v';
+import { adminMcpRoutes } from './modules/admin/mcp';
 import { registerCard } from './extensions/card';
 import { registerStripe } from './extensions/stripe';
 import { registerPaypal } from './extensions/paypal';
@@ -92,8 +93,10 @@ app.use(
       return allow.has(origin) ? origin : self;
     },
     credentials: true,
-    allowHeaders: ['Content-Type', 'X-CSRF-Token'],
-    exposeHeaders: ['X-Db-Queries-Warn', 'X-Edge-Cache'],
+    // Authorization：MCP 端点（/mcp）用 Bearer 令牌鉴权，浏览器型 MCP 客户端会带它做 preflight；
+    // Mcp-Protocol-Version / MCP-Protocol-Version：客户端协商协议版本用，不放行会被预检拦掉
+    allowHeaders: ['Content-Type', 'X-CSRF-Token', 'Authorization', 'Mcp-Protocol-Version', 'MCP-Protocol-Version'],
+    exposeHeaders: ['X-Db-Queries-Warn', 'X-Edge-Cache', 'MCP-Protocol-Version'],
   }),
 );
 // 多域名收敛（canonical host）：页面导航落到非主域名时 301 到后台「站点网址」。
@@ -228,6 +231,8 @@ app.route('/', adminNoticeRoutes());
 app.route('/', adminCheckRoutes());
 // 加V认证后台：审核两列表 + 通过/拒绝 + 手动加V + 收费参数
 app.route('/', adminVRoutes());
+// MCP 服务（插件 id=mcp）后台：个人访问令牌 CRUD（明文只在创建响应出现一次）
+app.route('/', adminMcpRoutes());
 // SEO 核心保底（robots.txt 装配引擎，§16.4 不可停用）
 app.route('/', seoCoreRoutes());
 // 后续模块逐个挂载（forum/post/my/mod/attach/admin/kv）
@@ -268,6 +273,24 @@ app.notFound(async (c) => {
   const p = c.req.path;
   if (p === '/api' || p === '/files' || p.startsWith('/api/') || p.startsWith('/files/')) {
     return handleNotFound(c);
+  }
+  /**
+   * MCP 端点必须是 JSON：插件停用 / 方法不匹配（GET）/ 路径写错时，
+   * 若落进下面的 SPA 壳分支会返回 text/html 200，MCP 客户端只会报「响应无法解析」，
+   * 排查成本极高。这里固定回 404 JSON，并给出明确原因。
+   */
+  if (p === '/mcp' || p.startsWith('/mcp/')) {
+    return c.json(
+      {
+        jsonrpc: '2.0',
+        id: null,
+        error: {
+          code: -32601,
+          message: c.req.method === 'POST' ? 'MCP endpoint is disabled' : 'MCP endpoint accepts POST only',
+        },
+      },
+      404,
+    );
   }
   const res = await c.env.ASSETS.fetch(c.req.raw);
   // 拿到的是 SPA 壳（而非真实文件）时，只有人类浏览器的干净路径才允许回退到壳：

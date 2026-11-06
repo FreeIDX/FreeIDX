@@ -1218,6 +1218,27 @@
   "ban_batch": "Bloqueo masivo",
   "ban_unban_confirm": "¿Desbloquear a este usuario?",
   "ban_no_selection": "Selecciona usuarios primero",
-  "ban_scope_required": "Selecciona al menos un ámbito de bloqueo"
+  "ban_scope_required": "Selecciona al menos un ámbito de bloqueo",
+  "mcp_new_token": "Nuevo token (se muestra una vez)",
+  "mcp_copy_now": "No se podrá ver de nuevo tras cerrar o recargar; cópielo ahora y péguelo en la configuración de su cliente de IA.",
+  "mcp_copy": "Copiar",
+  "mcp_endpoint_hint": "Endpoint: /mcp de este sitio · Cabecera: Authorization: Bearer <token>",
+  "mcp_tokens": "Tokens de acceso",
+  "mcp_scope_note": "El nivel del token es un límite superior; los niveles habilitados en el sitio también se aplican (intersección).",
+  "mcp_token_name": "Nombre",
+  "mcp_token_name_ph": "p. ej. Claude Desktop",
+  "mcp_scopes": "Niveles",
+  "mcp_expire_days": "Días de validez",
+  "mcp_token_prefix": "Prefijo",
+  "mcp_expire_at": "Caduca",
+  "mcp_last_used": "Último uso",
+  "mcp_never": "Nunca",
+  "mcp_revoked": "Revocado",
+  "mcp_revoke": "Revocar",
+  "mcp_auth_note": "Todas las llamadas se filtran por los permisos reales del propietario, el estado de moderación y el muro de pago; si el sitio está cerrado o en solo lectura, los clientes de IA también.",
+  "mcp_token_created": "Token creado; cópielo ahora",
+  "mcp_scope_read_hint": "Listar y leer foros, temas, respuestas y búsqueda",
+  "mcp_scope_write_hint": "Crear temas y respuestas (la moderación del foro sigue aplicando)",
+  "mcp_scope_admin_hint": "Acciones de moderación como fijar, cerrar y eliminar"
  }
 }

@@ -98,6 +98,32 @@ describe('POST /api/auth/password-reset/request', () => {
     expect(calls.some((c) => /INSERT INTO bbs_email_code/.test(c.sql))).toBe(false);
   });
 
+  it('限流命中与「未注册」响应逐字节同构（错误码会泄露邮箱是否注册）', async () => {
+    const limited = makeEnv([{ test: /SELECT create_date FROM bbs_email_code/, first: { create_date: Math.floor(Date.now() / 1000) } }]);
+    const ghost = makeEnv([{ test: /SELECT uid FROM bbs_user WHERE email = \?/, first: null }]);
+    const a = await app.request('/api/auth/password-reset/request', post('/x', { email: 'a@b.c' }), limited.env);
+    const b = await app.request('/api/auth/password-reset/request', post('/x', { email: 'ghost@b.c' }), ghost.env);
+    expect(await a.text()).toBe(await b.text());
+  });
+
+  it('IP 维度预算耗尽：换任意邮箱也静默成功、不落 token（挡换邮箱轰炸）', async () => {
+    // 预算键只挂 L2（bbs_cache），故这里让 send_ip: 的计数读为 10（= IP_SEND_CAP），其余键照常 miss
+    const { env, calls } = makeEnv([
+      {
+        test: /SELECT v FROM bbs_cache WHERE k = \? AND/,
+        first: (p: readonly unknown[]) => (String(p[0]).startsWith('send_ip:') ? { v: '10' } : null),
+      },
+    ]);
+    const res = await app.request('/api/auth/password-reset/request', post('/x', { email: 'other@b.c' }), env);
+    const body = await res.text(); // 只读一次：下面既要比 code 又要逐字节比对
+    expect((JSON.parse(body) as { code: number }).code).toBe(Code.OK);
+    expect(calls.some((c) => /INSERT INTO bbs_email_code/.test(c.sql))).toBe(false);
+    // 与「未注册邮箱」的响应必须逐字节一致（否则又是一个枚举指纹）
+    const ghost = makeEnv([{ test: /SELECT uid FROM bbs_user WHERE email = \?/, first: null }]);
+    const ghostRes = await app.request('/api/auth/password-reset/request', post('/x', { email: 'ghost@b.c' }), ghost.env);
+    expect(body).toBe(await ghostRes.text());
+  });
+
   it('未注册邮箱：同构成功、不发信、不落 token（防枚举）', async () => {
     const { env, calls } = makeEnv([{ test: /SELECT uid FROM bbs_user WHERE email = \?/, first: null }]);
     const res = await app.request('/api/auth/password-reset/request', post('/x', { email: 'ghost@b.c' }), env);

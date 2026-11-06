@@ -26,6 +26,7 @@ import { apiErrorMessage } from '../../lib/errors';
 import { extName } from './ExtensionPage';
 import { ExtIcon } from './ext-icon';
 import { AdSlotGrid } from './AdSlotGrid';
+import { McpTokenGrid } from './McpTokenGrid';
 import { extText, type ExtField } from '@freeidx/shared';
 import { PLUGIN_TABS } from '../tabs';
 import { Alert, Button, Card, ErrorState, LinkButton, TabBar, cx, inputCls } from '../ui';
@@ -496,6 +497,9 @@ export function ExtensionEditPage() {
 
           {/* 广告位管理并入「广告系统」插件页：配置表单在上，槽位表在下（原顶层「广告位」tab 已移除） */}
           {id === 'ads' && <AdSlotGrid />}
+
+          {/* MCP 访问令牌并入「MCP 服务」插件页：配置（档位/限流/资源）在上，令牌表在下 */}
+          {id === 'mcp' && <McpTokenGrid />}
 
           <p className="mt-[1rem] text-center">
             <LinkButton to="/admin/extensions" variant="secondary" className="w-[210px]">

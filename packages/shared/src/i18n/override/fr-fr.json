@@ -1218,6 +1218,27 @@
   "ban_batch": "Blocage groupé",
   "ban_unban_confirm": "Débloquer cet utilisateur ?",
   "ban_no_selection": "Sélectionnez d’abord des utilisateurs",
-  "ban_scope_required": "Sélectionnez au moins un périmètre de blocage"
+  "ban_scope_required": "Sélectionnez au moins un périmètre de blocage",
+  "mcp_new_token": "Nouveau jeton (affiché une seule fois)",
+  "mcp_copy_now": "Impossible de le revoir après fermeture ou rechargement ; copiez-le maintenant et collez-le dans la configuration de votre client IA.",
+  "mcp_copy": "Copier",
+  "mcp_endpoint_hint": "Point d’entrée : /mcp du site · En-tête : Authorization: Bearer <jeton>",
+  "mcp_tokens": "Jetons d’accès",
+  "mcp_scope_note": "Le niveau du jeton est un plafond ; les niveaux autorisés sur le site s’appliquent aussi (intersection).",
+  "mcp_token_name": "Nom",
+  "mcp_token_name_ph": "ex. Claude Desktop",
+  "mcp_scopes": "Niveaux",
+  "mcp_expire_days": "Jours de validité",
+  "mcp_token_prefix": "Préfixe",
+  "mcp_expire_at": "Expire",
+  "mcp_last_used": "Dernière utilisation",
+  "mcp_never": "Jamais",
+  "mcp_revoked": "Révoqué",
+  "mcp_revoke": "Révoquer",
+  "mcp_auth_note": "Chaque appel est filtré selon les droits réels du propriétaire, l’état de modération et le paywall ; si le site est fermé ou en lecture seule, les clients IA le sont aussi.",
+  "mcp_token_created": "Jeton créé — copiez-le maintenant",
+  "mcp_scope_read_hint": "Lister et lire forums, sujets, réponses et recherche",
+  "mcp_scope_write_hint": "Créer des sujets et réponses (la modération du forum s’applique)",
+  "mcp_scope_admin_hint": "Actions de modération : épingler, fermer, supprimer"
  }
 }

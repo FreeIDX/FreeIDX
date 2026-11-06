@@ -8,6 +8,8 @@ import type {
   ExtSchema,
   ExtensionManifest,
   ExtensionState,
+  McpResourceDecl,
+  McpToolDecl,
   PageMeta,
   RobotsContribution,
   RouteRegistration,
@@ -16,6 +18,7 @@ import type { D1b } from '../db';
 import type { Cache } from '../cache';
 import { remember } from '../cache';
 import type { Env } from '../../types/env';
+import type { ApiT } from '../i18n';
 import { EventBus } from './bus';
 
 /** 契约 ③：handler 以 Hono Context 调用，返回值即响应 */
@@ -26,6 +29,37 @@ export interface ExtensionCtx {
   db: D1b;
   cache: Cache;
   env?: Env;
+}
+
+/** 契约 ⑨：MCP 工具调用上下文（token 已验签、用户已确认存在） */
+export interface McpCallCtx {
+  /** 令牌持有者的身份快照（权限判定仍须走 access.ts，不得直接信任 gid 做业务放行） */
+  principal: { uid: number; gid: number; tokenId: number };
+  db: D1b;
+  cache: Cache;
+  env?: Env;
+  /** 站点语言（工具描述与返回文案取词） */
+  lang: string;
+  /** 请求 IP 的整数形式（与 HTTP 写路径同一口径，落库到 userip 等风控列；未取到为 0） */
+  ip: number;
+  /** 站点语言的 API 文案取词器：写工具出错时与 HTTP 端返回同一套 message */
+  t: ApiT;
+}
+
+/** 工具执行结果：业务失败用 isError（让模型自行纠正），协议层错误才走 JSON-RPC error */
+export interface McpToolResult {
+  text: string;
+  isError?: boolean;
+}
+
+/** 契约 ⑨ 完整工具定义（数据面 + 处理器） */
+export interface McpToolDef extends McpToolDecl {
+  handler: (args: Record<string, unknown>, ctx: McpCallCtx) => Promise<McpToolResult>;
+}
+
+/** 契约 ⑨ 完整资源定义：vars 为 URI 模板变量（如 {tid}） */
+export interface McpResourceDef extends McpResourceDecl {
+  handler: (vars: Record<string, string>, ctx: McpCallCtx) => Promise<string>;
 }
 
 export interface ExtensionApi {
@@ -50,6 +84,10 @@ export interface ExtensionApi {
   contributeRobots(order: number, lines: string[]): void;
   /** 契约 ⑦：/api/bootstrap 聚合贡献（随核心一次下发） */
   contributeBootstrap(fn: (ext: Record<string, unknown>) => void | Promise<void>): void;
+  /** 契约 ⑨：向 MCP 服务贡献一个工具（MCP 插件停用时无人消费，无副作用） */
+  contributeMcpTool(tool: McpToolDef): void;
+  /** 契约 ⑨：向 MCP 服务贡献一个只读资源 */
+  contributeMcpResource(res: McpResourceDef): void;
 }
 
 export interface ExtensionModule {
@@ -66,6 +104,9 @@ export interface ExtensionsRuntime {
   middlewares: ((c: unknown, next: () => Promise<void>) => Promise<void>)[];
   robots: RobotsContribution[];
   enabledIds: string[];
+  /** 契约 ⑨ 收集结果：MCP 插件在请求期读取（装配已完成，顺序无关） */
+  mcpTools: McpToolDef[];
+  mcpResources: McpResourceDef[];
 }
 
 function isEnabled(manifest: ExtensionManifest, state: Record<string, ExtensionState>): boolean {
@@ -83,7 +124,16 @@ export function buildRuntime(
   configs?: Record<string, Record<string, unknown>>,
 ): ExtensionsRuntime {
   const bus = new EventBus();
-  const rt: ExtensionsRuntime = { bus, routes: [], crons: [], middlewares: [], robots: [], enabledIds: [] };
+  const rt: ExtensionsRuntime = {
+    bus,
+    routes: [],
+    crons: [],
+    middlewares: [],
+    robots: [],
+    enabledIds: [],
+    mcpTools: [],
+    mcpResources: [],
+  };
 
   for (const m of modules) {
     if (!isEnabled(m.manifest, state)) continue;
@@ -109,6 +159,12 @@ export function buildRuntime(
       },
       contributeBootstrap: (fn) => {
         bus.on('bootstrap:contribute', (p) => fn(p.payload));
+      },
+      contributeMcpTool: (tool) => {
+        rt.mcpTools.push(tool);
+      },
+      contributeMcpResource: (res) => {
+        rt.mcpResources.push(res);
       },
     };
     try {

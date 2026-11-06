@@ -29,6 +29,9 @@ import type {
   CardGenResult,
   ExtensionDetail,
   ExtensionRow,
+  McpTokenCreated,
+  McpTokenInput,
+  McpTokenRow,
   EmailSettingView,
   SmtpAccountInput,
   ForumInput,
@@ -267,6 +270,12 @@ export const putExtension = (
     secretPatch?: Record<string, unknown>;
   },
 ) => apiSend<{ id: string }>('PUT', `/api/admin/extensions/${id}`, body);
+
+/** MCP 访问令牌：只回前缀与元信息（明文仅创建响应出现一次） */
+export const getMcpTokens = () => apiGet<{ tokens: McpTokenRow[] }>('/api/admin/mcp/tokens');
+export const createMcpToken = (body: McpTokenInput) => apiSend<McpTokenCreated>('POST', '/api/admin/mcp/tokens', body);
+/** 撤销 = 软删除（revoked=1）：审计与历史保留，令牌立即失效 */
+export const revokeMcpToken = (id: number) => apiSend<{ id: number }>('DELETE', `/api/admin/mcp/tokens/${id}`);
 
 /** 广告位：默认只回 enabled=1，preview=true 含草稿位（后台编辑必须能看到草稿） */
 export const getAdSlots = (preview = true) => apiGet<{ slots: AdSlotRow[] }>(`/api/admin/ad-slots${preview ? '?ad_preview=1' : ''}`);

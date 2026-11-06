@@ -144,15 +144,17 @@ export function R2MaintenancePage() {
     }
   };
 
-  // 静态映射而非拼接：i18n AST 扫描能识别到 5 个前缀键，避免死键告警
-  const PREFIX_LABEL: Record<string, AdminKey> = {
-    avatar: 'admin_maint_r2_prefix_avatar',
-    forum: 'admin_maint_r2_prefix_forum',
-    site: 'admin_maint_r2_prefix_site',
-    attach: 'admin_maint_r2_prefix_attach',
-    seo: 'admin_maint_r2_prefix_seo',
-  };
-  const prefixLabel = (p: string): string => t(PREFIX_LABEL[p] ?? 'admin_maint_r2', p);
+  /* 静态映射而非拼接。字段名必须是 textKey：i18n AST 扫描只认 `textKey: '...'` 这一形状，
+   * 写成普通对象值（如 `avatar: 'admin_...'`）时扫描器看不到，5 个词条会被误判为死键。 */
+  const PREFIX_LABEL: { prefix: string; textKey: AdminKey }[] = [
+    { prefix: 'avatar', textKey: 'admin_maint_r2_prefix_avatar' },
+    { prefix: 'forum', textKey: 'admin_maint_r2_prefix_forum' },
+    { prefix: 'site', textKey: 'admin_maint_r2_prefix_site' },
+    { prefix: 'attach', textKey: 'admin_maint_r2_prefix_attach' },
+    { prefix: 'seo', textKey: 'admin_maint_r2_prefix_seo' },
+  ];
+  const prefixLabel = (p: string): string =>
+    t(PREFIX_LABEL.find((x) => x.prefix === p)?.textKey ?? 'admin_maint_r2', p);
 
   const stateText = (st: MaintR2State | null): { tone: 'secondary' | 'info' | 'success' | 'warning'; text: string } => {
     if (!st) return { tone: 'secondary', text: t('admin_maint_r2_idle', '未开始') };

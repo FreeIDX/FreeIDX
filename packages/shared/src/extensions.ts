@@ -2,6 +2,8 @@
  * §12 扩展点契约全集（铁律 5：契约先于插件消费者，M1 定型后不改签名）。
  * 八项：①中间件注册 ②生命周期事件 ③registerRoute ④registerCron
  *      ⑤render:head(PageMeta) ⑥robots:contribute ⑦bootstrap:contribute ⑧前端组件插槽
+ * 第九项（MCP 服务插件新增，纯数据面声明；handler 由 api 侧 registry 收窄注入）：
+ *      ⑨contributeMcpTool / contributeMcpResource —— 插件把自己的能力暴露给 AI 客户端。
  */
 
 /** manifest.json 字段定义（§15.5） */
@@ -176,4 +178,47 @@ export interface ExtSchema {
   /** 表单顶部的插件说明：告诉管理员「开箱即用」的部分，消除“必须填配置”的误解 */
   intro: LocText;
   fields: ExtField[];
+}
+
+/* ------------------------------------------------------------------ *
+ * 契约 ⑨：MCP（Model Context Protocol）能力贡献
+ *
+ * MCP 服务本身也是一个插件（id='mcp'），它只做协议 + 鉴权 + 出口；
+ * 具体能力由各插件自行 contributeMcpTool/contributeMcpResource 声明，
+ * 因此这里的定义只有「数据面」（名称/描述/入参 schema/权限档位），
+ * handler 由 apps/api 侧 registry 以 McpCallCtx 收窄注入。
+ * ------------------------------------------------------------------ */
+
+/** 工具暴露档位：后台按 enabledScopes 裁剪（read ⊂ write ⊂ admin） */
+export type McpToolScope = 'read' | 'write' | 'admin';
+
+/** 工具声明（数据面） */
+export interface McpToolDecl {
+  /** JSON-RPC tools/call 的名称：^[a-zA-Z0-9_-]{1,64}$；插件工具约定 `${extId}_${name}` 防撞名 */
+  name: string;
+  /** 模型据此选择工具，必须是「什么时候该用我」的可判断描述 */
+  description: LocText;
+  /** JSON Schema（type=object），参数校验由 MCP 层按此收口 */
+  inputSchema: Record<string, unknown>;
+  scope: McpToolScope;
+}
+
+/** 资源声明（数据面）：以 URI 模板暴露只读内容，MCP 客户端可直接挂为上下文 */
+export interface McpResourceDecl {
+  /** 如 freeidx://thread/{tid} */
+  uriTemplate: string;
+  name: LocText;
+  mimeType: string;
+}
+
+/** MCP 令牌档位（个人访问令牌可授予的最大权限，工具调用时再与后台配置取交集） */
+export const MCP_SCOPES: readonly McpToolScope[] = ['read', 'write', 'admin'];
+
+/** 档位包含关系：scope 是否被 granted（逗号分隔字符串）覆盖 */
+export function mcpScopeAllowed(granted: string, scope: McpToolScope): boolean {
+  const list = granted.split(',').map((s) => s.trim());
+  if (list.includes('admin')) return true;
+  if (scope === 'admin') return false;
+  if (scope === 'write') return list.includes('write');
+  return list.includes('read') || list.includes('write');
 }

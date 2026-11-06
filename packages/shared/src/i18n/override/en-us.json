@@ -1218,6 +1218,27 @@
   "ban_batch": "Bulk ban",
   "ban_unban_confirm": "Unban this user?",
   "ban_no_selection": "Select users first",
-  "ban_scope_required": "Select at least one ban scope"
+  "ban_scope_required": "Select at least one ban scope",
+  "mcp_new_token": "New token (shown once)",
+  "mcp_copy_now": "It cannot be viewed again after closing or refreshing; copy it now and paste it into your AI client config.",
+  "mcp_copy": "Copy",
+  "mcp_endpoint_hint": "Endpoint: this site /mcp · Header: Authorization: Bearer <token>",
+  "mcp_tokens": "Access tokens",
+  "mcp_scope_note": "Token scope is an upper bound; the site-level enabled scopes also apply (intersection of both).",
+  "mcp_token_name": "Name",
+  "mcp_token_name_ph": "e.g. Claude Desktop",
+  "mcp_scopes": "Scopes",
+  "mcp_expire_days": "Valid days",
+  "mcp_token_prefix": "Prefix",
+  "mcp_expire_at": "Expires",
+  "mcp_last_used": "Last used",
+  "mcp_never": "Never",
+  "mcp_revoked": "Revoked",
+  "mcp_revoke": "Revoke",
+  "mcp_auth_note": "Every call is filtered by the token owner real forum permissions, moderation state and paywall; when the site is closed or read-only, AI clients are read-only too.",
+  "mcp_token_created": "Token created — copy it now",
+  "mcp_scope_read_hint": "List and read forums, threads, replies and search",
+  "mcp_scope_write_hint": "Create threads and replies (forum moderation still applies)",
+  "mcp_scope_admin_hint": "Moderation actions such as pin, close and delete"
  }
 }

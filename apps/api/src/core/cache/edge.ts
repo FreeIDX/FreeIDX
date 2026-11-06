@@ -28,13 +28,30 @@ import { classifyUserAgent, type UaClass } from '../crawler';
 type Bucket = typeof caches.default;
 
 /** 匿名只读接口 → 边缘 TTL（§7 口径：列表 30s，详情 60s） */
-const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
+/** 匿名只读 API 的缓存白名单与 TTL（导出供测试断言「哪些接口必须被缓存、正则不互相抢占」） */
+export const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/bootstrap$/, 30],
   [/^\/api\/threads$/, 30],
   [/^\/api\/forums\/\d+\/threads$/, 30],
   [/^\/api\/users\/\d+\/(?:threads|posts)$/, 30],
   [/^\/api\/threads\/\d+$/, 60],
   [/^\/api\/users\/\d+$/, 60],
+  /* 右栏/聚合类匿名只读端点：游客每次 PV 都会真打 Worker + D1，扩容前完全没吃到边缘缓存。
+   * 全部以 `$` 锚定，避免 /api/threads/\d+ 与 /api/threads/hot-favorites、/:tid/hot-posts 互相抢占；
+   * 付费/写侧（/api/threads/:tid/paylist、/api/orders、/api/my/*）必须仍然不在列。 */
+  [/^\/api\/online$/, 30],
+  [/^\/api\/posts\/latest$/, 30],
+  [/^\/api\/rank\/users$/, 600],
+  [/^\/api\/rank\/threads$/, 3600],
+  [/^\/api\/rank\/forum$/, 300],
+  [/^\/api\/rank\/list$/, 300],
+  [/^\/api\/threads\/hot-favorites$/, 300],
+  [/^\/api\/threads\/\d+\/hot-posts$/, 60],
+  [/^\/api\/insert-codes$/, 60],
+  [/^\/api\/quick-reply-message$/, 300],
+  [/^\/api\/vip\/plans$/, 600],
+  [/^\/api\/payment-providers$/, 600],
+  [/^\/api\/checkin$/, 30],
 ];
 
 /** 爬虫预渲染 HTML 的 TTL（与 §16.1 R2 产物同步，1h） */
@@ -177,7 +194,12 @@ export function edgeCache() {
       const key = keyRequest(raw.url, ua, lang);
       const hit = await b.match(key);
       if (hit) {
-        c.res = withState(hit, 'HIT');
+        const out = withState(hit, 'HIT');
+        /* 缓存副本上的 max-age 只为让 Cloudflare 判定可缓存与 Edge TTL，不能随 HIT 下发给浏览器：
+         * HTTP 缓存键不含 Cookie，游客在 30s 窗口内登录后重新拉 /api/bootstrap 会被浏览器喂回
+         * 「游客版」（登录成功但顶栏仍是游客）。/files/* 例外——avatar 直链的 immutable 语义必须保留。 */
+        if (!filePrefix) out.headers.delete('cache-control');
+        c.res = out;
         return;
       }
       await next();

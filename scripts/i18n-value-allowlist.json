@@ -49,7 +49,7 @@
     "_comment": "与英语同形的该语言正字（非漏翻）。按语言登记，判定时整值实词全部命中才放行。",
     "de-de": ["avatar", "tags", "gold", "credits", "forum", "link", "online", "name", "moderator", "port", "system", "status", "version", "normal", "admin", "open", "source"],
     "es-es": ["avatar", "normal", "admin", "forum", "status", "version", "online"],
-    "fr-fr": ["avatar", "forum", "messages", "pagination", "type", "port", "action", "page", "images", "permanent", "source", "version", "credits", "points", "status", "online", "normal", "admin", "gold", "link", "name", "system", "moderator", "tags"]
+    "fr-fr": ["avatar", "avatars", "forum", "messages", "pagination", "type", "port", "action", "page", "images", "permanent", "source", "version", "credits", "points", "status", "online", "normal", "admin", "gold", "link", "name", "system", "moderator", "tags"]
   },
   "keys": [
     "de-de|admin.vip_group_option",

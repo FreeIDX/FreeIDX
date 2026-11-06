@@ -23,7 +23,7 @@ import { postMessageFmt } from '../../core/fmt';
 import { invalidateThreadSeo } from '../seo/generate';
 import { filesBucket } from '../attach/core';
 import { attachKeysByTids, purgeR2Objects } from '../../core/purge';
-import { extractImageUrls, extractSummary } from '../write/routes';
+import { extractImageUrls, extractSummary } from '../write/core';
 import type { ApiT } from '../../core/i18n';
 import { adminUidOf, as01, core, getExecCtx, intParam, patchRuntime, readJson, totalPageOf, type ReadEnv } from '../shared';
 

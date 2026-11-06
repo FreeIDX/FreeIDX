@@ -11,10 +11,11 @@
  */
 import { Hono, type Context } from 'hono';
 import { setCookie } from 'hono/cookie';
-import { ADMIN_TOKEN_TTL, Code, GroupId, type LoginReq, type RegisterReq } from '@freeidx/shared';
+import { ADMIN_TOKEN_TTL, BanScope, Code, GroupId, effectiveBanScope, type LoginReq, type RegisterReq } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { core, randomPresetAvatar, type ReadEnv } from '../shared';
 import { loadSetting, loadViewer, reqIp } from '../../core/loaders';
+import { banMessage } from '../../core/ban';
 import { createSession, destroySession, destroyUserSessions, ipToLong } from '../../core/auth/session';
 import { hashPassword, verifyClientPassword } from '../../core/auth';
 import { issueAccessToken, ACCESS_TOKEN_TTL } from '../../core/auth/jwt';
@@ -32,6 +33,13 @@ import { t0 } from '../../core/i18n';
 const EMAIL_CODE_TTL = 300;
 const SEND_MIN_INTERVAL = 60;
 const SEND_DAILY_CAP = 10;
+/**
+ * IP 维度发信预算：每小时每 IP 每场景 10 次。
+ * 邮箱维度挡不住「换邮箱轰炸」—— 攻击者可用任意多个地址逐个触发发信，把 SMTP 池的日额度
+ * 与发信信誉打光（退信/投诉反噬域名），受害者全是无关的真实收件人。
+ */
+const IP_SEND_CAP = 10;
+const IP_SEND_WINDOW = 3600;
 /** IP×账号失败计数 5 次锁 15min（设计新增） */
 
 /** c.executionCtx 在无 ExecutionContext 绑定的环境（本地/测试）会抛错——安全取用（与 write/routes.ts 同款） */
@@ -65,10 +73,35 @@ interface UserSessionRow {
   avatar: number;
   username: string;
   email: string;
+  /** 小黑屋（0025）：USER_SESSION_COLS 已投影，登录前置判定禁登位 */
+  ban_scope: number;
+  ban_until: number;
+  ban_reason: string;
 }
 
 const now = () => Math.floor(Date.now() / 1000);
 const ipLongOf = (c: Context<ReadEnv>): number => ipToLong(reqIp(c));
+
+/**
+ * 消耗一次「IP × 场景」发信预算，返回 false 表示已耗尽。
+ *
+ * 存储走 Cache 的 L2（bbs_cache；`send_ip:` 前缀在 cache/index.ts 已配成只挂 L2）：
+ * 多 isolate 一致、零新表、零 KV 写。计数在**发信前**自增，因此成功/失败都占额度，
+ * 避免「投递失败」被用来无限重试。
+ *
+ * 调用方约定：耗尽时必须静默降级为同构成功，绝不能抛错 —— 错误码本身就是信息泄露面。
+ */
+async function consumeIpSendBudget(
+  cache: { get: <T>(k: string) => Promise<T | null>; set: <T>(k: string, v: T, ttl?: number) => Promise<void> },
+  c: Context<ReadEnv>,
+  scene: string,
+): Promise<boolean> {
+  const key = `send_ip:${ipLongOf(c)}:${scene}`;
+  const used = (await cache.get<number>(key)) ?? 0;
+  if (used >= IP_SEND_CAP) return false;
+  await cache.set(key, used + 1, IP_SEND_WINDOW);
+  return true;
+}
 
 /**
  * 注册默认积分（kv 三键 d_credit/d_gold/d_rmb）：
@@ -134,22 +167,24 @@ export function authRoutes(): Hono<ReadEnv> {
     const ferr = isEmail(email, t);
     if (ferr) throw new AppError(Code.FORM_INVALID_EMAIL, ferr);
 
-    const scene = b.scene ?? '';
-    if (scene === 'user_create') {
-      // 注册场景校验序
-      if (!setting.userCreateOn) throw new AppError(Code.NOT_LOGIN, t('auth.registerDisabled'));
-      if (!setting.userCreateEmailOn) throw new AppError(Code.NOT_LOGIN, t('auth.emailVerifyDisabled'));
-      if (!provider) throw new AppError(Code.NOT_LOGIN, t('auth.mailUnconfigured'));
-      const dup = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
-      if (dup) throw new AppError(Code.FORM_EMAIL_EXISTS, t('auth.emailExists'));
-    } else if (scene === 'user_resetpw') {
-      const u = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
-      if (!u) throw new AppError(Code.FORM_INVALID_EMAIL, t('auth.emailNotRegistered'));
-      if (!setting.userResetpwOn) throw new AppError(Code.NOT_LOGIN, t('auth.resetDisabled'));
-      if (!provider) throw new AppError(Code.NOT_LOGIN, t('auth.mailUnconfigured'));
-    } else {
-      throw new AppError(Code.VALIDATION_ERROR, t('auth.sceneInvalid'));
-    }
+    /**
+     * 只允许注册场景（6 位数字码）。找回密码**不走本接口**，它发放的是一次性 token 链接
+     * （/api/auth/password-reset/request|confirm）。
+     *
+     * 若这里也接受 user_resetpw，两条链路会共用同一个 email_code scene，后果三条：
+     *  (a) 本接口发放的 6 位数字码会被 /password-reset/confirm 当作 token 接受
+     *      —— 等于绕过邮件链接、对任意已注册邮箱重置密码；
+     *  (b) 两套频控口径互相挤占；
+     *  (c) 本接口对未注册邮箱必须明说不存在，正好给找回密码的防枚举开了侧门。
+     */
+    const scene = 'user_create';
+    if (b.scene !== scene) throw new AppError(Code.VALIDATION_ERROR, t('auth.sceneInvalid'));
+    // 注册场景校验序
+    if (!setting.userCreateOn) throw new AppError(Code.NOT_LOGIN, t('auth.registerDisabled'));
+    if (!setting.userCreateEmailOn) throw new AppError(Code.NOT_LOGIN, t('auth.emailVerifyDisabled'));
+    if (!provider) throw new AppError(Code.NOT_LOGIN, t('auth.mailUnconfigured'));
+    const dup = await db.prepare('SELECT uid FROM bbs_user WHERE email = ?').bind(email).first<{ uid: number }>();
+    if (dup) throw new AppError(Code.FORM_EMAIL_EXISTS, t('auth.emailExists'));
 
     // 频控：同 email+scene 60s 一次、每日上限（email_code 表口径，跨 isolate 一致）
     const ts = now();
@@ -170,6 +205,8 @@ export function authRoutes(): Hono<ReadEnv> {
       .bind(email, scene, dayStart)
       .first<{ c: number }>();
     if (Number(cnt?.c ?? 0) >= SEND_DAILY_CAP) throw new AppError(Code.RATE_LIMITED, t('auth.sendDailyCap'));
+    // IP 维度：同 IP 换邮箱批量索码同样要挡（本接口不防枚举，可直接返回限流错误）
+    if (!(await consumeIpSendBudget(cache, c, scene))) throw new AppError(Code.RATE_LIMITED, t('auth.sendTooFrequent'));
 
     const code = String(100000 + Math.floor(Math.random() * 900000));
     await db
@@ -259,7 +296,7 @@ export function authRoutes(): Hono<ReadEnv> {
     for (const [creditType, change, suffix] of defaults) {
       if (change === 0) continue;
       grantStmts.push(
-        ...creditDeltaStmts({ db, cache }, { uid, creditType, change, reason: 'register', bizKey: `register:${uid}${suffix}`, ts: ts }),
+        ...creditDeltaStmts({ db }, { uid, creditType, change, reason: 'register', bizKey: `register:${uid}${suffix}`, ts: ts }),
       );
     }
     if (grantStmts.length) await db.batch(grantStmts);
@@ -305,6 +342,20 @@ export function authRoutes(): Hono<ReadEnv> {
       throw new AppError(Code.FORM_PASSWORD_MISMATCH, t('auth.passwordWrong'));
     }
     await cache.del(failKey);
+
+    /**
+     * 小黑屋（0025）：禁登位必须在**签发会话之前**判定。
+     * 放到 banGuard 里是不够的——那时用户已拿到有效 sid/at，表现为「登录成功、随即被踢」，
+     * 且被禁登的会话会真实落库占用在线统计。禁言/禁访不拦登录（banGuard 管后续读/写）。
+     */
+    const banScope = effectiveBanScope(user.ban_scope, user.ban_until, now());
+    if (banScope & BanScope.LOGIN) {
+      throw new AppError(
+        Code.BANNED,
+        banMessage(banScope, Number(user.ban_until ?? 0), String(user.ban_reason ?? ''), t),
+        { banScope, banUntil: Number(user.ban_until ?? 0) },
+      );
+    }
 
     const ts = now();
     await db
@@ -399,15 +450,29 @@ export function authRoutes(): Hono<ReadEnv> {
     if (!u) return ok(c, t('auth.resetMailSent'));
 
     const ts = now();
+    /**
+     * 频控口径与 /api/auth/email-code 一致（同 email+scene：60s 一次、自然日 10 封），
+     * 但**命中限流时不能抛错**：错误码会把「已注册且刚请求过」与「未注册」区分开，
+     * 等于把上面的防枚举做穿。故命中即回同构成功，不发信、不落 token。
+     */
     const last = await db
       .prepare<{ create_date: number }>(
         'SELECT create_date FROM bbs_email_code WHERE email = ? AND scene = ? ORDER BY id DESC LIMIT 1',
       )
       .bind(email, RESET_SCENE)
       .first<{ create_date: number }>();
-    if (last && ts - Number(last.create_date) < SEND_MIN_INTERVAL) {
-      throw new AppError(Code.RATE_LIMITED, t('auth.sendTooFrequent'));
-    }
+    if (last && ts - Number(last.create_date) < SEND_MIN_INTERVAL) return ok(c, t('auth.resetMailSent'));
+    const dayStart = Math.floor(ts / 86400) * 86400;
+    const sentToday = await db
+      .prepare<{ c: number }>(
+        'SELECT COUNT(*) AS c FROM bbs_email_code WHERE email = ? AND scene = ? AND create_date >= ?',
+      )
+      .bind(email, RESET_SCENE, dayStart)
+      .first<{ c: number }>();
+    if (Number(sentToday?.c ?? 0) >= SEND_DAILY_CAP) return ok(c, t('auth.resetMailSent'));
+    // IP 维度：换邮箱轰炸同样按同构成功静默降级（这里任何错误码都会泄露「该邮箱已注册」）
+    if (!(await consumeIpSendBudget(cache, c, RESET_SCENE))) return ok(c, t('auth.resetMailSent'));
+
     const token = randomTokenHex();
     // 单活一次性：旧未用 token 作废
     await db
