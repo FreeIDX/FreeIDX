@@ -7,7 +7,7 @@ import { effectiveBanScope, normForumNameI18n } from '@freeidx/shared';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
 import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
-import { forumLangOf, loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
+import { forumLangOf, forumRankCompare, loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
 import { remember } from '../../core/cache';
 import { getEmailProvider } from '../../core/email';
 import { getExtensions } from '../../core/extensions';
@@ -32,7 +32,7 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
     ]);
     const visible = forumListAccessFilter(forumlist, viewer.gid, grouplist);
     const nodes = Object.values(visible)
-      .sort((a, b) => b.rank - a.rank || a.fid - b.fid)
+      .sort(forumRankCompare)
       .map((f) => ({
         fid: f.fid,
         name: f.name,

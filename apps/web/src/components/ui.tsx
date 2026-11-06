@@ -312,8 +312,9 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   const [collapsed, toggle] = useSideNavCollapsed();
   const itemCls = (active: boolean) =>
     cx(
-      'flex h-10 items-center gap-2.5 rounded-[5px] px-3 text-sm leading-6 transition-colors outline-none',
-      collapsed && 'justify-center gap-0 px-0',
+      /* min-h + py：单行仍为 40px；多语言长名称换行后自然撑高，不截断 */
+      'flex min-h-10 items-center gap-2.5 rounded-[5px] px-3 py-2 text-sm leading-6 transition-colors outline-none',
+      collapsed && 'justify-center gap-0 px-0 py-0',
       active ? 'bg-[rgba(41,151,247,0.1)] font-medium text-[#2997f7]' : 'text-foreground hover:bg-lt-hover',
     );
   const toggleLabel = collapsed ? t('side_nav_expand') : t('side_nav_collapse');
@@ -327,7 +328,8 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
       ) : (
         <Icon name="folder" className="size-[20px] shrink-0 text-zh-grey" aria-hidden="true" />
       )}
-      {!collapsed && <span className="truncate">{fname(f)}</span>}
+      {/* 版块名多语言：俄语/德语等较长时换行显示，break-words 兜底超长单词 */}
+      {!collapsed && <span className="min-w-0 flex-1 break-words">{fname(f)}</span>}
     </Link>
   );
   return (
@@ -350,7 +352,7 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
                   className={itemCls(!!it.active)}
                 >
                   <Icon name={it.icon} className={cx('size-[20px] shrink-0', it.active ? 'text-brand' : 'text-zh-grey')} />
-                  {!collapsed && <span className="truncate">{it.label}</span>}
+                  {!collapsed && <span className="min-w-0 flex-1 break-words">{it.label}</span>}
                 </Link>
               </li>
             ))}

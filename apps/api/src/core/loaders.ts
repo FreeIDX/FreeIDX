@@ -91,11 +91,19 @@ export async function loadGrouplist(
   });
 }
 
+/**
+ * 版块展示序：后台「排序」(rank) 数字越小越靠前，同值按 fid 稳定兜底。
+ * forumlist 缓存以 fid 为数字键，Object.values 会按 fid 重排，故列表输出必须显式用本比较器排序。
+ */
+export function forumRankCompare<T extends { rank: number; fid: number }>(a: T, b: T): number {
+  return a.rank - b.rank || a.fid - b.fid;
+}
+
 /** 版块树 + access 矩阵（一次组装进缓存，命中零 D1——§7 forumlist 行） */
 export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<number, ForumRow>> {
   return remember(cache, 'forumlist', async () => {
     const [forums, access] = await Promise.all([
-      db.prepare<ForumRow>(`SELECT ${FORUM_COLS} FROM bbs_forum ORDER BY rank DESC, fid ASC`).all(),
+      db.prepare<ForumRow>(`SELECT ${FORUM_COLS} FROM bbs_forum ORDER BY rank ASC, fid ASC`).all(),
       db
         .prepare<{ fid: number; gid: number } & AccessRow>(
           'SELECT fid,gid,allowread,allowthread,allowpost,allowattach,allowdown FROM bbs_forum_access',

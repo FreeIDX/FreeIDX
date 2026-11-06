@@ -769,7 +769,8 @@ export function Layout({ children }: { children?: ReactNode }) {
                             <Icon name="folder" className="size-4 text-zh-grey" />
                           </span>
                         )}
-                        <span className="w-full truncate text-[11px] leading-tight text-foreground">
+                        {/* 宫格窄（4 列），长名称最多两行并断词，避免单行截断后无法辨认 */}
+                        <span className="line-clamp-2 w-full break-words text-[11px] leading-tight text-foreground" title={fname(f)}>
                           {fname(f)}
                         </span>
                       </Link>

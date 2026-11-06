@@ -24,7 +24,7 @@ import {
 } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
-import { forumLangOf, loadForumlist, loadGrouplist } from '../../core/loaders';
+import { forumLangOf, forumRankCompare, loadForumlist, loadGrouplist } from '../../core/loaders';
 import { ipToLong } from '../../core/auth/session';
 import { postMessageFmt } from '../../core/fmt';
 import { invalidateThreadSeo } from '../seo/generate';
@@ -134,8 +134,11 @@ export function adminForumRoutes(): Hono<ReadEnv> {
   app.get('/api/admin/forums', async (c) => {
     const { db, cache } = core(c);
     const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
-    /* name_i18n 原样是 JSON 串，这里解析成对象直接给后台表单用（解析失败按未配置处理） */
-    const forums = Object.values(forumlist).map((f) => ({ ...f, name_i18n: normForumNameI18n(f.name_i18n) }));
+    /* name_i18n 原样是 JSON 串，这里解析成对象直接给后台表单用（解析失败按未配置处理）；
+       与前台同一排序口径（rank 升序），后台表格保存后可见真实展示顺序 */
+    const forums = Object.values(forumlist)
+      .sort(forumRankCompare)
+      .map((f) => ({ ...f, name_i18n: normForumNameI18n(f.name_i18n) }));
     return ok(c, 'ok', { data: { forums, groups: Object.values(grouplist) } });
   });
 

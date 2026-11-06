@@ -75,6 +75,24 @@ describe('版块管理 CRUD（T3-5）', () => {
     expect(data.groups.length).toBe(2);
   });
 
+  it('GET：版块列表按 rank 升序（与前台展示顺序一致）', async () => {
+    const rs = rules();
+    rs[rs.findIndex((r) => r.test.source.includes('FROM bbs_forum ORDER BY'))] = {
+      test: /SELECT .* FROM bbs_forum ORDER BY/,
+      rows: () => [
+        { fid: 2, name: '排后', accesson: 0, rank: 9, threads: 0 },
+        { fid: 8, name: '排前', accesson: 0, rank: 1, threads: 0 },
+      ],
+    };
+    const { db } = fakeD1Sql(rs);
+    const env = { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: {} };
+    const res = await app.request('/api/admin/forums', { headers: { cookie: `admin_at=${await token()}` } }, env as never);
+    const body = await jsonOf(res);
+    expect(body.code).toBe(Code.OK);
+    const data = body.data as { forums: { name: string }[] };
+    expect(data.forums.map((f) => f.name)).toEqual(['排前', '排后']);
+  });
+
   it('POST：创建版块 RETURNING fid，写 access 矩阵并清 forumlist 缓存', async () => {
     const { env, calls } = makeEnv();
     const res = await app.request(

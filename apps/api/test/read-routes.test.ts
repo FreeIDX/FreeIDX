@@ -206,6 +206,23 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(d.setting.mailOn).toBe(false);
   });
 
+  it('GET /api/bootstrap：版块按后台 rank 升序下发，rank 相同按 fid 升序', async () => {
+    const rules = baseRules({
+      forum: [
+        { ...FORUM_OPEN, fid: 7, name: '社区问答', rank: 7 },
+        { ...FORUM_OPEN, fid: 1, name: '智能工具', rank: 1 },
+        { ...FORUM_OPEN, fid: 4, name: '游戏软件', rank: 4 },
+        { ...FORUM_OPEN, fid: 2, name: '开发套餐', rank: 1 },
+      ],
+    });
+    const { env, calls } = envFor(rules);
+    const body = await json(await app.request('/api/bootstrap', {}, env as never));
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { forumlist: { fid: number; name: string }[] };
+    expect(d.forumlist.map((f) => f.name)).toEqual(['智能工具', '开发套餐', '游戏软件', '社区问答']);
+    expect(calls.some((c) => /FROM bbs_forum ORDER BY rank ASC, fid ASC/.test(c.sql))).toBe(true);
+  });
+
   it('GET /api/bootstrap：版块绑定语言下发，且 locale 形式归一化为内容语言（0024）', async () => {
     const rules = baseRules({ forum: [{ ...FORUM_OPEN, lang: 'ja-jp' }] });
     const { env } = envFor(rules);

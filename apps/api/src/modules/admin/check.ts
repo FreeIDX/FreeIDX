@@ -128,7 +128,7 @@ export function adminCheckRoutes(): Hono<ReadEnv> {
       .prepare<Record<string, unknown>>('SELECT gid, name, thread_check, post_check, see_check, edit_check FROM bbs_group ORDER BY gid')
       .all();
     const forums = await db
-      .prepare<Record<string, unknown>>('SELECT fid, name, thread_check, post_check, edit_check FROM bbs_forum ORDER BY rank DESC, fid')
+      .prepare<Record<string, unknown>>('SELECT fid, name, thread_check, post_check, edit_check FROM bbs_forum ORDER BY rank ASC, fid')
       .all();
     return ok(c, 'ok', {
       data: {
