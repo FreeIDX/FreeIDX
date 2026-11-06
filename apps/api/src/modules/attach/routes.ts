@@ -22,11 +22,15 @@ import { decodeBase64, intParam, type ReadEnv } from '../shared';
 import type { ApiT } from '../../core/i18n';
 import {
   ATTACH_MAX_BYTES,
+  ATTACH_THUMB_MAX_BYTES,
   attachKey,
+  attachObjectKeys,
   fileExt,
   filesBucket,
+  isWebp,
   mimeFor,
   storageExt,
+  thumbKey,
   tmpKey,
   ymDir,
   attachType,
@@ -83,6 +87,8 @@ async function createAttachment(c: Ctx): Promise<Response> {
 
   let name = '';
   let bytes: Uint8Array | null = null;
+  /** 列表缩略图（可选，客户端 canvas 生成）：缺失/非法一律忽略，绝不阻断上传 */
+  let thumbBytes: Uint8Array | null = null;
   let isimage = 0;
   let width = 0;
   let height = 0;
@@ -95,6 +101,10 @@ async function createAttachment(c: Ctx): Promise<Response> {
     if (file && typeof file.arrayBuffer === 'function') {
       name = String(fd.get('name') ?? file.name ?? '');
       bytes = new Uint8Array(await file.arrayBuffer());
+    }
+    const thumb = fd.get('thumb') as unknown as { arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+    if (thumb && typeof thumb.arrayBuffer === 'function') {
+      thumbBytes = new Uint8Array(await thumb.arrayBuffer());
     }
     isimage = Number(fd.get('is_image') ?? 0);
     width = Number(fd.get('width') ?? 0);
@@ -141,6 +151,16 @@ async function createAttachment(c: Ctx): Promise<Response> {
   const aid = Number(row?.aid ?? 0);
   if (!aid) throw new AppError(Code.SYSTEM_ERROR, t('attach.writeFailed'));
 
+  /* 缩略图落盘（仅图片）：体积/魔数任一不符就丢弃——它是纯优化，失败了预览自动回退原图。
+     key 用 aid 而非派生自 filename，故无需在 associateAttachments 里跟着移动。 */
+  if (thumbBytes && isimage > 0 && thumbBytes.length <= ATTACH_THUMB_MAX_BYTES && isWebp(thumbBytes)) {
+    try {
+      await filesBucket(c.env).put(thumbKey(aid), thumbBytes, { httpMetadata: { contentType: 'image/webp' } });
+    } catch {
+      /* 忽略：无缩略图时前置回退原图 */
+    }
+  }
+
   return ok(c, t('attach.uploadDone'), {
     data: {
       aid,
@@ -186,7 +206,8 @@ async function deleteAttachment(c: Ctx): Promise<Response> {
   await core.db.batch([
     core.db.prepare('DELETE FROM bbs_attach WHERE aid = ?').bind(aid) as unknown as Stmt,
   ]);
-  await filesBucket(c.env).delete(a.filename);
+  // 原件 + 缩略图一次批删（R2 批量删除按 1 个子请求计）；缩略图缺失不算失败
+  await filesBucket(c.env).delete(attachObjectKeys(aid, a.filename));
   return ok(c, t('common.deleted'), { data: { aid } });
 }
 
@@ -302,13 +323,21 @@ async function previewAttachment(c: Ctx): Promise<Response> {
     }
     gated = price > 0 || Number(th.content_buy ?? 0) > 0;
   }
-  const data = await bucketBytes(c, a.filename);
+  /* `?t=1` = 列表缩略图：命中返回 400px WebP，缺失自动回退原图（存量附件零影响）。
+     权限判定在上方已全部走完——读哪个对象都不改变可见性，故复用同一套闸门。 */
+  const thumb = c.req.query('t') === '1' ? await bucketBytes(c, thumbKey(aid)) : null;
+  const data = thumb ?? (await bucketBytes(c, a.filename));
   if (!data) throw new AppError(Code.NOT_FOUND, t('attach.fileNotFound'));
-  const ct = Number(a.isimage) > 0 ? mimeFor(fileExt(a.filename)) : 'application/octet-stream';
+  const ct = thumb
+    ? 'image/webp'
+    : Number(a.isimage) > 0
+      ? mimeFor(fileExt(a.filename))
+      : 'application/octet-stream';
   return new Response(data, {
     headers: {
       'content-type': ct,
-      'content-disposition': disposition('inline', a.orgfilename || `aid-${aid}`),
+      // 缩略图是转码后的 WebP，沿用原文件名会让「另存为」得到名不副实的扩展名
+      'content-disposition': disposition('inline', thumb ? `aid-${aid}.webp` : a.orgfilename || `aid-${aid}`),
       // 受限期件的响应不得进公共缓存（否则未购者可经边缘/浏览器缓存取到）
       'cache-control': Number(a.status) === 1 && !gated ? 'public, max-age=86400' : 'private, no-store',
     },

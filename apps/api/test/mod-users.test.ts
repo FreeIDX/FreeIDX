@@ -34,7 +34,7 @@ function deleteRules(): SqlRule[] {
     // userPurgeStmts：他主题内回帖的 thread.posts 回退（B1 后仅统计已过审回帖）
     { test: /SELECT tid, COUNT\(\*\) AS c FROM bbs_post WHERE uid = \? AND isfirst = 0 AND ok = 1 GROUP BY tid/, rows: [{ tid: 20, c: 1 }] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
-    { test: /SELECT filename FROM bbs_attach/, rows: [] },
+    { test: /SELECT aid,filename FROM bbs_attach/, rows: [] },
     { test: /UPDATE bbs_|DELETE FROM bbs_|INSERT/, rows: [] },
   ];
 }
@@ -117,7 +117,7 @@ describe('版务删用户（T3-2）', () => {
     expect(s).toMatch(/DELETE FROM bbs_mypost WHERE tid IN/);
     expect(s).toMatch(/DELETE FROM bbs_mythread WHERE tid IN/);
     expect(s).toMatch(/DELETE FROM bbs_attach WHERE tid IN/);
-    expect(s).toMatch(/SELECT filename FROM bbs_attach WHERE uid = \? OR tid IN/);
+    expect(s).toMatch(/SELECT aid,filename FROM bbs_attach WHERE uid = \? OR tid IN/);
     expect(s).toMatch(/UPDATE bbs_forum SET threads = threads - \?/);
     expect(s).toMatch(/UPDATE bbs_thread SET posts = posts - \? WHERE tid = \?/); // 他主题回帖回退
     // 他人作者 posts 回退（uid=3, c=2）

@@ -98,6 +98,30 @@ export const tmpKey = (uid: number, ext: string): string => `tmp/${uid}_${randTo
 /** 正式附件 R2 key：attach/{YYYYmm}/{rand}.{ext} */
 export const attachKey = (ym: string, ext: string): string => `attach/${ym}/${randToken(20)}.${ext}`;
 
+/* ---------------- 列表缩略图（性能项 C6） ----------------
+ * 列表里 <img> 只有 100px 高，却直接引用原图（实测单张 410KB）。缩略图由客户端 canvas
+ * 生成后随原件一起上传，服务端只做校验与落盘——Workers 没有图像编解码器，不能在这里生成。
+ * 键按 aid 而非从 filename 派生：tmp→attach 关联移动时缩略图不必跟着搬（省 3 个子请求/图），
+ * 且撤销上传 / 临时件 GC / 孤儿清理 / 真删四条路径都握有 aid。
+ */
+
+/** 缩略图体积上限：400px 长边 WebP 实测 15~35KB，留一倍余量 */
+export const ATTACH_THUMB_MAX_BYTES = 65_536;
+
+/** 缩略图 R2 key：attach/thumb/{aid}.webp */
+export const thumbKey = (aid: number): string => `attach/thumb/${aid}.webp`;
+
+/** 附件在 R2 上的**全部**对象（原件 + 缩略图）——删除/回收路径统一走它，避免漏删派生对象 */
+export const attachObjectKeys = (aid: number, filename: string): string[] =>
+  filename ? [filename, thumbKey(aid)] : [thumbKey(aid)];
+
+/** WebP 魔数校验（RIFF....WEBP）：客户端可伪造，落盘前必须验真 */
+export function isWebp(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  const tag = (off: number): string => String.fromCharCode(...bytes.subarray(off, off + 4));
+  return tag(0) === 'RIFF' && tag(8) === 'WEBP';
+}
+
 /** R2 list 的单页结果（只投影维护页需要的字段：key / 上传时间） */
 export interface FilesListPage {
   objects: { key: string; size?: number; uploaded?: Date | string }[];

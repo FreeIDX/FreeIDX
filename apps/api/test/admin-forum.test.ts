@@ -38,7 +38,7 @@ function rules(): SqlRule[] {
     { test: /UPDATE bbs_thread_top SET/, rows: [] },
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN/, rows: () => [{ uid: 7, c: 3 }] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
-    { test: /SELECT filename FROM bbs_attach/, rows: [] },
+    { test: /SELECT aid,filename FROM bbs_attach/, rows: [] },
     { test: /UPDATE bbs_user SET/, rows: [] },
     { test: /DELETE FROM bbs_/, rows: [] },
   ];

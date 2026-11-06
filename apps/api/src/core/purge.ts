@@ -6,6 +6,7 @@
  * 附件 R2 对象由调用方在 batch 前用 attachKeysBy* 收集、batch 后经 purgeR2Objects 尽力删除。
  */
 import type { D1b, Stmt } from './db';
+import { attachObjectKeys } from '../modules/attach/core';
 
 /** 今日统计口径（B5）：daily cron 于每日 03:00 UTC 重置 today*；「当日」= 距最近一次重置以来的窗口。 */
 export function dailyResetBoundary(ts: number): number {
@@ -225,13 +226,18 @@ export async function userPurgeStmts(db: D1b, uid: number): Promise<{ stmts: Stm
  * 故真删前先收集 key，batch 后经 waitUntil 尽力而为删除，失败不影响 D1 一致性。
  * ------------------------------------------------------------------ */
 
+/** 附件行 → R2 对象 key 列表（原件 + 缩略图）：所有回收路径共用，避免漏删派生对象 */
+type AttachKeyRow = { aid: number; filename: string };
+const keysOfRows = (rows: AttachKeyRow[]): string[] =>
+  rows.flatMap((x) => attachObjectKeys(Number(x.aid), String(x.filename ?? '')));
+
 /** 主题内全部附件 key（thread_delete 前调用） */
 export async function attachKeysByTid(db: D1b, tid: number): Promise<string[]> {
   const r = await db
-    .prepare<{ filename: string }>('SELECT filename FROM bbs_attach WHERE tid = ?')
+    .prepare<AttachKeyRow>('SELECT aid,filename FROM bbs_attach WHERE tid = ?')
     .bind(tid)
     .all();
-  return r.results.map((x) => String(x.filename)).filter(Boolean);
+  return keysOfRows(r.results);
 }
 
 /** 多主题内全部附件 key（删版块等批量真删前调用） */
@@ -239,45 +245,67 @@ export async function attachKeysByTids(db: D1b, tids: number[]): Promise<string[
   if (!tids.length) return [];
   const inList = tids.map(() => '?').join(',');
   const r = await db
-    .prepare<{ filename: string }>(`SELECT filename FROM bbs_attach WHERE tid IN (${inList})`)
+    .prepare<AttachKeyRow>(`SELECT aid,filename FROM bbs_attach WHERE tid IN (${inList})`)
     .bind(...tids)
     .all();
-  return r.results.map((x) => String(x.filename)).filter(Boolean);
+  return keysOfRows(r.results);
 }
 
 /** 楼层附件 key（post_delete 前调用） */
 export async function attachKeysByPid(db: D1b, pid: number): Promise<string[]> {
   const r = await db
-    .prepare<{ filename: string }>('SELECT filename FROM bbs_attach WHERE pid = ?')
+    .prepare<AttachKeyRow>('SELECT aid,filename FROM bbs_attach WHERE pid = ?')
     .bind(pid)
     .all();
-  return r.results.map((x) => String(x.filename)).filter(Boolean);
+  return keysOfRows(r.results);
 }
 
 /** 用户级联删的附件 key：本人上传 + 本人主题内他人上传（与 userPurgeStmts 的删除范围一致） */
 export async function attachKeysForUserPurge(db: D1b, uid: number, tids: number[]): Promise<string[]> {
   if (!tids.length) {
-    const only = await db.prepare<{ filename: string }>('SELECT filename FROM bbs_attach WHERE uid = ?').bind(uid).all();
-    return only.results.map((x) => String(x.filename)).filter(Boolean);
+    const only = await db.prepare<AttachKeyRow>('SELECT aid,filename FROM bbs_attach WHERE uid = ?').bind(uid).all();
+    return keysOfRows(only.results);
   }
   const inList = tids.map(() => '?').join(',');
   const r = await db
-    .prepare<{ filename: string }>(`SELECT filename FROM bbs_attach WHERE uid = ? OR tid IN (${inList})`)
+    .prepare<AttachKeyRow>(`SELECT aid,filename FROM bbs_attach WHERE uid = ? OR tid IN (${inList})`)
     .bind(uid, ...tids)
     .all();
-  return r.results.map((x) => String(x.filename)).filter(Boolean);
+  return keysOfRows(r.results);
 }
 
-/** 尽力而为删除 R2 对象（有 waitUntil 则旁路，否则原地 await；单个失败静默） */
+/** R2 批量删除单次上限（官方：一次最多 1000 个 key），分片留余量 */
+const R2_DELETE_CHUNK = 900;
+
+/**
+ * 尽力而为删除 R2 对象（有 waitUntil 则旁路，否则原地 await；失败静默）。
+ *
+ * 走 R2 批量删除：一次调用销毁多个对象、按 1 个子请求计。附件 key 现在同时含原件与缩略图
+ * （数量翻倍），逐 key 删除会成倍吃掉子请求预算；批量不可用时自动回落逐 key。
+ */
 export function purgeR2Objects(
   env: { FILES?: unknown },
   exec: { waitUntil?: (pr: Promise<unknown>) => void } | undefined,
   keys: string[],
 ): void {
   if (!keys.length) return;
-  const bucket = env.FILES as { delete?: (k: string) => unknown } | undefined;
+  const bucket = env.FILES as { delete?: (k: string | string[]) => unknown } | undefined;
   if (!bucket || typeof bucket.delete !== 'function') return;
-  const work = Promise.all(keys.map((k) => Promise.resolve(bucket.delete!(k)).catch(() => undefined)));
+  const del = bucket.delete;
+  const work = (async () => {
+    for (let i = 0; i < keys.length; i += R2_DELETE_CHUNK) {
+      const chunk = keys.slice(i, i + R2_DELETE_CHUNK);
+      try {
+        await Promise.resolve(del.call(bucket, chunk));
+      } catch {
+        await Promise.all(
+          chunk.map((k) => Promise.resolve()
+            .then(() => del.call(bucket, k))
+            .catch(() => undefined)),
+        );
+      }
+    }
+  })();
   if (exec?.waitUntil) exec.waitUntil(work);
   else void work;
 }

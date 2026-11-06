@@ -7,7 +7,7 @@ import { queueGc } from '../src/core/queue';
 
 const NOW = 1_700_000_000;
 
-function deps(rs: SqlRule[], files?: { delete?: (k: string) => unknown }) {
+function deps(rs: SqlRule[], files?: { delete?: (k: string | string[]) => unknown }) {
   const { db, calls } = fakeD1Sql(rs);
   const d1 = D1b.of(db as unknown as D1Database);
   const kv = fakeKv();
@@ -152,13 +152,20 @@ describe('临时附件 GC（每小时档：先删对象再删行，批量对齐�
 
   it('先删 R2 对象、再删 D1 行；返回实际删除条数', async () => {
     const deleted: string[] = [];
-    const files = { delete: (k: string) => void deleted.push(k) };
+    const files = { delete: (k: string | string[]) => void (Array.isArray(k) ? deleted.push(...k) : deleted.push(k)) };
     const rows = [1, 2, 3].map((i) => ({ aid: i, filename: `tmp/${i}.png` }));
     const d = deps([...staleRules(rows), ...common], files);
     const n = await attachGc(d.cron, NOW);
     expect(n).toBe(3);
-    // 每个对象都被尝试删除（时间窗与批量生效）
-    expect(deleted).toEqual(['tmp/1.png', 'tmp/2.png', 'tmp/3.png']);
+    // 每个对象都被尝试删除（时间窗与批量生效）；缩略图按 aid 推导，与原件一并批删
+    expect(deleted).toEqual([
+      'tmp/1.png',
+      'attach/thumb/1.webp',
+      'tmp/2.png',
+      'attach/thumb/2.webp',
+      'tmp/3.png',
+      'attach/thumb/3.webp',
+    ]);
     const del = d.calls.find((c) => /DELETE FROM bbs_attach WHERE aid IN/.test(c.sql));
     expect(del?.params).toEqual([1, 2, 3]);
     expect(d.calls.find((c) => /FROM bbs_attach WHERE status = 0/.test(c.sql))?.params[1]).toBe(40);
@@ -166,8 +173,9 @@ describe('临时附件 GC（每小时档：先删对象再删行，批量对齐�
 
   it('对象删除失败 → 保留该行 D1 元数据（下轮重试），不产生 R2 孤儿', async () => {
     const files = {
-      delete: (k: string) => {
-        if (k.endsWith('2.png')) throw new Error('r2 unavailable');
+      delete: (k: string | string[]) => {
+        const keys = Array.isArray(k) ? k : [k];
+        if (keys.some((x) => x.endsWith('2.png'))) throw new Error('r2 unavailable');
       },
     };
     const rows = [1, 2, 3].map((i) => ({ aid: i, filename: `tmp/${i}.png` }));

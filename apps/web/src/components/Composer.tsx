@@ -11,6 +11,7 @@ import { Image as TiptapImage } from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import { deleteAttachment, uploadAttachment } from '../lib/api';
 import { apiErrorMessage } from '../lib/errors';
+import { fileToWebpThumb } from '../lib/image';
 import { useT } from '../lib/i18n';
 import { Turnstile, turnstileDisabled } from './Turnstile';
 import { Button } from './ui';
@@ -133,8 +134,9 @@ export function Composer(props: ComposerProps) {
     setUploading(true);
     setError('');
     try {
-      const { w, h } = await readDims(file);
-      const r = await uploadAttachment(file, { isImage: true, width: w, height: h });
+      /* 尺寸与缩略图并行算：缩略图失败返回 null，上传照常（列表回退原图） */
+      const [{ w, h }, thumb] = await Promise.all([readDims(file), fileToWebpThumb(file)]);
+      const r = await uploadAttachment(file, { isImage: true, width: w, height: h, thumb });
       editor.chain().focus().setImage({ src: r.url, alt: r.orgfilename }).run();
       const next = [...attachRef.current, { aid: r.aid, name: r.orgfilename, isImage: true }];
       attachRef.current = next;

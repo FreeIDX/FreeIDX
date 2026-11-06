@@ -27,7 +27,7 @@ import { BUDGET } from '../../core/db/budget';
 import type { D1b } from '../../core/db';
 import { attachGc, calibrateCounters, cronFiveMin } from '../../core/cron';
 import { queueGc } from '../../core/queue';
-import { filesBucket } from '../attach/core';
+import { attachObjectKeys, filesBucket } from '../attach/core';
 import { adminUidOf, core, intParam, readJsonObject, type ReadEnv } from '../shared';
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -181,7 +181,8 @@ async function removeAttachBatch(
   let objectFailed = 0;
   for (const r of rows.results) {
     try {
-      await bucket.delete(String(r.filename));
+      // 原件 + 缩略图一次批删（R2 批量删除按 1 个子请求计，不增加本批预算占用）
+      await bucket.delete(attachObjectKeys(Number(r.aid), String(r.filename)));
       removed.push(Number(r.aid));
     } catch {
       objectFailed++;
@@ -344,12 +345,34 @@ async function judgePage(db: D1b, prefix: R2Prefix, keys: string[]): Promise<{ u
   }
 
   if (prefix === 'attach') {
-    const placeholders = keys.map(() => '?').join(',');
-    const rows = await db
-      .prepare<{ filename: string }>(`SELECT filename FROM bbs_attach WHERE filename IN (${placeholders})`)
-      .bind(...keys)
-      .all();
-    const alive = new Set(rows.results.map((r) => String(r.filename)));
+    /* attach/ 下有两类对象：正式附件 `attach/YYYYmm/xxx.ext`（对照 bbs_attach.filename）
+       与列表缩略图 `attach/thumb/{aid}.webp`（对照 bbs_attach.aid）。
+       必须分别反查——只按 filename 查会把缩略图判成孤儿并删掉（页面缩略图静默回退原图/404）。 */
+    const thumbRe = /^attach\/thumb\/(\d+)\.webp$/;
+    const plain: string[] = [];
+    const thumbAids: number[] = [];
+    for (const k of keys) {
+      const m = thumbRe.exec(k);
+      if (m) thumbAids.push(Number(m[1]));
+      else plain.push(k);
+    }
+    const alive = new Set<string>();
+    if (plain.length) {
+      const placeholders = plain.map(() => '?').join(',');
+      const rows = await db
+        .prepare<{ filename: string }>(`SELECT filename FROM bbs_attach WHERE filename IN (${placeholders})`)
+        .bind(...plain)
+        .all();
+      for (const r of rows.results) alive.add(String(r.filename));
+    }
+    if (thumbAids.length) {
+      const placeholders = thumbAids.map(() => '?').join(',');
+      const rows = await db
+        .prepare<{ aid: number }>(`SELECT aid FROM bbs_attach WHERE aid IN (${placeholders})`)
+        .bind(...thumbAids)
+        .all();
+      for (const r of rows.results) alive.add(`attach/thumb/${Number(r.aid)}.webp`);
+    }
     const unused = keys.filter((k) => !alive.has(k));
     return { unused, used: keys.length - unused.length };
   }
@@ -576,7 +599,8 @@ export function adminMaintenanceRoutes(): Hono<ReadEnv> {
     let affected = 0;
     let detail: Record<string, unknown> = {};
 
-    const files = c.env.FILES as unknown as { delete?: (key: string) => unknown };
+    /* 支持单 key 与批量数组：attachGc 现在一次批删「原件 + 缩略图」（R2 批量删除按 1 个子请求计） */
+    const files = c.env.FILES as unknown as { delete?: (key: string | string[]) => unknown };
 
     if (job === 'session') {
       const r = await cronFiveMin({ db, cache, files, now: ts, env: c.env });

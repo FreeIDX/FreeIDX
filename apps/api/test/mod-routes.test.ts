@@ -51,7 +51,7 @@ function baseRules(threads: Record<string, unknown>[] = [th()]): SqlRule[] {
     // 真删回扣楼层列表（tt_credits threadRevokeEntries）
     { test: /SELECT pid,uid FROM bbs_post WHERE tid = \? AND isfirst = 0/, rows: [{ pid: 81, uid: 3 }] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
-    { test: /SELECT filename FROM bbs_attach/, rows: [] },
+    { test: /SELECT aid,filename FROM bbs_attach/, rows: [] },
     // 写：modlog / 主题通知（0006_notice：版务动作通知作者）/ thread_top replace / 其余 UPDATE+DELETE 兜空
     { test: /INSERT INTO bbs_modlog/, rows: [] },
     { test: /INSERT INTO bbs_notice/, first: { nid: 1 } },

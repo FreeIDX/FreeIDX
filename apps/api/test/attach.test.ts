@@ -352,3 +352,88 @@ describe('GET /files/* 公共直链边缘缓存（Cache API 写穿，§7 读取�
     expect(fc.entries.size).toBe(1);
   });
 });
+
+/* ============ 列表缩略图（性能项 C6）：客户端生成 → 服务端校验落盘 → 预览 ?t=1 取用 ============ */
+
+/** 最小 WebP 头（RIFF....WEBP），只用于魔数校验，不是可解码图像 */
+function webpHeader(): Uint8Array {
+  const b = new Uint8Array(16);
+  b.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
+  b.set([0x57, 0x45, 0x42, 0x50], 8); // "WEBP"
+  return b;
+}
+
+function uploadForm(fileBytes: Uint8Array, thumb?: Uint8Array): FormData {
+  const fd = new FormData();
+  fd.append('file', new Blob([fileBytes]), 'a.png');
+  fd.append('name', 'a.png');
+  fd.append('is_image', '1');
+  if (thumb) fd.append('thumb', new Blob([thumb]), 'thumb.webp');
+  return fd;
+}
+
+describe('列表缩略图', () => {
+  it('随上传落 attach/thumb/{aid}.webp（与原件分开存，键按 aid 以便关联时不必搬迁）', async () => {
+    const r = makeEnv(baseRules());
+    const res = await app.request(
+      '/api/attachments',
+      { method: 'POST', headers: authHeaders(), body: uploadForm(new TextEncoder().encode('hello'), webpHeader()) },
+      r.env as never,
+    );
+    expect(((await res.json()) as { code: number }).code).toBe(Code.OK);
+    const thumb = r.r2.store.get('attach/thumb/42.webp');
+    expect(thumb).toBeTruthy();
+    expect(thumb?.contentType).toBe('image/webp');
+  });
+
+  it('缩略图不是 WebP（客户端编码降级成 PNG）→ 丢弃但上传照常成功', async () => {
+    const r = makeEnv(baseRules());
+    const png = new Uint8Array(16);
+    png.set([0x89, 0x50, 0x4e, 0x47], 0); // "\x89PNG"
+    const res = await app.request(
+      '/api/attachments',
+      { method: 'POST', headers: authHeaders(), body: uploadForm(new TextEncoder().encode('hello'), png) },
+      r.env as never,
+    );
+    expect(((await res.json()) as { code: number }).code).toBe(Code.OK);
+    expect(r.r2.store.has('attach/thumb/42.webp')).toBe(false);
+  });
+
+  it('预览 ?t=1 命中缩略图 → image/webp', async () => {
+    const r = makeEnv(baseRules(defaultAttach({ status: 0, uid: 1 })));
+    await r.r2.put('attach/202410/x.png', 'ORIGINAL', { httpMetadata: { contentType: 'image/png' } });
+    await r.r2.put('attach/thumb/42.webp', 'THUMB', { httpMetadata: { contentType: 'image/webp' } });
+    const res = await app.request('/api/attachments/42/preview?t=1', { headers: authHeaders() }, r.env as never);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/webp');
+    expect(await res.text()).toBe('THUMB');
+  });
+
+  it('存量附件没有缩略图 → ?t=1 回退原图（不给 404）', async () => {
+    const r = makeEnv(baseRules(defaultAttach({ status: 0, uid: 1 })));
+    await r.r2.put('attach/202410/x.png', 'ORIGINAL', { httpMetadata: { contentType: 'image/png' } });
+    const res = await app.request('/api/attachments/42/preview?t=1', { headers: authHeaders() }, r.env as never);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(await res.text()).toBe('ORIGINAL');
+  });
+
+  it('不带 ?t=1 一律返回原图（正文内联图仍取原尺寸）', async () => {
+    const r = makeEnv(baseRules(defaultAttach({ status: 0, uid: 1 })));
+    await r.r2.put('attach/202410/x.png', 'ORIGINAL', { httpMetadata: { contentType: 'image/png' } });
+    await r.r2.put('attach/thumb/42.webp', 'THUMB', { httpMetadata: { contentType: 'image/webp' } });
+    const res = await app.request('/api/attachments/42/preview', { headers: authHeaders() }, r.env as never);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(await res.text()).toBe('ORIGINAL');
+  });
+
+  it('删除附件时原件与缩略图一并清除', async () => {
+    const r = makeEnv(baseRules(defaultAttach({ status: 0, uid: 1 })));
+    await r.r2.put('attach/202410/x.png', 'ORIGINAL');
+    await r.r2.put('attach/thumb/42.webp', 'THUMB');
+    const res = await app.request('/api/attachments/42', { method: 'DELETE', headers: authHeaders() }, r.env as never);
+    expect(((await res.json()) as { code: number }).code).toBe(Code.OK);
+    expect(r.r2.store.has('attach/202410/x.png')).toBe(false);
+    expect(r.r2.store.has('attach/thumb/42.webp')).toBe(false);
+  });
+});

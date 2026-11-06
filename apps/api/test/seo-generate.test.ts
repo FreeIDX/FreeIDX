@@ -37,7 +37,7 @@ function seoRules(): SqlRule[] {
     { test: /REPLACE INTO bbs_cache/, rows: [] },
     { test: /DELETE FROM bbs_cache/, rows: [] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
-    { test: /SELECT filename FROM bbs_attach/, rows: [] },
+    { test: /SELECT aid,filename FROM bbs_attach/, rows: [] },
     { test: /SELECT tid FROM bbs_thread WHERE tid > \? ORDER BY tid ASC/, rows: [{ tid: 1 }, { tid: 2 }] },
     { test: /FROM bbs_forum ORDER BY/, rows: [FORUM1] },
     { test: /bbs_forum_access/, rows: [] },

@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { CONTENT_LANG_NATIVE_NAMES, type ContentLang, type ForumNode, type ThreadListItem } from '@freeidx/shared';
-import { fmtDate } from '../lib/api';
+import { fmtDate, threadThumbSrc } from '../lib/api';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
 import { VBadge } from './VBadge';
@@ -150,7 +150,9 @@ function ForumChip({ th, forum }: { th: ThreadListItem; forum?: ForumNode }) {
 }
 
 /** 列表图片组（三列栅格、100px 高 cover、rounded、errpic 兜底）
- *  张数由 light.summaryPic 决定：3/6/9，超出换行 */
+ *  张数由 light.summaryPic 决定：3/6/9，超出换行。
+ *  地址经 threadThumbSrc 加 `?t=1` 取 400px 缩略图（缺失自动回退原图），
+ *  否则这里会为 100px 的格子下载数百 KB 的原图——实测单张 410KB，是整页最大资源。 */
 function ImageRow({ th, pic }: { th: ThreadListItem; pic: number }) {
   const t = useT();
   const list = (th.imageUrls ?? '').split(',').filter(Boolean).slice(0, pic);
@@ -161,9 +163,10 @@ function ImageRow({ th, pic }: { th: ThreadListItem; pic: number }) {
         <div key={src} className="w-1/3 p-1">
           <Link to={`/thread/${th.tid}`}>
             <img
-              src={src}
+              src={threadThumbSrc(src)}
               alt={t('click_view_detail')}
               loading="lazy"
+              decoding="async"
               className="block h-[100px] w-full rounded-[4px] object-cover"
               onError={(e) => {
                 e.currentTarget.src = '/theme-light/errpic.webp';

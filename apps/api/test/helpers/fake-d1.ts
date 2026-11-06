@@ -129,7 +129,10 @@ export function fakeR2() {
         httpMetadata: { contentType: hit.contentType },
       };
     },
-    delete: async (key: string) => void store.delete(key),
+    // 与真实 R2 一致：单 key 或批量数组（附件删除会把「原件 + 缩略图」一次批删）
+    delete: async (key: string | string[]) => {
+      for (const k of Array.isArray(key) ? key : [key]) store.delete(k);
+    },
     head: async (key: string) => {
       const hit = store.get(key);
       return hit ? { httpMetadata: { contentType: hit.contentType } } : null;

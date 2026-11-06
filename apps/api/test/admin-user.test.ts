@@ -34,7 +34,7 @@ function baseRules(): SqlRule[] {
     { test: /SELECT uid, COUNT\(\*\) AS c FROM bbs_post WHERE tid IN/, rows: () => [{ uid: 3, c: 2 }] },
     { test: /SELECT tid, COUNT\(\*\) AS c FROM bbs_post WHERE uid = \? AND isfirst = 0/, rows: () => [] },
     // 真删前收集附件 R2 key（core/purge.attachKeysBy*）
-    { test: /SELECT filename FROM bbs_attach/, rows: [] },
+    { test: /SELECT aid,filename FROM bbs_attach/, rows: [] },
     { test: /UPDATE bbs_/, rows: [] },
     { test: /DELETE FROM bbs_/, rows: [] },
   ];
@@ -140,7 +140,7 @@ describe('用户管理（T3-6）', () => {
     expect(calls.some((c) => /DELETE FROM bbs_mypost WHERE tid IN/.test(c.sql))).toBe(true);
     expect(calls.some((c) => /DELETE FROM bbs_mythread WHERE tid IN/.test(c.sql))).toBe(true);
     // R2 对象侧：删除前先收集附件 key（本人上传 + 本人主题内他人上传），随后尽力删除
-    expect(calls.some((c) => /SELECT filename FROM bbs_attach WHERE uid = \? OR tid IN/.test(c.sql))).toBe(true);
+    expect(calls.some((c) => /SELECT aid,filename FROM bbs_attach WHERE uid = \? OR tid IN/.test(c.sql))).toBe(true);
     // 自定义头像对象一并清理（avatar>0 → avatar/{3位}/{uid}.png 加入 R2 删除清单）
     expect(calls.some((c) => /SELECT avatar FROM bbs_user/.test(c.sql))).toBe(true);
     // runtime.users 无校准兜底 → 删用户即时回退（写 runtime 缓存）

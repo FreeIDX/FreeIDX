@@ -16,6 +16,7 @@ import { reconcilePending, sweepStaleOrders } from './payment/orchestrator';
 import { demoteExpiredVip } from './order';
 import { liftExpiredBans } from './ban';
 import { seoRebuildRenamed } from '../modules/seo/generate';
+import { attachObjectKeys } from '../modules/attach/core';
 
 export const ONLINE_HOLD_TIME_DEFAULT = 300;
 const DAY = 86400;
@@ -30,7 +31,8 @@ const ATTACH_GC_BATCH = 40;
 interface CronDeps {
   db: D1b;
   cache: Cache;
-  files?: { delete?: (key: string) => unknown } | undefined;
+  /** 支持单 key 与批量数组（R2 批量删除按 1 个子请求计，见 attachGc 的批量上限说明） */
+  files?: { delete?: (key: string | string[]) => unknown } | undefined;
   now: number;
   /** 插件 cron 需要（SITE_URL/Secret 主密钥）；内建档不依赖 */
   env?: Env;
@@ -208,7 +210,10 @@ export async function attachGc(deps: CronDeps, now: number, limit = ATTACH_GC_BA
   const removed: number[] = [];
   for (const r of stale.results) {
     try {
-      if (files && typeof files.delete === 'function') await Promise.resolve(files.delete(String(r.filename)));
+      // 原件 + 缩略图一次批删（R2 批量删除按 1 个子请求计，不突破 ATTACH_GC_BATCH 的子请求预算）
+      if (files && typeof files.delete === 'function') {
+        await Promise.resolve(files.delete(attachObjectKeys(Number(r.aid), String(r.filename))));
+      }
       removed.push(Number(r.aid));
     } catch {
       /* 尽力而为：对象没删掉就保留行，下轮重试（桶上 tmp/ 生命周期规则兜底） */

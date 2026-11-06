@@ -213,7 +213,7 @@ export function modThreads(req: ModThreadsReq): Promise<{ count: number; results
 /** 附件上传走 multipart：File → FormData，返回 aid + 预览 URL（图片插入正文用 /api/attachments/:aid/preview） */
 export function uploadAttachment(
   file: File,
-  opts?: { isImage?: boolean; width?: number; height?: number },
+  opts?: { isImage?: boolean; width?: number; height?: number; thumb?: Blob | null },
 ): Promise<UploadResult> {
   const form = new FormData();
   form.append('file', file);
@@ -221,6 +221,9 @@ export function uploadAttachment(
   form.append('is_image', opts?.isImage ? '1' : '0');
   if (opts?.width) form.append('width', String(opts.width));
   if (opts?.height) form.append('height', String(opts.height));
+  /* 列表缩略图（可选，见 lib/image 的 fileToWebpThumb）：服务端校验 WebP 魔数后另存一个对象；
+     不带也完全正常——列表会回退原图（存量附件同理）。 */
+  if (opts?.thumb) form.append('thumb', opts.thumb, 'thumb.webp');
   return apiSendForm<UploadResult>('POST', '/api/attachments', form);
 }
 
@@ -797,6 +800,14 @@ export function redeemOrder(orderNo: string, code: string): Promise<{ order_no: 
 export function fmtDay(ts: number): string {
   if (!ts) return '0000-00-00';
   return new Intl.DateTimeFormat(uiLocale(), { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts * 1000));
+}
+
+/**
+ * 列表缩略图地址：只对本站附件预览加 `?t=1`——服务端优先返回 400px WebP，缺失自动回退原图，
+ * 因此对存量附件（没有缩略图）也安全。外链图片与其它来源原样返回，不给第三方 URL 加查询串。
+ */
+export function threadThumbSrc(src: string): string {
+  return /^\/api\/attachments\/\d+\/preview$/.test(src) ? `${src}?t=1` : src;
 }
 
 /** 头像直链：avatar/{uid 补 9 位取前 3 段}/{uid}.png?v={avatar}；v=0 表示未设头像 */
