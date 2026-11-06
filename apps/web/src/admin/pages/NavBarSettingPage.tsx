@@ -186,18 +186,21 @@ export function NavBarSettingPage() {
             const i18nCount = Object.keys(r.labels ?? {}).length;
             return (
               <div key={i} className="rounded-[6px] border border-line-soft p-2.5">
+                {/* 单行排布：名称 → 语言 → 链接类型 → 目标 → 右侧开关/排序/删除。
+                    控件基础样式自带 w-full（Tailwind v4 中 .w-full 排在 .w-[..] 之后，覆盖行内定宽），
+                    故宽度一律由定宽包裹层锁定，与 CardAdminPage 同口径。 */}
                 <div className="flex flex-wrap items-center gap-2">
                   {/* 名称（默认名称） */}
-                  <Input
-                    className="w-36"
-                    value={r.label}
-                    placeholder={t('nav_item_label', '名称')}
-                    aria-label={t('nav_item_label', '名称')}
-                    onChange={(e) => set(i, { label: e.target.value })}
-                  />
+                  <div className="w-40">
+                    <Input
+                      value={r.label}
+                      placeholder={t('nav_item_label', '名称')}
+                      aria-label={t('nav_item_label', '名称')}
+                      onChange={(e) => set(i, { label: e.target.value })}
+                    />
+                  </div>
                   {/* 名称多语言：前台按站点语言取词，未填写的语言回退默认名称 */}
                   <Button
-                    size="sm"
                     variant="default"
                     title={t('nav_item_name_i18n_title', '导航项名称多语言')}
                     onClick={() => setI18nEdit({ index: i, name: r.label, value: r.labels })}
@@ -206,51 +209,55 @@ export function NavBarSettingPage() {
                     {i18nCount > 0 ? ` (${i18nCount})` : ''}
                   </Button>
                   {/* 链接类型 */}
-                  <Select
-                    className="w-32"
-                    value={r.type}
-                    aria-label={t('nav_item_type', '链接类型')}
-                    onChange={(e) => set(i, { type: e.target.value as NavRow['type'] })}
-                  >
-                    <option value="forum">{t('nav_type_forum', '版块')}</option>
-                    <option value="thread">{t('nav_type_thread', '文章')}</option>
-                    <option value="custom">{t('nav_type_custom', '自定义')}</option>
-                  </Select>
+                  <div className="w-28">
+                    <Select
+                      value={r.type}
+                      aria-label={t('nav_item_type', '链接类型')}
+                      onChange={(e) => set(i, { type: e.target.value as NavRow['type'] })}
+                    >
+                      <option value="forum">{t('nav_type_forum', '版块')}</option>
+                      <option value="thread">{t('nav_type_thread', '文章')}</option>
+                      <option value="custom">{t('nav_type_custom', '自定义')}</option>
+                    </Select>
+                  </div>
                   {/* 目标：版块下拉 / 文章 tid / 自定义地址 */}
                   {r.type === 'forum' && (
-                    <Select
-                      className="w-44"
-                      value={r.fid}
-                      aria-label={t('nav_pick_forum', '选择版块')}
-                      onChange={(e) => set(i, { fid: e.target.value })}
-                    >
-                      <option value="">{t('nav_pick_forum', '选择版块')}</option>
-                      {forumlist.map((f) => (
-                        <option key={f.fid} value={f.fid}>
-                          {f.name}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="w-44">
+                      <Select
+                        value={r.fid}
+                        aria-label={t('nav_pick_forum', '选择版块')}
+                        onChange={(e) => set(i, { fid: e.target.value })}
+                      >
+                        <option value="">{t('nav_pick_forum', '选择版块')}</option>
+                        {forumlist.map((f) => (
+                          <option key={f.fid} value={f.fid}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
                   )}
                   {r.type === 'thread' && (
-                    <Input
-                      className="w-32"
-                      type="number"
-                      min={1}
-                      value={r.tid}
-                      placeholder={t('nav_thread_tid', '主题 ID')}
-                      aria-label={t('nav_thread_tid', '主题 ID')}
-                      onChange={(e) => set(i, { tid: e.target.value })}
-                    />
+                    <div className="w-32">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={r.tid}
+                        placeholder={t('nav_thread_tid', '主题 ID')}
+                        aria-label={t('nav_thread_tid', '主题 ID')}
+                        onChange={(e) => set(i, { tid: e.target.value })}
+                      />
+                    </div>
                   )}
                   {r.type === 'custom' && (
-                    <Input
-                      className="w-56"
-                      value={r.url}
-                      placeholder={t('nav_custom_url', '链接地址，如 /new 或 https://')}
-                      aria-label={t('nav_custom_url', '链接地址')}
-                      onChange={(e) => set(i, { url: e.target.value })}
-                    />
+                    <div className="w-56">
+                      <Input
+                        value={r.url}
+                        placeholder={t('nav_custom_url', '链接地址，如 /new 或 https://')}
+                        aria-label={t('nav_custom_url', '链接地址')}
+                        onChange={(e) => set(i, { url: e.target.value })}
+                      />
+                    </div>
                   )}
                   <div className="ml-auto flex items-center gap-1">
                     <Switch
