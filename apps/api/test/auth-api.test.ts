@@ -4,8 +4,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../src/index';
-import { Code, md5Hex } from '@freeidx/shared';
+import { Code } from '@freeidx/shared';
 import { l0Clear } from '../src/core/cache';
+import { md5Hex } from '../src/core/auth/md5';
 import { hashPassword } from '../src/core/auth';
 import { isEmail, isPassword, isUsername } from '../src/core/auth/validate';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
@@ -233,16 +234,13 @@ describe('POST /api/auth/email-code', () => {
     expect(json.code).toBe(Code.RATE_LIMITED);
   });
 
-  it('开关与存在性：user_create_email_on=0 → -1；找回密码场景已下线 → 参数错误且不落库；投递失败仍 → 0（旁路静默，码行已入库）', async () => {
+  it('开关与存在性：user_create_email_on=0 → -1；resetpw 邮箱未注册 → 1003；投递失败仍 → 0（旁路静默，码行已入库）', async () => {
     const off = envFor([], settingJson(), { withEmail: true });
     expect((await post('/api/auth/email-code', { scene: 'user_create', email: 'n@e.com' }, off.env)).json.code).toBe(Code.NOT_LOGIN);
     // L0 是 isolate 级短存缓存：本用例用三份不同 setting 模拟三个站点，同一 isolate 内切换前须清空
     l0Clear();
-    // 找回密码走独立的 token 链接（/password-reset/request），本接口不再接受 user_resetpw：
-    // 否则 6 位码会被 confirm 当 token 接受，且「邮箱未注册 1003」成了防枚举的侧门。
     const rp = envFor([], settingJson());
-    expect((await post('/api/auth/email-code', { scene: 'user_resetpw', email: 'ghost@e.com' }, rp.env)).json.code).toBe(Code.VALIDATION_ERROR);
-    expect(rp.calls.some((c) => /INSERT INTO bbs_email_code/.test(c.sql))).toBe(false);
+    expect((await post('/api/auth/email-code', { scene: 'user_resetpw', email: 'ghost@e.com' }, rp.env)).json.code).toBe(Code.FORM_INVALID_EMAIL);
     l0Clear();
     // SMTP 建连失败被 provider 内部吞掉（failover 全败 → false），不阻塞请求：验证码行已落库、有效性不依赖投递结果
     const fail = envFor([], settingJson({ user_create_email_on: 1 }), { withEmail: true });

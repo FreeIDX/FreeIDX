@@ -1,8 +1,9 @@
 /** useAuth：bootstrap 一次拉取（setting/forumlist/grouplist/me），Zustand 全局态（§10.3） */
 import { create } from 'zustand';
-import { md5Hex, type ForumNode, type GroupRow, type SiteSetting, type UserBrief } from '@freeidx/shared';
+import type { ForumNode, GroupRow, SiteSetting, UserBrief } from '@freeidx/shared';
 import { bootstrap, login, logout, onSessionExpired, register, type LoginResult, type RegisterResult } from '../lib/api';
 import { queryClient } from '../lib/query-client';
+import { md5 } from '../lib/md5';
 
 interface AuthState {
   loaded: boolean;
@@ -24,11 +25,6 @@ interface AuthState {
     unreadNotices?: number;
     /** 账号审核状态（bootstrap me）：1=正常 0=待审核 -1=未通过；非 1 首页顶部提示 */
     ok?: number;
-    /** 小黑屋（bootstrap me）：生效中的封禁位（0=未封禁/已到期）1 禁言 2 禁访 4 禁登 */
-    banScope?: number;
-    /** 封禁到期（unix 秒，0=永久） */
-    banUntil?: number;
-    banReason?: string;
     /** see_check 组（bootstrap me）：列表显示审核图标、帖内现场审核按钮 */
     seeCheck?: boolean;
     /** 预设头像路径（user.avatar_auto，如 /avatars/7.png；avatar=0 且已设预设时才下发） */
@@ -76,7 +72,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   // 后端要求前端预哈希 md5(明文)（§8.4），登录/注册成功后 re-fetch bootstrap 让 me 生效
   // 鉴权态变更后失效全量 react-query 缓存：详情/列表的 allowupdate/allowdelete/计数由服务端按访问者下发，须随之刷新
   signIn: async (input) => {
-    const r = await login({ account: input.account, password: md5Hex(input.password), turnstileToken: input.turnstileToken });
+    const r = await login({ account: input.account, password: md5(input.password), turnstileToken: input.turnstileToken });
     await get().load(true);
     void queryClient.invalidateQueries();
     return r;
@@ -85,7 +81,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     const r = await register({
       username: input.username,
       email: input.email,
-      password: md5Hex(input.password),
+      password: md5(input.password),
       emailCode: input.emailCode,
       turnstileToken: input.turnstileToken,
     });
