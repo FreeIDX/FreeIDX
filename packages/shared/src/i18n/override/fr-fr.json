@@ -527,6 +527,10 @@
   "compose_muted_hint": "Votre compte est réduit au silence ; la publication et les réponses sont temporairement désactivées."
  },
  "admin": {
+  "forum_name_i18n": "Langue",
+  "forum_name_i18n_title": "Nom du forum en plusieurs langues",
+  "forum_name_i18n_hint": "Affiche le nom correspondant à la langue actuelle du site ; les langues vides utilisent le nom par défaut.",
+  "forum_name_i18n_default": "Nom par défaut",
   "admin_maint_lang_stats_col_lang": "Langue",
   "admin_maint_lang_stats_col_recent": "30 derniers jours",
   "admin_maint_lang_stats_col_share": "Part",

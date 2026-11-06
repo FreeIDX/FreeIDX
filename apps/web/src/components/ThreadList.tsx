@@ -18,7 +18,7 @@ import { Pill, TagBadge, cx } from './ui';
 import { Highlight } from './Highlight';
 import { useReadUnread } from '../hooks/useReadUnread';
 import { useAuth } from '../store/auth';
-import { useT } from '../lib/i18n';
+import { useForumName, useT } from '../lib/i18n';
 import { useLight } from '../store/theme';
 
 export interface ThreadPageData {
@@ -133,7 +133,9 @@ function TagRow({ th }: { th: ThreadListItem }) {
  */
 function ForumChip({ th, forum }: { th: ThreadListItem; forum?: ForumNode }) {
   const t = useT();
-  const name = forum?.name ?? t('forum_label');
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
+  const name = forum ? fname(forum) : t('forum_label');
   return (
     <Link to={`/forum/${th.fid}`} title={name} className="flex min-w-0 shrink-0 items-center gap-1 transition-colors hover:text-brand">
       {forum?.iconUrl ? (

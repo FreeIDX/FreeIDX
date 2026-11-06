@@ -11,13 +11,15 @@ import { useAuth } from '../../../store/auth';
 import { useContentLangMode } from '../../../store/contentLang';
 import { useLight } from '../../../store/theme';
 import { useAuthModal } from '../../../store/authModal';
-import { useT } from '../../../lib/i18n';
+import { useForumName, useT } from '../../../lib/i18n';
 
 /** 发帖页（§4.4，/new 或 /forum/:fid/new）：
  *  两栏 —— 左主表单卡（8/12 栅格：版块/标题 + Composer + 标签选择 + 收费设置）、
  *  右功能卡（4/12 栅格，tabs 功能/附件，sticky）。提交仍走 Composer 内按钮 → POST /api/threads（doctype=0）。 */
 export function ComposePage() {
   const t = useT();
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const routeParams = useParams();
@@ -168,7 +170,7 @@ export function ComposePage() {
               ) : (
                 <Icon name="folder" className="size-4 shrink-0 text-zh-grey" />
               )}
-              <span className="max-w-[10rem] truncate">{currentForum?.name ?? t('select_category')}</span>
+              <span className="max-w-[10rem] truncate">{currentForum ? fname(currentForum) : t('select_category')}</span>
               <Icon name="chevron_down" className="size-4 shrink-0 text-zh-grey" />
             </button>
             <input
@@ -383,7 +385,7 @@ export function ComposePage() {
                     <Icon name="folder" className="size-5 text-zh-grey" />
                   </span>
                 )}
-                <span className="mt-1.5 whitespace-nowrap text-sm text-foreground">{f.name}</span>
+                <span className="mt-1.5 whitespace-nowrap text-sm text-foreground">{fname(f)}</span>
               </label>
             ))}
           </div>

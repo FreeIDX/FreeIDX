@@ -6,7 +6,7 @@
  * sitemap/JSON-LD/OG/.htm 301 归 seo 插件（extensions/seo.ts）。
  */
 import { Hono } from 'hono';
-import type { PageMeta, RobotsContribution, SiteSetting } from '@freeidx/shared';
+import { forumNameOf, normForumNameI18n, type PageMeta, type RobotsContribution, type SiteSetting } from '@freeidx/shared';
 import type { D1b } from '../../core/db';
 import type { Cache } from '../../core/cache';
 import { BOT_HTML_TTL, SHARED_UA, edgeLookup, edgeStore, isPersonalRequest, maybeCtx } from '../../core/cache/edge';
@@ -184,23 +184,25 @@ async function buildFallback(
   if (route.kind === 'forum' && route.id) {
     const fid = route.id;
     const f = await db
-      .prepare<{ name: string; brief: string; seo_title: string }>(
-        'SELECT name,brief,seo_title FROM bbs_forum WHERE fid = ?',
+      .prepare<{ name: string; brief: string; seo_title: string; name_i18n: string }>(
+        'SELECT name,brief,seo_title,name_i18n FROM bbs_forum WHERE fid = ?',
       )
       .bind(fid)
-      .first<{ name: string; brief: string; seo_title: string }>();
+      .first<{ name: string; brief: string; seo_title: string; name_i18n: string }>();
     if (!f) return null;
+    /* 版块名多语言（0027）：SEO 产物固定用站点语言取词（与 setting.lang 一致，不随访客 cookie 变） */
+    const forumName = forumNameOf(f.name, normForumNameI18n(f.name_i18n), setting.lang);
     const rows = await db
       .prepare<{ tid: number; subject: string }>(
         'SELECT tid,subject FROM bbs_thread WHERE fid = ? AND ok = 1 ORDER BY last_date DESC LIMIT 50',
       )
       .bind(fid)
       .all();
-    const meta = newPageMeta('forum', rt, setting, { fid, seoTitle: f.seo_title || f.name, seoKeywords: '' });
+    const meta = newPageMeta('forum', rt, setting, { fid, seoTitle: f.seo_title || forumName, seoKeywords: '' });
     const list = rows.results
       .map((t) => `<li><a href="/thread/${t.tid}">${escAttr(t.subject)}</a></li>`)
       .join('');
-    return { meta, body: `<main><h1>${escAttr(f.name)}</h1><p>${escAttr(f.brief)}</p><ul>${list}</ul></main>` };
+    return { meta, body: `<main><h1>${escAttr(forumName)}</h1><p>${escAttr(f.brief)}</p><ul>${list}</ul></main>` };
   }
 
   if (route.kind === 'user' && route.id) {

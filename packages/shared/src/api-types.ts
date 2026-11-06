@@ -33,6 +33,9 @@ export interface UserBrief {
 export interface ForumNode {
   fid: number;
   name: string;
+  /** 版块名多语言（0027）：locale → 名称；缺省/空 = 未配置，展示回退 name。
+   *  前台按当前界面语言取词（forumNameOf），切换语言即时生效，无需重新请求。 */
+  nameI18n?: Record<string, string>;
   rank: number;
   brief: string;
   threads: number;
@@ -193,12 +196,15 @@ export interface HotPostsData {
 export interface ModForumData {
   fid: number;
   name: string;
+  /** 版块名多语言（0027）：前台按当前界面语言取词，缺省回退 name */
+  nameI18n?: Record<string, string>;
   perms: { allowmod: boolean; allowdelete: boolean; allowmove: boolean };
 }
 
 export interface ThreadDetail {
   thread: ThreadListItem;
-  forum: { fid: number; name: string; moduids: string };
+  /** nameI18n：版块名多语言（0027），前台按当前界面语言取词 */
+  forum: { fid: number; name: string; moduids: string; nameI18n?: Record<string, string> };
   posts: Paged<PostItem>;
   /** 当前用户对本帖的可操作位（服务端计算，前端不做权限推断） */
   perms: {

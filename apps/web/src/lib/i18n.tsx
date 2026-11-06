@@ -6,6 +6,8 @@ import {
   builtinGroupName,
   createFrontTranslator,
   DEFAULT_LOCALE,
+  forumNameOf,
+  type ForumNameMap,
   type FrontKey,
   type LocaleBundles,
 } from '@freeidx/shared';
@@ -125,4 +127,13 @@ export function useT(): T {
 export function useGroupName(): (gid: number, name: string) => string {
   const lang = useLang();
   return useCallback((gid: number, name: string) => builtinGroupName(gid, name, lang), [lang]);
+}
+
+/**
+ * 版块名取词（0027）：命中当前界面的多语言名称则用之，否则回退主名称 name。
+ * 依赖 useLang → 语言切换后所有取词点同步重渲染，无需重新请求 bootstrap。
+ */
+export function useForumName(): (f: { name: string; nameI18n?: ForumNameMap | null }) => string {
+  const lang = useLang();
+  return useCallback((f: { name: string; nameI18n?: ForumNameMap | null }) => forumNameOf(f.name, f.nameI18n, lang), [lang]);
 }

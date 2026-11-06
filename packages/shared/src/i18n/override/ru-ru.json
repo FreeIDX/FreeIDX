@@ -528,6 +528,10 @@
   "compose_muted_hint": "Аккаунт лишён права писать: публикация и ответы временно недоступны."
  },
  "admin": {
+  "forum_name_i18n": "Язык",
+  "forum_name_i18n_title": "Названия раздела на разных языках",
+  "forum_name_i18n_hint": "Показывается название на текущем языке сайта; если перевод пуст, используется название по умолчанию.",
+  "forum_name_i18n_default": "Название по умолчанию",
   "admin_maint_lang_stats_col_lang": "Язык",
   "admin_maint_lang_stats_col_recent": "За 30 дней",
   "admin_maint_lang_stats_col_share": "Доля",

@@ -11,7 +11,7 @@ import { Link } from 'react-router';
 import type { ThreadListItem } from '@freeidx/shared';
 import { apiGet, fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../../../lib/api';
 import { useAuth } from '../../../store/auth';
-import { useT } from '../../../lib/i18n';
+import { useForumName, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 import { Carousel } from '../../../components/Carousel';
 import { Avatar } from '../../../components/Avatar';
@@ -103,6 +103,8 @@ function UserRankCard({ type, title, icon }: { type: 'active' | 'posts' | 'wealt
 
 export function DiscoveryPage() {
   const t = useT();
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
   const light = useLight();
   const forumlist = useAuth((s) => s.forumlist);
   const runtime = useAuth((s) => s.runtime);
@@ -182,8 +184,8 @@ export function DiscoveryPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <Link to={`/forum/${f.fid}`} className="min-w-0 truncate text-sm font-medium text-foreground hover:text-brand" title={f.name}>
-                            {f.name}
+                          <Link to={`/forum/${f.fid}`} className="min-w-0 truncate text-sm font-medium text-foreground hover:text-brand" title={fname(f)}>
+                            {fname(f)}
                           </Link>
                           <span className="shrink-0 rounded-full bg-[#303133] px-2 py-0.5 text-[11px] leading-none text-white tabular-nums">
                             {f.threads}
@@ -249,7 +251,7 @@ export function DiscoveryPage() {
                         <Icon name="folder" className="size-3.5 text-zh-grey" />
                       </span>
                     )}
-                    <span className="min-w-0 truncate text-xs text-foreground">{f.name}</span>
+                    <span className="min-w-0 truncate text-xs text-foreground">{fname(f)}</span>
                   </Link>
                   <span className="shrink-0 text-[11px] tabular-nums text-lt-grey">{f.threads}</span>
                 </li>

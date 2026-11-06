@@ -9,7 +9,7 @@ import { Link } from 'react-router';
 import type { ForumNode } from '@freeidx/shared';
 import { Icon, type IconName } from './icons';
 import { Avatar } from './Avatar';
-import { useT } from '../lib/i18n';
+import { useForumName, useT } from '../lib/i18n';
 import { useAuthModal } from '../store/authModal';
 import { useAuth } from '../store/auth';
 import ztIcon from '../assets/theme/zt.png';
@@ -307,6 +307,8 @@ function useSideNavCollapsed(): [boolean, () => void] {
 function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; ariaLabel?: string; divider?: boolean }) {
   const forumlist = useAuth((s) => s.forumlist);
   const t = useT();
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
   const [collapsed, toggle] = useSideNavCollapsed();
   const itemCls = (active: boolean) =>
     cx(
@@ -319,13 +321,13 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   const tops = forumlist.filter((f) => !f.parentFid || !forumlist.some((p) => p.fid === f.parentFid));
   const kidsOf = (fid: number) => forumlist.filter((f) => f.parentFid === fid);
   const forumLink = (f: ForumNode) => (
-    <Link to={`/forum/${f.fid}`} title={f.name} className={itemCls(false)}>
+    <Link to={`/forum/${f.fid}`} title={fname(f)} className={itemCls(false)}>
       {f.iconUrl ? (
         <img src={f.iconUrl} alt="" className="size-[24px] shrink-0 rounded-full object-contain" />
       ) : (
         <Icon name="folder" className="size-[20px] shrink-0 text-zh-grey" aria-hidden="true" />
       )}
-      {!collapsed && <span className="truncate">{f.name}</span>}
+      {!collapsed && <span className="truncate">{fname(f)}</span>}
     </Link>
   );
   return (

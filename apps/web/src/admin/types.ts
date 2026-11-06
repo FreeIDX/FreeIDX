@@ -45,6 +45,8 @@ export interface AdminForumRow {
   parent_fid: number;
   /** 绑定内容语言原始值（0024）：'' = 未绑定（子版块继承父版块，顶级版块不限制）；'none' = 显式不限制（仅子版块）；其余 = 强制该语言 */
   lang: string;
+  /** 版块名多语言（0027）：locale → 名称；服务端已把库里的 JSON 串解析成对象，{} = 未配置（前台回退 name） */
+  name_i18n: Record<string, string>;
   accesslist: Record<string, ForumAccessRow>;
 }
 
@@ -93,6 +95,8 @@ export interface ForumInput {
   parent_fid?: number;
   /** 绑定内容语言原始值（0024）：''/缺省 = 未绑定（子版块继承父版块，顶级版块不限制）；'none' = 显式不限制（仅子版块）；其余 = 强制该语言 */
   lang?: string;
+  /** 版块名多语言（0027）：locale → 名称；缺省 = 保持原值（PUT），{} = 清空（展示回退 name） */
+  name_i18n?: Record<string, string>;
   /** 仅在此键存在时整体替换权限矩阵；提交标量字段时不要带上，否则矩阵被清空 */
   access?: AccessInput[];
 }

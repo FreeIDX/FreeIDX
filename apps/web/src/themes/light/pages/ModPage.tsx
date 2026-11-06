@@ -16,7 +16,7 @@ import { Button, Card, cx } from '../../../components/ui';
 import { Icon } from '../../../components/icons';
 import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
 import { Pagination } from '../../../components/Pagination';
-import { useT } from '../../../lib/i18n';
+import { useForumName, useT } from '../../../lib/i18n';
 
 /** 工具栏按钮（小尺寸：38px 高、4px 圆角、描边） */
 const toolCls =
@@ -24,6 +24,8 @@ const toolCls =
 
 export function ModPage() {
   const t = useT();
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
   const qc = useQueryClient();
   const params = useParams();
   const [search] = useSearchParams();
@@ -104,7 +106,7 @@ export function ModPage() {
           <span className="flex items-center gap-2 text-sm font-medium">
             <Icon name="wrench" className="size-4 text-brand" />
             {t('mod_manage')}
-            {forum && <span className="text-lt-grey">· {forum.name}</span>}
+            {forum && <span className="text-lt-grey">· {fname({ name: forum.name, nameI18n: forum.nameI18n })}</span>}
           </span>
         }
       >
@@ -163,7 +165,7 @@ export function ModPage() {
                   .filter((f) => f.fid !== fid)
                   .map((f) => (
                     <option key={f.fid} value={f.fid}>
-                      {f.name}
+                      {fname(f)}
                     </option>
                   ))}
               </select>

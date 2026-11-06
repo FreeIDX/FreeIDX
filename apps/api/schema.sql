@@ -130,7 +130,8 @@ CREATE TABLE bbs_forum (
   post_check INTEGER NOT NULL DEFAULT 0,
   edit_check INTEGER NOT NULL DEFAULT 0,
   parent_fid INTEGER NOT NULL DEFAULT 0,
-  lang TEXT NOT NULL DEFAULT ''
+  lang TEXT NOT NULL DEFAULT '',
+  name_i18n TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE bbs_forum_access (

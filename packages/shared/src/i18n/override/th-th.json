@@ -527,6 +527,10 @@
   "compose_muted_hint": "บัญชีอยู่ระหว่างถูกห้ามพูดคุย จึงยังโพสต์หรือตอบกลับไม่ได้"
  },
  "admin": {
+  "forum_name_i18n": "ภาษา",
+  "forum_name_i18n_title": "ชื่อบอร์ดหลายภาษา",
+  "forum_name_i18n_hint": "แสดงชื่อตามภาษาปัจจุบันของเว็บไซต์ ภาษาที่ไม่ได้กรอกจะใช้ชื่อเริ่มต้น",
+  "forum_name_i18n_default": "ชื่อเริ่มต้น",
   "admin_maint_lang_stats_col_lang": "ภาษา",
   "admin_maint_lang_stats_col_recent": "30 วันล่าสุด",
   "admin_maint_lang_stats_col_share": "สัดส่วน",

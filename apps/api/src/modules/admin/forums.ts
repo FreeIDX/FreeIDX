@@ -14,7 +14,14 @@
  * 全部路由挂在 adminGuard（app.use('/api/admin/*')）之后。
  */
 import { Hono } from 'hono';
-import { Code, FORUM_LANG_UNRESTRICTED, GroupId, normalizeForumLang } from '@freeidx/shared';
+import {
+  Code,
+  FORUM_LANG_UNRESTRICTED,
+  GroupId,
+  normalizeForumLang,
+  normForumNameI18n,
+  stringifyForumNameI18n,
+} from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import { forumLangOf, loadForumlist, loadGrouplist } from '../../core/loaders';
@@ -127,7 +134,9 @@ export function adminForumRoutes(): Hono<ReadEnv> {
   app.get('/api/admin/forums', async (c) => {
     const { db, cache } = core(c);
     const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
-    return ok(c, 'ok', { data: { forums: Object.values(forumlist), groups: Object.values(grouplist) } });
+    /* name_i18n 原样是 JSON 串，这里解析成对象直接给后台表单用（解析失败按未配置处理） */
+    const forums = Object.values(forumlist).map((f) => ({ ...f, name_i18n: normForumNameI18n(f.name_i18n) }));
+    return ok(c, 'ok', { data: { forums, groups: Object.values(grouplist) } });
   });
 
   app.post('/api/admin/forums', async (c) => {
@@ -139,10 +148,11 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     const parentFid = normParentFid(b.parent_fid);
     await assertValidParent(db, t, parentFid);
     const lang = normForumLang(b.lang, parentFid);
+    const nameI18n = stringifyForumNameI18n(b.name_i18n);
     const ts = now();
     const r = await db
       .prepare<{ fid: number }>(
-        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
+        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,name_i18n,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
       )
       .bind(
         name,
@@ -157,6 +167,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         String(b.seo_keywords ?? ''),
         parentFid,
         lang,
+        nameI18n,
         ts,
       )
       .first<{ fid: number }>();
@@ -226,6 +237,8 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     }
     /* 未提交 parent_fid 时用库中现值判定哨兵（顶级版块的 'none' 会归一回空串） */
     if ('lang' in b) put('lang', normForumLang(b.lang, parentFid));
+    /* 版块名多语言（0027）：显式携带才写，空对象/空串 = 清空（展示回退主名称） */
+    if ('name_i18n' in b) put('name_i18n', stringifyForumNameI18n(b.name_i18n));
 
     if (!sets.length && !('access' in b)) throw new AppError(Code.VALIDATION_ERROR, t('common.noFieldsToUpdate'));
     if (sets.length) {

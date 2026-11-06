@@ -1,8 +1,8 @@
 /**
  * 版块列表（树形内联编辑）：一级版块 → 其子版块（二级）缩进展示，一级版块可收缩/展开。
- * 列 = 名称(树列，含收缩箭头) / 版块ID / 父版块(行内下拉，可即时挂到一级版块下) / 内容语言(只读摘要，改在编辑页) /
- *      图标缩略图 / 上传图标 / 排序 / 编辑 / 删除；
- * `<table class="adm-table" style="min-width:960px">`，页面无二级 Tab（版块菜单的 tab 是空表）。
+ * 列 = 名称(树列，含收缩箭头) / 语言(版块名多语言弹窗) / 版块ID / 父版块(行内下拉，可即时挂到一级版块下) /
+ *      内容语言(只读摘要，改在编辑页) / 图标缩略图 / 上传图标 / 排序 / 编辑 / 删除；
+ * `<table class="adm-table" style="min-width:1060px">`，页面无二级 Tab（版块菜单的 tab 是空表）。
  * 实现差异（§7 记账）：
  *  - **图标两列**：缩略图 48px + 行内 file input（选图立即上传
  *    PUT /api/admin/forums/:fid/icon，存 R2 forum/{fid}.{ext}，见 admin/forums.ts）；
@@ -24,6 +24,7 @@ import { useAdminT } from '../t';
 import { useBatchAction } from '../use-action';
 import { useAuth } from '../../store/auth';
 import { Alert, Button, Card, ConfirmModal, ErrorState, Input, PageTitle, Select, cx } from '../ui';
+import { ForumNameI18nModal } from '../ForumNameI18nModal';
 import { Icon } from '../../components/icons';
 
 /** 提交口径 = 服务端 PUT 的标量字段集（不带 access） */
@@ -41,17 +42,25 @@ function scalarInput(r: AdminForumRow): ForumInput {
     seo_keywords: r.seo_keywords,
     parent_fid: r.parent_fid,
     lang: r.lang,
+    /* 版块名多语言（0027）：对象按内容比较（见 changed），未改动时与 q.data 同引用 */
+    name_i18n: r.name_i18n ?? {},
   };
 }
 
 const DIFF_KEYS: (keyof ForumInput)[] = [
-  'name', 'rank', 'brief', 'announcement', 'accesson', 'orderby', 'icon', 'moduids', 'seo_title', 'seo_keywords', 'parent_fid', 'lang',
+  'name', 'name_i18n', 'rank', 'brief', 'announcement', 'accesson', 'orderby', 'icon', 'moduids', 'seo_title', 'seo_keywords', 'parent_fid', 'lang',
 ];
+
+/** 字段值比较：name_i18n 是对象，必须按内容比（引用会随 patch 变化） */
+function sameField(k: keyof ForumInput, a: ForumInput, b: ForumInput): boolean {
+  if (k === 'name_i18n') return JSON.stringify(a.name_i18n ?? {}) === JSON.stringify(b.name_i18n ?? {});
+  return a[k] === b[k];
+}
 
 function changed(a: AdminForumRow, b: AdminForumRow): boolean {
   const x = scalarInput(a);
   const y = scalarInput(b);
-  return DIFF_KEYS.some((k) => x[k] !== y[k]);
+  return DIFF_KEYS.some((k) => !sameField(k, x, y));
 }
 
 /** 二级版块：按「一级版块 → 其子版块」重排，便于后台树形对照（父不可见的孤儿追加到末尾） */
@@ -83,6 +92,7 @@ function BLANK_FORUM(): AdminForumRow {
     seo_keywords: '',
     parent_fid: 0,
     lang: '',
+    name_i18n: {},
     accesslist: {},
   };
 }
@@ -94,6 +104,8 @@ export function ForumListPage() {
   const q = useQuery({ queryKey: ['admin', 'forums'], queryFn: getForums });
   const [rows, setRows] = useState<AdminForumRow[]>([]);
   const [confirming, setConfirming] = useState<AdminForumRow | null>(null);
+  /** 版块名多语言弹窗：打开时快照该行值，确认后才回写行（取消丢弃草稿） */
+  const [i18nEdit, setI18nEdit] = useState<{ fid: number; name: string; value: Record<string, string> } | null>(null);
   const [notice, setNotice] = useState('');
   /** 折叠的一级版块 fid（默认全部展开）；驱动子版块显隐 */
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -242,10 +254,11 @@ export function ForumListPage() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="adm-table w-full min-w-[960px] text-base">
+          <table className="adm-table w-full min-w-[1060px] text-base">
             <thead>
               <tr>
                 <th scope="col" className="whitespace-nowrap text-left font-medium">{t('forum_name', '名称')}</th>
+                <th scope="col" className="w-[100px] whitespace-nowrap font-medium">{t('forum_name_i18n', '语言')}</th>
                 <th scope="col" className="w-[90px] whitespace-nowrap font-medium">{t('forum_id', '版块 ID')}</th>
                 <th scope="col" className="w-[150px] whitespace-nowrap font-medium">{t('forum_parent', '父版块')}</th>
                 <th scope="col" className="w-[130px] whitespace-nowrap font-medium">{t('content_lang_label')}</th>
@@ -259,6 +272,8 @@ export function ForumListPage() {
             <tbody>
               {visible.map(({ row: r, depth, kids }) => {
                 const open = !collapsed.has(r.fid);
+                /** 已配置的界面语言数（仅用于按钮上的提示标记） */
+                const i18nCount = Object.keys(r.name_i18n ?? {}).length;
                 return (
                   <tr key={r.fid} className="text-center">
                     {/* 名称列 = 树列：一级版块带收缩/展开箭头，子版块缩进 */}
@@ -280,6 +295,17 @@ export function ForumListPage() {
                         )}
                         <Input value={r.name} placeholder={t('forum_name', '名称')} onChange={(e) => patch(r.fid, { name: e.target.value })} />
                       </div>
+                    </td>
+                    {/* 版块名多语言（0027）：点开弹窗逐语言填名称，前台按站点语言取词 */}
+                    <td>
+                      <Button
+                        variant="default"
+                        onClick={() => setI18nEdit({ fid: r.fid, name: r.name, value: r.name_i18n ?? {} })}
+                        title={t('forum_name_i18n_title', '版块名称多语言')}
+                      >
+                        {t('forum_name_i18n', '语言')}
+                        {i18nCount > 0 ? ` (${i18nCount})` : ''}
+                      </Button>
                     </td>
                     <td className="text-muted-2">{r.fid || '—'}</td>
                     <td>
@@ -366,6 +392,17 @@ export function ForumListPage() {
           {t('admin_note_tip', '注：{tip}', { tip: t('forum_edit_tip', '请谨慎编辑版块，一旦确定后不要轻易变动，否则可能会导致数据关联错误，一般在正式运营时就不要再变动。') })}
         </p>
       </Card>
+
+      <ForumNameI18nModal
+        open={i18nEdit !== null}
+        name={i18nEdit?.name ?? ''}
+        value={i18nEdit?.value}
+        onSave={(next, defaultName) => {
+          if (i18nEdit) patch(i18nEdit.fid, { name_i18n: next, name: defaultName });
+          setI18nEdit(null);
+        }}
+        onClose={() => setI18nEdit(null)}
+      />
 
       <ConfirmModal
         open={confirming !== null}

@@ -14,7 +14,7 @@ import { GroupId, AVAILABLE_LOCALES, NATIVE_LANG_NAMES } from '@freeidx/shared';
 import { useAuth } from '../../store/auth';
 import { useAuthModal } from '../../store/authModal';
 import { AuthModal } from '../../components/AuthModal';
-import { useT, useLang, useLangPref, useGroupName } from '../../lib/i18n';
+import { useT, useLang, useLangPref, useGroupName, useForumName } from '../../lib/i18n';
 import { Avatar } from '../../components/Avatar';
 import { Icon, type IconName } from '../../components/icons';
 import { InsertCode, useInsertCodes } from '../../components/InsertCode';
@@ -332,6 +332,8 @@ export function Layout({ children }: { children?: ReactNode }) {
   const load = useAuth((s) => s.load);
   const error = useAuth((s) => s.error);
   const t = useT();
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const insertCodes = useInsertCodes();
@@ -375,7 +377,7 @@ export function Layout({ children }: { children?: ReactNode }) {
   const homeActive = pathname === '/' || pathname.startsWith('/page');
   const discActive = pathname.startsWith('/discovery');
   const rankActive = pathname.startsWith('/rank');
-  const forumItems = customNav.length > 0 ? customNav : topForums.map((f) => ({ label: f.name, url: `/forum/${f.fid}`, sort: f.rank, on: 1 as const }));
+  const forumItems = customNav.length > 0 ? customNav : topForums.map((f) => ({ label: fname(f), url: `/forum/${f.fid}`, sort: f.rank, on: 1 as const }));
   const contact: IconName[] = ['message', 'comment', 'envelope'];
   /** 发现页显示名（可后台自定义；缺省回落 i18n「发现」） */
   const discLabel = light.discPageTitle || t('discovery');
@@ -628,7 +630,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                         <Icon name="folder" className="size-4 text-zh-grey" />
                       </span>
                     )}
-                    <span className="w-full truncate text-[11px] leading-tight text-foreground">{f.name}</span>
+                    <span className="w-full truncate text-[11px] leading-tight text-foreground">{fname(f)}</span>
                   </Link>
                 </li>
               ))}

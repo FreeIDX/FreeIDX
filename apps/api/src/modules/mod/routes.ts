@@ -10,7 +10,7 @@
  *  deleteuser 归 T3-2（不走 forumAccessMod）；mod:executed 事件（契约②）逐条发射。
  */
 import { Hono, type Context } from 'hono';
-import { Code, GroupId, type ModThreadsReq } from '@freeidx/shared';
+import { Code, GroupId, normForumNameI18n, type ModThreadsReq } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
@@ -91,6 +91,8 @@ export function modRoutes(): Hono<ReadEnv> {
       data: {
         fid,
         name: forum.name,
+        /* 版块名多语言（0027）：整份 map 下发，前台按当前界面语言取词 */
+        nameI18n: normForumNameI18n(forum.name_i18n),
         perms: {
           allowmod: forumAccessMod(ctx, fid, 'allowtop'),
           allowdelete: forumAccessMod(ctx, fid, 'allowdelete'),

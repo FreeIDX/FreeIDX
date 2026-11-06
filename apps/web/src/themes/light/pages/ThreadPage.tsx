@@ -21,7 +21,7 @@ import { Alert, Breadcrumb, Button, Card, Modal, TagBadge, cx } from '../../../c
 import { useReadUnread } from '../../../hooks/useReadUnread';
 import { useAuth } from '../../../store/auth';
 import { useAuthModal } from '../../../store/authModal';
-import { useT, useGroupName } from '../../../lib/i18n';
+import { useT, useGroupName, useForumName } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 import type { UserProfile } from './UserPage';
 
@@ -178,6 +178,8 @@ function PrevNextCards({ prev, next }: { prev: { tid: number; subject: string } 
 export function ThreadPage() {
   const t = useT();
   const gn = useGroupName();
+  /* 版块名多语言（0027）：面包屑/版务弹窗的版块下拉按当前界面语言取词 */
+  const fname = useForumName();
   const light = useLight();
   const params = useParams();
   const navigate = useNavigate();
@@ -724,7 +726,7 @@ export function ThreadPage() {
             <Breadcrumb
               items={[
                 { text: t('home'), to: '/' },
-                { text: d.forum.name, to: `/forum/${th.fid}` },
+                { text: fname({ name: d.forum.name, nameI18n: d.forum.nameI18n }), to: `/forum/${th.fid}` },
                 { text: th.subject, title: th.subject },
               ]}
               right={
@@ -1359,7 +1361,7 @@ export function ThreadPage() {
                 .filter((f) => f.fid !== th.fid)
                 .map((f) => (
                   <option key={f.fid} value={f.fid}>
-                    {f.name}
+                    {fname(f)}
                   </option>
                 ))}
             </select>

@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES, FORUM_LANG_UNRESTRICTED, type ContentLang } from '@freeidx/shared';
 import { createForum, getForums, updateForum, uploadForumIcon, deleteForumIcon } from '../api';
 import type { AccessInput, ForumInput, GroupFullRow } from '../types';
+import { ForumNameI18nModal } from '../ForumNameI18nModal';
 import { useAdminT } from '../t';
 import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
@@ -59,6 +60,7 @@ const EMPTY: ForumInput = {
   seo_keywords: '',
   parent_fid: 0,
   lang: '',
+  name_i18n: {},
 };
 
 type Matrix = Record<number, Record<string, number>>;
@@ -76,6 +78,8 @@ export function ForumEditPage() {
   /** 版块图标直链（选图即传，不随表单提交；''=内置默认图） */
   const [iconUrl, setIconUrl] = useState('');
   const [iconNotice, setIconNotice] = useState('');
+  /** 版块名多语言弹窗（0027）：与列表页同一组件，确认后写回表单 */
+  const [i18nOpen, setI18nOpen] = useState(false);
 
   useEffect(() => {
     if (!q.data || form) return;
@@ -102,6 +106,7 @@ export function ForumEditPage() {
       seo_keywords: row.seo_keywords,
       parent_fid: row.parent_fid,
       lang: row.lang ?? '',
+      name_i18n: row.name_i18n ?? {},
     });
     setIconUrl(row.icon_url);
     const seed: Matrix = {};
@@ -179,6 +184,8 @@ export function ForumEditPage() {
   if (q.isError) return <ErrorState error={q.error} />;
   if (!form && !q.isPending) return <Card>{t('forum_not_found_id', '版块 {fid} 不存在。', { fid: routeFid })}</Card>;
   if (!form) return <Card>{t('loading', '加载中…')}</Card>;
+  /** 已配置的界面语言数（仅用于按钮上的提示标记） */
+  const i18nCount = Object.keys(form.name_i18n ?? {}).length;
 
   return (
     <div className="space-y-3">
@@ -192,6 +199,17 @@ export function ForumEditPage() {
         </h4>
         <Field label={t('forum_name', '名称')} htmlFor="f-name">
           <Input id="f-name" value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} />
+        </Field>
+        {/* 版块名多语言（0027）：逐语言填写名称，前台按站点当前语言取词（未填写的回退「名称」） */}
+        <Field
+          label={t('forum_name_i18n', '语言')}
+          hint={t('forum_name_i18n_hint', '按站点当前语言自动显示对应名称；未填写的语言回退到默认名称。')}
+          controlClass="sm:w-4/12"
+        >
+          <Button variant="default" onClick={() => setI18nOpen(true)}>
+            {t('forum_name_i18n_title', '版块名称多语言')}
+            {i18nCount > 0 ? ` (${i18nCount})` : ''}
+          </Button>
         </Field>
         <Field
           label={t('forum_parent', '父版块')}
@@ -326,6 +344,18 @@ export function ForumEditPage() {
           </LinkButton>
         </SubmitRow>
       </Card>
+
+      <ForumNameI18nModal
+        open={i18nOpen}
+        name={form.name ?? ''}
+        value={form.name_i18n}
+        onSave={(next, defaultName) => {
+          set('name_i18n', next);
+          set('name', defaultName);
+          setI18nOpen(false);
+        }}
+        onClose={() => setI18nOpen(false)}
+      />
     </div>
   );
 }

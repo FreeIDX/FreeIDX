@@ -9,7 +9,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { Code, PageSize, normalizeContentLang, type AttachItem, type FavoriterItem, type PostItem, type PostReplyItem, type SearchUserHit, type ThreadListItem, type ThreadDetail } from '@freeidx/shared';
+import { Code, PageSize, normalizeContentLang, normForumNameI18n, type AttachItem, type FavoriterItem, type PostItem, type PostReplyItem, type SearchUserHit, type ThreadListItem, type ThreadDetail } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
@@ -303,6 +303,8 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
               forum: {
                 fid: forumlist[fid].fid,
                 name: forumlist[fid].name,
+                /* 版块名多语言（0027）：整份 map 下发，前端按当前界面语言取词 */
+                nameI18n: normForumNameI18n(forumlist[fid].name_i18n),
                 brief: forumlist[fid].brief,
                 moduids: forumlist[fid].moduids,
                 icon: forumlist[fid].icon,
@@ -714,7 +716,7 @@ export function threadRoutes(): Hono<ReadEnv> {
     const detail: ThreadDetail = {
       // 主题作者 V 头衔 + 预设头像随行下发（同 usersMap 一次 IN 查询的结果）
       thread: attachAuthorExtras(toThreadItem(thread), usersMap.get(Number(thread.uid))),
-      forum: { fid: forum.fid, name: forum.name, moduids: forum.moduids },
+      forum: { fid: forum.fid, name: forum.name, moduids: forum.moduids, nameI18n: normForumNameI18n(forum.name_i18n) },
       posts: { list: postsOut as ThreadDetail['posts']['list'], page, totalPage: totalPageOf(thread.posts + 1, size) },
       perms: {
         // closed 帖仅版务可回（叠加版务权限）；close/digest 复用 allowtop（§D.8#1）

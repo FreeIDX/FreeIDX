@@ -3,7 +3,7 @@
  * 合并版头渲染依赖的 forumlist/grouplist/当前用户为单请求（§7 首屏 RTT 收敛）。
  */
 import { Hono } from 'hono';
-import { effectiveBanScope } from '@freeidx/shared';
+import { effectiveBanScope, normForumNameI18n } from '@freeidx/shared';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
 import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
@@ -36,6 +36,8 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
       .map((f) => ({
         fid: f.fid,
         name: f.name,
+        /* 版块名多语言（0027）：整份 map 下发，前端按当前界面语言取词 → 切语言即时同步 */
+        nameI18n: normForumNameI18n(f.name_i18n),
         rank: f.rank,
         brief: f.brief,
         threads: f.threads,

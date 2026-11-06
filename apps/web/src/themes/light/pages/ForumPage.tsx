@@ -6,7 +6,7 @@ import { useAuth } from '../../../store/auth';
 import { useLight } from '../../../store/theme';
 import { ApiError, apiGet, modThreads } from '../../../lib/api';
 import { posInt } from '../../../lib/params';
-import { useT } from '../../../lib/i18n';
+import { useForumName, useT } from '../../../lib/i18n';
 import { NotFoundPage } from './NotFoundPage';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
@@ -21,6 +21,8 @@ interface ForumPageData extends ThreadPageData {
   forum?: {
     fid: number;
     name: string;
+    /** 版块名多语言（0027）：前端按当前界面语言取词 */
+    nameI18n?: Record<string, string>;
     brief: string;
     moduids: string;
     icon?: number;
@@ -63,6 +65,8 @@ export function ForumPage() {
   const light = useLight();
   const tags = light.tags;
   const t = useT();
+  /* 版块名多语言（0027）：按当前界面语言取词 */
+  const fname = useForumName();
   const [noticeOff, setNoticeOff] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   /* 版主批量操作：勾选 → 底部动作条 → POST /api/mod/threads */
@@ -106,7 +110,7 @@ export function ForumPage() {
   const langMode = useContentLangMode();
   const node = forumlist.find((f) => f.fid === fid);
   const forum = { ...node, ...q.data?.forum };
-  const name = forum.name ?? '';
+  const name = fname({ name: forum.name ?? '', nameI18n: forum.nameI18n });
   const brief = forum.brief ?? '';
   const announcement = forum.announcement ?? '';
   const mods = parseModuids(forum.moduids);
@@ -387,7 +391,7 @@ export function ForumPage() {
                     .filter((f) => f.fid !== fid)
                     .map((f) => (
                       <option key={f.fid} value={f.fid}>
-                        {f.name}
+                        {fname(f)}
                       </option>
                     ))}
                 </select>

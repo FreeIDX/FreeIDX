@@ -46,6 +46,8 @@ export interface ForumRow extends ForumForAccess {
   icon_url: string;
   /** 上级版块 fid，0 = 一级版块（0018_forum_parent，仅两级） */
   parent_fid: number;
+  /** 版块名多语言 JSON（0027）：空串 = 未配置；展示取词见 shared/forum-name.ts */
+  name_i18n: string;
 }
 
 /**
@@ -98,6 +100,7 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
       f.icon_time = Number(f.icon_time ?? 0);
       f.icon_url = f.icon_file ? `/files/${f.icon_file}?v=${f.icon_time}` : '';
       f.parent_fid = Number(f.parent_fid ?? 0);
+      f.name_i18n = String(f.name_i18n ?? '');
       out[f.fid] = { ...f, accesson: Number(f.accesson), accesslist: {} };
     }
     for (const a of access.results) {
