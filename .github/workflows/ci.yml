@@ -45,12 +45,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Deploy Worker preview
+      # 顺序不可颠倒：wrangler.toml 的 [assets].directory = "../web/dist" 是硬校验，
+      # 目录不存在时 `wrangler deploy --dry-run` 直接报错退出（此前先 dry-run 后构建踩过坑）。
+      - name: Build Pages frontend
+        run: pnpm --filter @freeidx/web build
+        env:
+          VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+      - name: Deploy Worker preview (dry-run)
         working-directory: apps/api
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --dry-run
-      - name: Build Pages frontend
-        run: pnpm --filter @freeidx/web build
       # prod 发布为手动门禁（§13.4）：wrangler deploy --env prod 由人工触发
