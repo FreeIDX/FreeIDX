@@ -325,8 +325,10 @@ export interface SiteSetting {
 
 /** 顶部导航栏单项（后台「导航栏设置」可配：链接到版块 /thread、文章或自定义地址） */
 export interface NavItem {
-  /** 显示名称 */
+  /** 显示名称（默认名称：未配置当前语言译文时回退它） */
   label: string;
+  /** 名称多语言：locale → 名称（与版块名 name_i18n 同一结构，前台按当前界面语言取词） */
+  labels?: Record<string, string>;
   /** 链接目标：站内路径（/forum/{fid}、/thread/{tid}、/new 等）或完整 URL */
   url: string;
   /** 排序（小在前） */

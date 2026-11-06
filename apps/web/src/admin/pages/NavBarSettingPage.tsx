@@ -14,11 +14,25 @@ import type { AdminSettingMap } from '../types';
 import { useAdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { useAuth } from '../../store/auth';
-import { Alert, Button, Card, ErrorState, Input, PageTitle, Select, SubmitRow, Switch, cx } from '../ui';
+import {
+  Alert,
+  Button,
+  Card,
+  ErrorState,
+  Input,
+  PageTitle,
+  Select,
+  SubmitRow,
+  Switch,
+  cx,
+} from '../ui';
+import { NameI18nModal } from '../NameI18nModal';
 
 /** 行编辑态：type 只为录入辅助，保存时折算成 url */
 interface NavRow {
   label: string;
+  /** 名称多语言：locale → 名称；空 = 未配置，前台回退 label */
+  labels: Record<string, string>;
   type: 'forum' | 'thread' | 'custom';
   fid: string;
   tid: string;
@@ -33,6 +47,7 @@ function toRow(it: NavItem): NavRow {
   const tm = /^\/thread\/(\d+)/.exec(url);
   return {
     label: String(it.label ?? ''),
+    labels: it.labels ?? {},
     type: fm ? 'forum' : tm ? 'thread' : 'custom',
     fid: fm ? fm[1]! : '',
     tid: tm ? tm[1]! : '',
@@ -43,8 +58,20 @@ function toRow(it: NavItem): NavRow {
 
 /** 行编辑态 → 存储项（sort 用行序，启用项才保留） */
 function toItem(r: NavRow, i: number): NavItem {
-  const url = r.type === 'forum' && r.fid ? `/forum/${r.fid}` : r.type === 'thread' && r.tid ? `/thread/${r.tid}` : r.url.trim();
-  return { label: r.label.trim(), url, sort: i, on: r.on ? 1 : 0 };
+  const url =
+    r.type === 'forum' && r.fid
+      ? `/forum/${r.fid}`
+      : r.type === 'thread' && r.tid
+        ? `/thread/${r.tid}`
+        : r.url.trim();
+  /* labels 为空时不落字段（与「未配置」同义，避免把空对象写进 kv） */
+  return {
+    label: r.label.trim(),
+    ...(Object.keys(r.labels).length ? { labels: r.labels } : {}),
+    url,
+    sort: i,
+    on: r.on ? 1 : 0,
+  };
 }
 
 export function NavBarSettingPage() {
@@ -55,6 +82,12 @@ export function NavBarSettingPage() {
   const [rows, setRows] = useState<NavRow[] | null>(null);
   /* true = 尚未保存过自定义导航，列表内容为前台顶栏当前实际显示的默认版块项（预填供直接编辑） */
   const [prefilled, setPrefilled] = useState(false);
+  /** 名称多语言弹窗：快照该行默认名称与译文，确认后回写行（取消丢弃草稿） */
+  const [i18nEdit, setI18nEdit] = useState<{
+    index: number;
+    name: string;
+    value: Record<string, string>;
+  } | null>(null);
 
   useEffect(() => {
     if (!q.data || rows) return;
@@ -70,8 +103,17 @@ export function NavBarSettingPage() {
     if (items.length === 0) {
       /* 未配置：预填前台顶栏当前实际显示的默认版块项。
          口径与 Layout.tsx 的版块回落一致（只取一级版块、最多 8 项），顺序沿用 bootstrap forumlist。 */
-      const topForums = forumlist.filter((f) => !f.parentFid || !forumlist.some((p) => p.fid === f.parentFid));
-      items = topForums.slice(0, 8).map((f, i) => ({ label: f.name, url: `/forum/${f.fid}`, sort: i, on: 1 as const }));
+      const topForums = forumlist.filter(
+        (f) => !f.parentFid || !forumlist.some((p) => p.fid === f.parentFid),
+      );
+      /* 预填项直接继承版块名的多语言（nameI18n → labels），避免保存后默认导航丢掉译文 */
+      items = topForums.slice(0, 8).map((f, i) => ({
+        label: f.name,
+        ...(f.nameI18n && Object.keys(f.nameI18n).length ? { labels: f.nameI18n } : {}),
+        url: `/forum/${f.fid}`,
+        sort: i,
+        on: 1 as const,
+      }));
       setPrefilled(true);
     }
     setRows(items.map(toRow));
@@ -91,7 +133,8 @@ export function NavBarSettingPage() {
   if (q.isError) return <ErrorState error={q.error} />;
   if (!rows) return <Card>{t('setting_loading', '设置加载中…')}</Card>;
 
-  const set = (i: number, patch: Partial<NavRow>) => setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const set = (i: number, patch: Partial<NavRow>) =>
+    setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const move = (i: number, d: -1 | 1) =>
     setRows((rs) => {
       const next = [...(rs ?? [])];
@@ -102,7 +145,10 @@ export function NavBarSettingPage() {
     });
   const remove = (i: number) => setRows((rs) => (rs ?? []).filter((_, j) => j !== i));
   const add = () =>
-    setRows((rs) => [...(rs ?? []), { label: '', type: 'custom', fid: '', tid: '', url: '', on: true }]);
+    setRows((rs) => [
+      ...(rs ?? []),
+      { label: '', labels: {}, type: 'custom', fid: '', tid: '', url: '', on: true },
+    ]);
 
   /* 未预填（= 已保存过自定义导航）且有条目 → 显示已配置计数；预填态提示「未配置」 */
   const configured = rows.length > 0 && !prefilled;
@@ -110,85 +156,153 @@ export function NavBarSettingPage() {
   return (
     <div className="space-y-3">
       <PageTitle>{t('admin_menu_nav_setting', '导航栏')}</PageTitle>
-      <Card title={t('nav_setting_title', '前台顶部导航栏')} footer={t('nav_setting_hint', '导航项可链接到版块、文章或自定义地址；一条都不保留（清空保存）时前台恢复默认导航（首页 + 版块列表）。链接类型选「版块」从下拉选择，选「文章」填主题 ID，选「自定义」填站内路径或完整网址。')}>
+      <Card
+        title={t('nav_setting_title', '前台顶部导航栏')}
+        footer={t(
+          'nav_setting_hint',
+          '导航项可链接到版块、文章或自定义地址；一条都不保留（清空保存）时前台恢复默认导航（首页 + 版块列表）。链接类型选「版块」从下拉选择，选「文章」填主题 ID，选「自定义」填站内路径或完整网址。',
+        )}
+      >
         {save.flash && <Alert tone={save.flash.tone}>{save.flash.text}</Alert>}
-        {configured && <p className="mb-2 text-sm text-muted-2">{t('nav_current_count', '已配置 {n} 个导航项（含停用项）', { n: rows.length }).replace('{n}', String(rows.length))}</p>}
-        {!configured && <p className="mb-2 text-sm text-muted-2">{t('nav_empty_hint', '当前未配置，以下为前台顶栏正在显示的默认版块项，可直接修改后保存；全部删除后保存即恢复默认导航。')}</p>}
+        {configured && (
+          <p className="mb-2 text-sm text-muted-2">
+            {t('nav_current_count', '已配置 {n} 个导航项（含停用项）', { n: rows.length }).replace(
+              '{n}',
+              String(rows.length),
+            )}
+          </p>
+        )}
+        {!configured && (
+          <p className="mb-2 text-sm text-muted-2">
+            {t(
+              'nav_empty_hint',
+              '当前未配置，以下为前台顶栏正在显示的默认版块项，可直接修改后保存；全部删除后保存即恢复默认导航。',
+            )}
+          </p>
+        )}
         <div className="space-y-2">
-          {rows.map((r, i) => (
-            <div key={i} className="rounded-[6px] border border-line-soft p-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                {/* 名称 */}
-                <Input
-                  className="w-36"
-                  value={r.label}
-                  placeholder={t('nav_item_label', '名称')}
-                  aria-label={t('nav_item_label', '名称')}
-                  onChange={(e) => set(i, { label: e.target.value })}
-                />
-                {/* 链接类型 */}
-                <Select
-                  className="w-32"
-                  value={r.type}
-                  aria-label={t('nav_item_type', '链接类型')}
-                  onChange={(e) => set(i, { type: e.target.value as NavRow['type'] })}
-                >
-                  <option value="forum">{t('nav_type_forum', '版块')}</option>
-                  <option value="thread">{t('nav_type_thread', '文章')}</option>
-                  <option value="custom">{t('nav_type_custom', '自定义')}</option>
-                </Select>
-                {/* 目标：版块下拉 / 文章 tid / 自定义地址 */}
-                {r.type === 'forum' && (
-                  <Select className="w-44" value={r.fid} aria-label={t('nav_pick_forum', '选择版块')} onChange={(e) => set(i, { fid: e.target.value })}>
-                    <option value="">{t('nav_pick_forum', '选择版块')}</option>
-                    {forumlist.map((f) => (
-                      <option key={f.fid} value={f.fid}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-                {r.type === 'thread' && (
+          {rows.map((r, i) => {
+            /** 已配置的界面语言数（仅用于按钮上的提示标记） */
+            const i18nCount = Object.keys(r.labels ?? {}).length;
+            return (
+              <div key={i} className="rounded-[6px] border border-line-soft p-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* 名称（默认名称） */}
                   <Input
+                    className="w-36"
+                    value={r.label}
+                    placeholder={t('nav_item_label', '名称')}
+                    aria-label={t('nav_item_label', '名称')}
+                    onChange={(e) => set(i, { label: e.target.value })}
+                  />
+                  {/* 名称多语言：前台按站点语言取词，未填写的语言回退默认名称 */}
+                  <Button
+                    size="sm"
+                    variant="default"
+                    title={t('nav_item_name_i18n_title', '导航项名称多语言')}
+                    onClick={() => setI18nEdit({ index: i, name: r.label, value: r.labels })}
+                  >
+                    {t('forum_name_i18n', '语言')}
+                    {i18nCount > 0 ? ` (${i18nCount})` : ''}
+                  </Button>
+                  {/* 链接类型 */}
+                  <Select
                     className="w-32"
-                    type="number"
-                    min={1}
-                    value={r.tid}
-                    placeholder={t('nav_thread_tid', '主题 ID')}
-                    aria-label={t('nav_thread_tid', '主题 ID')}
-                    onChange={(e) => set(i, { tid: e.target.value })}
-                  />
-                )}
-                {r.type === 'custom' && (
-                  <Input
-                    className="w-56"
-                    value={r.url}
-                    placeholder={t('nav_custom_url', '链接地址，如 /new 或 https://')}
-                    aria-label={t('nav_custom_url', '链接地址')}
-                    onChange={(e) => set(i, { url: e.target.value })}
-                  />
-                )}
-                <div className="ml-auto flex items-center gap-1">
-                  <Switch checked={r.on} onChange={(v) => set(i, { on: v })} title={t('nav_item_on', '启用')} />
-                  <Button size="sm" variant="default" disabled={i === 0} aria-label={t('nav_move_up', '上移')} onClick={() => move(i, -1)}>
-                    ↑
-                  </Button>
-                  <Button size="sm" variant="default" disabled={i === rows.length - 1} aria-label={t('nav_move_down', '下移')} onClick={() => move(i, 1)}>
-                    ↓
-                  </Button>
-                  <Button size="sm" variant="danger" aria-label={t('nav_delete', '删除')} onClick={() => remove(i)}>
-                    {t('delete', '删除')}
-                  </Button>
+                    value={r.type}
+                    aria-label={t('nav_item_type', '链接类型')}
+                    onChange={(e) => set(i, { type: e.target.value as NavRow['type'] })}
+                  >
+                    <option value="forum">{t('nav_type_forum', '版块')}</option>
+                    <option value="thread">{t('nav_type_thread', '文章')}</option>
+                    <option value="custom">{t('nav_type_custom', '自定义')}</option>
+                  </Select>
+                  {/* 目标：版块下拉 / 文章 tid / 自定义地址 */}
+                  {r.type === 'forum' && (
+                    <Select
+                      className="w-44"
+                      value={r.fid}
+                      aria-label={t('nav_pick_forum', '选择版块')}
+                      onChange={(e) => set(i, { fid: e.target.value })}
+                    >
+                      <option value="">{t('nav_pick_forum', '选择版块')}</option>
+                      {forumlist.map((f) => (
+                        <option key={f.fid} value={f.fid}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  {r.type === 'thread' && (
+                    <Input
+                      className="w-32"
+                      type="number"
+                      min={1}
+                      value={r.tid}
+                      placeholder={t('nav_thread_tid', '主题 ID')}
+                      aria-label={t('nav_thread_tid', '主题 ID')}
+                      onChange={(e) => set(i, { tid: e.target.value })}
+                    />
+                  )}
+                  {r.type === 'custom' && (
+                    <Input
+                      className="w-56"
+                      value={r.url}
+                      placeholder={t('nav_custom_url', '链接地址，如 /new 或 https://')}
+                      aria-label={t('nav_custom_url', '链接地址')}
+                      onChange={(e) => set(i, { url: e.target.value })}
+                    />
+                  )}
+                  <div className="ml-auto flex items-center gap-1">
+                    <Switch
+                      checked={r.on}
+                      onChange={(v) => set(i, { on: v })}
+                      title={t('nav_item_on', '启用')}
+                    />
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={i === 0}
+                      aria-label={t('nav_move_up', '上移')}
+                      onClick={() => move(i, -1)}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      disabled={i === rows.length - 1}
+                      aria-label={t('nav_move_down', '下移')}
+                      onClick={() => move(i, 1)}
+                    >
+                      ↓
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      aria-label={t('nav_delete', '删除')}
+                      onClick={() => remove(i)}
+                    >
+                      {t('delete', '删除')}
+                    </Button>
+                  </div>
                 </div>
+                {/* 生成的链接预览（无效输入提示） */}
+                <p
+                  className={cx(
+                    'mt-1.5 text-xs',
+                    toItem(r, i).url ? 'text-muted-2' : 'text-danger',
+                  )}
+                >
+                  {toItem(r, i).url
+                    ? t('nav_link_preview', '链接：{url}', { url: toItem(r, i).url }).replace(
+                        '{url}',
+                        toItem(r, i).url,
+                      )
+                    : t('nav_link_missing', '请完整填写名称和链接目标')}
+                </p>
               </div>
-              {/* 生成的链接预览（无效输入提示） */}
-              <p className={cx('mt-1.5 text-xs', toItem(r, i).url ? 'text-muted-2' : 'text-danger')}>
-                {toItem(r, i).url
-                  ? t('nav_link_preview', '链接：{url}', { url: toItem(r, i).url }).replace('{url}', toItem(r, i).url)
-                  : t('nav_link_missing', '请完整填写名称和链接目标')}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <Button className="mt-3" variant="default" onClick={add}>
           + {t('nav_add_item', '添加导航项')}
@@ -199,6 +313,18 @@ export function NavBarSettingPage() {
           </Button>
         </SubmitRow>
       </Card>
+
+      <NameI18nModal
+        open={i18nEdit !== null}
+        name={i18nEdit?.name ?? ''}
+        value={i18nEdit?.value}
+        title={t('nav_item_name_i18n_title', '导航项名称多语言')}
+        onSave={(next, defaultName) => {
+          if (i18nEdit) set(i18nEdit.index, { labels: next, label: defaultName });
+          setI18nEdit(null);
+        }}
+        onClose={() => setI18nEdit(null)}
+      />
     </div>
   );
 }

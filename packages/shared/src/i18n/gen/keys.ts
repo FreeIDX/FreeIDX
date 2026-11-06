@@ -1183,6 +1183,7 @@ export type AdminKey =
   | 'nav_delete'
   | 'nav_empty_hint'
   | 'nav_item_label'
+  | 'nav_item_name_i18n_title'
   | 'nav_item_on'
   | 'nav_item_type'
   | 'nav_link_missing'

@@ -528,6 +528,7 @@
   "compose_muted_hint": "アカウントは投稿禁止のため、現在スレッド作成・返信ができません。"
  },
  "admin": {
+  "nav_item_name_i18n_title": "ナビ項目名の多言語設定",
   "forum_name_i18n": "言語",
   "forum_name_i18n_title": "フォーラム名の多言語設定",
   "forum_name_i18n_hint": "サイトの現在の言語に応じた名前を表示します。未入力の言語は既定の名前を使用します。",

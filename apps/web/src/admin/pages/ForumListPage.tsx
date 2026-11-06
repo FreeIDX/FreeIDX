@@ -24,7 +24,7 @@ import { useAdminT } from '../t';
 import { useBatchAction } from '../use-action';
 import { useAuth } from '../../store/auth';
 import { Alert, Button, Card, ConfirmModal, ErrorState, Input, PageTitle, Select, cx } from '../ui';
-import { ForumNameI18nModal } from '../ForumNameI18nModal';
+import { NameI18nModal } from '../NameI18nModal';
 import { Icon } from '../../components/icons';
 
 /** 提交口径 = 服务端 PUT 的标量字段集（不带 access） */
@@ -393,7 +393,7 @@ export function ForumListPage() {
         </p>
       </Card>
 
-      <ForumNameI18nModal
+      <NameI18nModal
         open={i18nEdit !== null}
         name={i18nEdit?.name ?? ''}
         value={i18nEdit?.value}

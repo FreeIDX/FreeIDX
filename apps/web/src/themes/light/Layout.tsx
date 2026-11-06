@@ -14,7 +14,14 @@ import { GroupId, AVAILABLE_LOCALES, NATIVE_LANG_NAMES } from '@freeidx/shared';
 import { useAuth } from '../../store/auth';
 import { useAuthModal } from '../../store/authModal';
 import { AuthModal } from '../../components/AuthModal';
-import { useT, useLang, useLangPref, useGroupName, useForumName } from '../../lib/i18n';
+import {
+  useT,
+  useLang,
+  useLangPref,
+  useGroupName,
+  useForumName,
+  useLocalizedName,
+} from '../../lib/i18n';
 import { Avatar } from '../../components/Avatar';
 import { Icon, type IconName } from '../../components/icons';
 import { InsertCode, useInsertCodes } from '../../components/InsertCode';
@@ -57,14 +64,30 @@ function NavItem({
     );
   }
   return (
-    <Link to={to} onClick={onClick} aria-current={active ? 'page' : undefined} title={label} className={cls}>
+    <Link
+      to={to}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      title={label}
+      className={cls}
+    >
       {inner}
     </Link>
   );
 }
 
 /** 搜索：顶栏圆角胶囊（.index_header_search：--aid-color 底 + 20px 圆角） */
-function SearchForm({ kw, setKw, onSearch, pill }: { kw: string; setKw: (v: string) => void; onSearch: (e: React.FormEvent) => void; pill?: boolean }) {
+function SearchForm({
+  kw,
+  setKw,
+  onSearch,
+  pill,
+}: {
+  kw: string;
+  setKw: (v: string) => void;
+  onSearch: (e: React.FormEvent) => void;
+  pill?: boolean;
+}) {
   const t = useT();
   return (
     <form
@@ -83,7 +106,11 @@ function SearchForm({ kw, setKw, onSearch, pill }: { kw: string; setKw: (v: stri
         autoComplete="off"
         className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-zh-grey"
       />
-      <button type="submit" aria-label={t('search')} className="flex size-7 shrink-0 items-center justify-center text-zh-grey transition-colors hover:text-brand">
+      <button
+        type="submit"
+        aria-label={t('search')}
+        className="flex size-7 shrink-0 items-center justify-center text-zh-grey transition-colors hover:text-brand"
+      >
         <Icon name="search" className="size-4" />
       </button>
     </form>
@@ -121,7 +148,12 @@ function ThemeSwitch() {
   const t = useT();
   const mode = useThemeMode((s) => s.mode);
   const cycle = useThemeMode((s) => s.cycle);
-  const label = mode === 'auto' ? t('theme_mode_auto') : mode === 'day' ? t('theme_mode_day') : t('theme_mode_night');
+  const label =
+    mode === 'auto'
+      ? t('theme_mode_auto')
+      : mode === 'day'
+        ? t('theme_mode_day')
+        : t('theme_mode_night');
   const icon: IconName = mode === 'auto' ? 'refresh_cw' : mode === 'day' ? 'sun' : 'moon';
   return (
     <button
@@ -228,7 +260,10 @@ function UserMenu() {
   }, [open]);
   if (!me) return null;
   const group = grouplist.find((g) => g.gid === me.gid);
-  const progress = group && group.creditsto > 0 ? Math.min(100, Math.round(((me.credits ?? 0) / group.creditsto) * 100)) : 100;
+  const progress =
+    group && group.creditsto > 0
+      ? Math.min(100, Math.round(((me.credits ?? 0) / group.creditsto) * 100))
+      : 100;
   const items: [string, string][] = [
     [t('personal_profile'), '/me'],
     [t('my_posts'), '/me?s=threads'],
@@ -263,12 +298,22 @@ function UserMenu() {
               <Avatar uid={me.uid} avatar={me.avatar} username={me.username} size={4} />
             </Link>
             <div className="min-w-0">
-              <Link to={`/user/${me.uid}`} onClick={() => setOpen(false)} className="block truncate text-sm font-bold text-foreground hover:text-brand">
+              <Link
+                to={`/user/${me.uid}`}
+                onClick={() => setOpen(false)}
+                className="block truncate text-sm font-bold text-foreground hover:text-brand"
+              >
                 {me.username}
               </Link>
               <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-none">
-                <span className="rounded-[3px] bg-brand px-1.5 py-0.5 text-white">UID:{me.uid}</span>
-                {group && <span className="rounded-[3px] bg-[#00b8d8] px-1.5 py-0.5 text-white">{gn(group.gid, group.name)}</span>}
+                <span className="rounded-[3px] bg-brand px-1.5 py-0.5 text-white">
+                  UID:{me.uid}
+                </span>
+                {group && (
+                  <span className="rounded-[3px] bg-[#00b8d8] px-1.5 py-0.5 text-white">
+                    {gn(group.gid, group.name)}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -287,7 +332,10 @@ function UserMenu() {
                   <b className="ml-auto tabular-nums text-foreground">{me.credits ?? 0}</b>
                 </div>
                 <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-[#e9ecef]">
-                  <div className="h-full rounded-full bg-brand transition-[width] duration-500" style={{ width: `${progress}%` }} />
+                  <div
+                    className="h-full rounded-full bg-brand transition-[width] duration-500"
+                    style={{ width: `${progress}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -332,8 +380,9 @@ export function Layout({ children }: { children?: ReactNode }) {
   const load = useAuth((s) => s.load);
   const error = useAuth((s) => s.error);
   const t = useT();
-  /* 版块名多语言（0027）：按当前界面语言取词 */
+  /* 版块名 / 导航项名多语言：按当前界面语言取词 */
   const fname = useForumName();
+  const lname = useLocalizedName();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const insertCodes = useInsertCodes();
@@ -358,7 +407,8 @@ export function Layout({ children }: { children?: ReactNode }) {
   /* 顶栏导航与一级版块均为派生数据：Layout 在每个页面常驻、路由与 store 变化都会重渲染，
      故按来源引用记忆化；原 topForums 用 filter + some 为 O(版块数²)，改为 Set 查找 O(n)。 */
   const customNav = useMemo(
-    () => (setting?.nav ?? []).filter((n) => n.on && n.label && n.url).sort((a, b) => a.sort - b.sort),
+    () =>
+      (setting?.nav ?? []).filter((n) => n.on && n.label && n.url).sort((a, b) => a.sort - b.sort),
     [setting?.nav],
   );
   /* 二级版块：顶栏/移动二级行/抽屉宫格只显示一级版块（父不可见的子版块回退为一级，避免入口丢失） */
@@ -377,7 +427,16 @@ export function Layout({ children }: { children?: ReactNode }) {
   const homeActive = pathname === '/' || pathname.startsWith('/page');
   const discActive = pathname.startsWith('/discovery');
   const rankActive = pathname.startsWith('/rank');
-  const forumItems = customNav.length > 0 ? customNav : topForums.map((f) => ({ label: fname(f), url: `/forum/${f.fid}`, sort: f.rank, on: 1 as const }));
+  /* 自定义导航项：label 是默认名称，命中当前语言的 labels 则覆盖（后台「导航栏设置」可配） */
+  const forumItems =
+    customNav.length > 0
+      ? customNav.map((n) => ({ ...n, label: lname(n.label, n.labels) }))
+      : topForums.map((f) => ({
+          label: fname(f),
+          url: `/forum/${f.fid}`,
+          sort: f.rank,
+          on: 1 as const,
+        }));
   const contact: IconName[] = ['message', 'comment', 'envelope'];
   /** 发现页显示名（可后台自定义；缺省回落 i18n「发现」） */
   const discLabel = light.discPageTitle || t('discovery');
@@ -387,397 +446,532 @@ export function Layout({ children }: { children?: ReactNode }) {
   /** 底栏第二格：有发现页走发现，否则落到第一个一级版块 */
   const dockSecond: { icon: IconName; label: string; to: string; active: boolean } = light.discPage
     ? { icon: 'atom', label: discLabel, to: '/discovery', active: discActive }
-    : { icon: 'grid', label: t('all_forums'), to: topForums[0] ? `/forum/${topForums[0].fid}` : '/', active: false };
+    : {
+        icon: 'grid',
+        label: t('all_forums'),
+        to: topForums[0] ? `/forum/${topForums[0].fid}` : '/',
+        active: false,
+      };
 
   return (
-    <div className={cx('theme-zh flex min-h-dvh flex-col bg-background text-foreground', light.bodyFontStyle === 2 && 'font-smiley')}>
+    <div
+      className={cx(
+        'theme-zh flex min-h-dvh flex-col bg-background text-foreground',
+        light.bodyFontStyle === 2 && 'font-smiley',
+      )}
+    >
       {/* ============ #header：固定白色顶栏（blur 10.5px）============
           主题插槽：启用主题覆写 header 时整块（含移动端抽屉）由主题渲染，否则用下方简蓝实现。 */}
       <ThemeSlot name="header">
         <>
-      <header className="fixed inset-x-0 top-0 z-[999] w-full bg-card/96 backdrop-blur-[10.5px] max-lg:border-b max-lg:border-zh-line">
-        {/* PC 行（lg+） */}
-        <div className="mx-auto hidden h-[75px] w-full max-w-[1280px] items-center gap-2 px-4 lg:flex">
-          <Link to="/" className="flex shrink-0 items-center" aria-label={setting?.sitename || 'FreeIDX'}>
-            {setting?.logo_url ? (
-              <img src={String(setting.logo_url)} alt={setting.sitename} className="h-[42px] w-auto max-w-none" />
-            ) : (
-              <span className="text-xl font-bold tracking-tight text-brand">{setting?.sitename || 'FreeIDX'}</span>
-            )}
-          </Link>
-          <nav className="ml-4 flex h-full min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={t('forum_nav')}>
-            <NavItem to="/" label={t('home')} active={homeActive} />
-            {light.enabled && light.discPage && <NavItem to="/discovery" label={discLabel} active={discActive} />}
-            {forumItems.slice(0, 8).map((f) => (
-              <NavItem
-                key={f.url}
-                to={f.url}
-                label={f.label}
-                active={pathname === f.url || pathname.startsWith(`${f.url}/`) || pathname.startsWith(`${f.url}?`)}
-                external={/^https?:\/\//i.test(f.url)}
-              />
-            ))}
-            <NavItem to="/rank" label={t('ranking_short')} active={rankActive} />
-            {light.links.map((l) => (
-              <NavItem key={`${l.name}-${l.url}`} to={l.url} label={l.name} active={false} external />
-            ))}
-          </nav>
-          {light.navSearchForm && (
-            <div className="hidden min-w-0 flex-1 md:block md:max-w-[260px]">
-              <SearchForm kw={kw} setKw={setKw} onSearch={doSearch} />
-            </div>
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            <Link
-              to={createTo}
-              className="mr-1 hidden h-9 items-center justify-center gap-1 rounded-[6px] bg-brand px-3.5 text-sm font-medium text-white transition-colors hover:bg-brand-hover sm:flex"
-            >
-              <Icon name="edit" className="size-4" /> {t('create_new_thread')}
-            </Link>
-            {light.darkMode && <ThemeSwitch />}
-            <LangSwitch />
-            {me ? (
-              <>
+          <header className="fixed inset-x-0 top-0 z-[999] w-full bg-card/96 backdrop-blur-[10.5px] max-lg:border-b max-lg:border-zh-line">
+            {/* PC 行（lg+） */}
+            <div className="mx-auto hidden h-[75px] w-full max-w-[1280px] items-center gap-2 px-4 lg:flex">
+              <Link
+                to="/"
+                className="flex shrink-0 items-center"
+                aria-label={setting?.sitename || 'FreeIDX'}
+              >
+                {setting?.logo_url ? (
+                  <img
+                    src={String(setting.logo_url)}
+                    alt={setting.sitename}
+                    className="h-[42px] w-auto max-w-none"
+                  />
+                ) : (
+                  <span className="text-xl font-bold tracking-tight text-brand">
+                    {setting?.sitename || 'FreeIDX'}
+                  </span>
+                )}
+              </Link>
+              <nav
+                className="ml-4 flex h-full min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                aria-label={t('forum_nav')}
+              >
+                <NavItem to="/" label={t('home')} active={homeActive} />
+                {light.enabled && light.discPage && (
+                  <NavItem to="/discovery" label={discLabel} active={discActive} />
+                )}
+                {forumItems.slice(0, 8).map((f) => (
+                  <NavItem
+                    key={f.url}
+                    to={f.url}
+                    label={f.label}
+                    active={
+                      pathname === f.url ||
+                      pathname.startsWith(`${f.url}/`) ||
+                      pathname.startsWith(`${f.url}?`)
+                    }
+                    external={/^https?:\/\//i.test(f.url)}
+                  />
+                ))}
+                <NavItem to="/rank" label={t('ranking_short')} active={rankActive} />
+                {light.links.map((l) => (
+                  <NavItem
+                    key={`${l.name}-${l.url}`}
+                    to={l.url}
+                    label={l.name}
+                    active={false}
+                    external
+                  />
+                ))}
+              </nav>
+              {light.navSearchForm && (
+                <div className="hidden min-w-0 flex-1 md:block md:max-w-[260px]">
+                  <SearchForm kw={kw} setKw={setKw} onSearch={doSearch} />
+                </div>
+              )}
+              <div className="ml-auto flex shrink-0 items-center gap-0.5">
                 <Link
-                  to="/me?s=notices"
-                  className="relative flex size-10 items-center justify-center text-ink-soft transition-colors hover:text-brand"
-                  aria-label={(me.unreadNotices ?? 0) > 0 ? t('message_unread_count', { count: me.unreadNotices ?? 0 }) : t('messages_short')}
-                  title={t('messages_short')}
+                  to={createTo}
+                  className="mr-1 hidden h-9 items-center justify-center gap-1 rounded-[6px] bg-brand px-3.5 text-sm font-medium text-white transition-colors hover:bg-brand-hover sm:flex"
                 >
-                  <Icon name="bell" className="size-[18px]" />
-                  {(me.unreadNotices ?? 0) > 0 && (
-                    <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-medium leading-4 text-white tabular-nums">
-                      {(me.unreadNotices ?? 0) > 99 ? '99+' : me.unreadNotices}
-                    </span>
-                  )}
+                  <Icon name="edit" className="size-4" /> {t('create_new_thread')}
                 </Link>
-                <UserMenu />
-              </>
-            ) : (
-              <div className="flex items-center">
-                <button
-                  type="button"
-                  className="px-2.5 py-2 text-[15px] text-ink-soft transition-colors hover:text-brand"
-                  onClick={() => openAuth('login')}
-                >
-                  {t('login')}
-                </button>
-                <button
-                  type="button"
-                  className="px-2.5 py-2 text-[15px] text-ink-soft transition-colors hover:text-brand"
-                  onClick={() => openAuth('register')}
-                >
-                  {t('register')}
-                </button>
+                {light.darkMode && <ThemeSwitch />}
+                <LangSwitch />
+                {me ? (
+                  <>
+                    <Link
+                      to="/me?s=notices"
+                      className="relative flex size-10 items-center justify-center text-ink-soft transition-colors hover:text-brand"
+                      aria-label={
+                        (me.unreadNotices ?? 0) > 0
+                          ? t('message_unread_count', { count: me.unreadNotices ?? 0 })
+                          : t('messages_short')
+                      }
+                      title={t('messages_short')}
+                    >
+                      <Icon name="bell" className="size-[18px]" />
+                      {(me.unreadNotices ?? 0) > 0 && (
+                        <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-medium leading-4 text-white tabular-nums">
+                          {(me.unreadNotices ?? 0) > 99 ? '99+' : me.unreadNotices}
+                        </span>
+                      )}
+                    </Link>
+                    <UserMenu />
+                  </>
+                ) : (
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      className="px-2.5 py-2 text-[15px] text-ink-soft transition-colors hover:text-brand"
+                      onClick={() => openAuth('login')}
+                    >
+                      {t('login')}
+                    </button>
+                    <button
+                      type="button"
+                      className="px-2.5 py-2 text-[15px] text-ink-soft transition-colors hover:text-brand"
+                      onClick={() => openAuth('register')}
+                    >
+                      {t('register')}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* 移动行（<lg）：头像 + 搜索胶囊 + 消息 + 发帖 */}
-        <div className="flex h-[55px] items-center gap-2.5 px-3 lg:hidden">
-          <button
-            type="button"
-            className="flex shrink-0 items-center"
-            aria-label={t('open_nav')}
-            onClick={() => setDrawer(true)}
-          >
-            {me ? (
-              <Avatar uid={me.uid} avatar={me.avatar} username={me.username} size={2} />
-            ) : (
-              <span className="grid size-8 place-items-center rounded-full bg-lt-soft text-zh-grey">
-                <Icon name="user" className="size-4" />
-              </span>
-            )}
-          </button>
-          <div className="min-w-0 flex-1">
-            <SearchForm kw={kw} setKw={setKw} onSearch={doSearch} pill />
-          </div>
-          <Link
-            to="/me?s=notices"
-            className="relative flex size-9 shrink-0 items-center justify-center text-ink-soft"
-            aria-label={t('messages_short')}
-            title={t('messages_short')}
-          >
-            <Icon name="bell" className="size-5" />
-            {(me?.unreadNotices ?? 0) > 0 && (
-              <span className="absolute right-0 top-0 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-medium leading-4 text-white tabular-nums">
-                {(me?.unreadNotices ?? 0) > 99 ? '99+' : me?.unreadNotices}
-              </span>
-            )}
-          </Link>
-          <Link to={createTo} className="flex size-9 shrink-0 items-center justify-center text-brand" aria-label={t('create_new_thread')} title={t('create_new_thread')}>
-            <Icon name="plus_circle" className="size-[22px]" />
-          </Link>
-        </div>
-        {/* 移动二级行：导航 tabs + 汉堡（.header_nav_2_mobile_menu） */}
-        <div className="flex h-[37px] items-center gap-1.5 border-t border-zh-line px-3 lg:hidden">
-          <nav className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={t('forum_nav')}>
-            <NavItem to="/" label={t('home')} active={homeActive} compact />
-            {light.enabled && light.discPage && <NavItem to="/discovery" label={discLabel} active={discActive} compact />}
-            {forumItems.slice(0, 6).map((f) => (
-              <NavItem key={f.url} to={f.url} label={f.label} active={pathname.startsWith(f.url)} compact external={/^https?:\/\//i.test(f.url)} />
-            ))}
-            <NavItem to="/rank" label={t('ranking_short')} active={rankActive} compact />
-          </nav>
-          {light.darkMode && <ThemeSwitch />}
-          <button
-            type="button"
-            className="flex size-8 shrink-0 items-center justify-center text-ink-soft"
-            aria-label={t('open_nav')}
-            onClick={() => setDrawer(true)}
-          >
-            <Icon name="menu" className="size-5" />
-          </button>
-        </div>
-      </header>
-
-      {/* ============ 抽屉：社区导航 + 版块宫格============ */}
-      {drawer && (
-        <div className="fixed inset-0 z-[1500] lg:hidden">
-          <div className="modal-fade absolute inset-0 bg-black/50" onClick={() => setDrawer(false)} aria-hidden="true" />
-          <div className="drawer-in absolute left-0 top-0 h-full w-[80%] max-w-[300px] overflow-y-auto bg-background p-4 shadow-[2px_0_20px_rgba(0,0,0,0.2)]">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-base font-bold tracking-tight text-brand">{setting?.sitename || 'FreeIDX'}</span>
+            {/* 移动行（<lg）：头像 + 搜索胶囊 + 消息 + 发帖 */}
+            <div className="flex h-[55px] items-center gap-2.5 px-3 lg:hidden">
               <button
                 type="button"
-                className="-mr-2 flex size-9 items-center justify-center rounded-full text-zh-grey transition-colors hover:bg-accent hover:text-foreground"
-                aria-label={t('close_nav')}
-                onClick={() => setDrawer(false)}
+                className="flex shrink-0 items-center"
+                aria-label={t('open_nav')}
+                onClick={() => setDrawer(true)}
               >
-                <Icon name="close" className="size-5" />
+                {me ? (
+                  <Avatar uid={me.uid} avatar={me.avatar} username={me.username} size={2} />
+                ) : (
+                  <span className="grid size-8 place-items-center rounded-full bg-lt-soft text-zh-grey">
+                    <Icon name="user" className="size-4" />
+                  </span>
+                )}
+              </button>
+              <div className="min-w-0 flex-1">
+                <SearchForm kw={kw} setKw={setKw} onSearch={doSearch} pill />
+              </div>
+              <Link
+                to="/me?s=notices"
+                className="relative flex size-9 shrink-0 items-center justify-center text-ink-soft"
+                aria-label={t('messages_short')}
+                title={t('messages_short')}
+              >
+                <Icon name="bell" className="size-5" />
+                {(me?.unreadNotices ?? 0) > 0 && (
+                  <span className="absolute right-0 top-0 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-medium leading-4 text-white tabular-nums">
+                    {(me?.unreadNotices ?? 0) > 99 ? '99+' : me?.unreadNotices}
+                  </span>
+                )}
+              </Link>
+              <Link
+                to={createTo}
+                className="flex size-9 shrink-0 items-center justify-center text-brand"
+                aria-label={t('create_new_thread')}
+                title={t('create_new_thread')}
+              >
+                <Icon name="plus_circle" className="size-[22px]" />
+              </Link>
+            </div>
+            {/* 移动二级行：导航 tabs + 汉堡（.header_nav_2_mobile_menu） */}
+            <div className="flex h-[37px] items-center gap-1.5 border-t border-zh-line px-3 lg:hidden">
+              <nav
+                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                aria-label={t('forum_nav')}
+              >
+                <NavItem to="/" label={t('home')} active={homeActive} compact />
+                {light.enabled && light.discPage && (
+                  <NavItem to="/discovery" label={discLabel} active={discActive} compact />
+                )}
+                {forumItems.slice(0, 6).map((f) => (
+                  <NavItem
+                    key={f.url}
+                    to={f.url}
+                    label={f.label}
+                    active={pathname.startsWith(f.url)}
+                    compact
+                    external={/^https?:\/\//i.test(f.url)}
+                  />
+                ))}
+                <NavItem to="/rank" label={t('ranking_short')} active={rankActive} compact />
+              </nav>
+              {light.darkMode && <ThemeSwitch />}
+              <button
+                type="button"
+                className="flex size-8 shrink-0 items-center justify-center text-ink-soft"
+                aria-label={t('open_nav')}
+                onClick={() => setDrawer(true)}
+              >
+                <Icon name="menu" className="size-5" />
               </button>
             </div>
-            {me ? (
-              <div className="mb-3 flex items-center gap-3 rounded-[5px] bg-card p-3">
-                <Avatar uid={me.uid} avatar={me.avatar} username={me.username} size={3} />
-                <div className="min-w-0 flex-1">
-                  <Link to={`/user/${me.uid}`} className="block truncate text-sm font-bold" onClick={() => setDrawer(false)}>
-                    {me.username}
+          </header>
+
+          {/* ============ 抽屉：社区导航 + 版块宫格============ */}
+          {drawer && (
+            <div className="fixed inset-0 z-[1500] lg:hidden">
+              <div
+                className="modal-fade absolute inset-0 bg-black/50"
+                onClick={() => setDrawer(false)}
+                aria-hidden="true"
+              />
+              <div className="drawer-in absolute left-0 top-0 h-full w-[80%] max-w-[300px] overflow-y-auto bg-background p-4 shadow-[2px_0_20px_rgba(0,0,0,0.2)]">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-base font-bold tracking-tight text-brand">
+                    {setting?.sitename || 'FreeIDX'}
+                  </span>
+                  <button
+                    type="button"
+                    className="-mr-2 flex size-9 items-center justify-center rounded-full text-zh-grey transition-colors hover:bg-accent hover:text-foreground"
+                    aria-label={t('close_nav')}
+                    onClick={() => setDrawer(false)}
+                  >
+                    <Icon name="close" className="size-5" />
+                  </button>
+                </div>
+                {me ? (
+                  <div className="mb-3 flex items-center gap-3 rounded-[5px] bg-card p-3">
+                    <Avatar uid={me.uid} avatar={me.avatar} username={me.username} size={3} />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/user/${me.uid}`}
+                        className="block truncate text-sm font-bold"
+                        onClick={() => setDrawer(false)}
+                      >
+                        {me.username}
+                      </Link>
+                      <div className="mt-1 flex gap-2 text-[11px] text-lt-grey">
+                        <span>
+                          {t('credits_label')} {me.credits ?? 0}
+                        </span>
+                        <span>
+                          {t('credits_gold')} {me.golds ?? 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDrawer(false);
+                        openAuth('login');
+                      }}
+                      className="flex h-9 flex-1 items-center justify-center rounded-[6px] bg-brand text-sm font-medium text-white"
+                    >
+                      {t('login')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDrawer(false);
+                        openAuth('register');
+                      }}
+                      className="flex h-9 flex-1 items-center justify-center rounded-[6px] border border-brand text-sm font-medium text-brand"
+                    >
+                      {t('register')}
+                    </button>
+                  </div>
+                )}
+                {/* 社区导航（nav-pills：激活 #2997f7 字 + 10% 底） */}
+                <p className="mb-1.5 mt-4 text-xs font-medium text-lt-grey">{t('community_nav')}</p>
+                <ul className="space-y-0.5">
+                  {(
+                    [
+                      ['home', t('home'), '/'],
+                      ...(light.discPage
+                        ? ([['atom', discLabel, '/discovery']] as [IconName, string, string][])
+                        : []),
+                      ['medal', t('ranking_short'), '/rank'],
+                      ['star', t('my_favorites'), '/me?s=favorites'],
+                      ['bell', t('my_messages'), '/me?s=notices'],
+                      ['user', t('my_home'), '/me'],
+                    ] as [IconName, string, string][]
+                  ).map(([icon, label, to]) => (
+                    <li key={to}>
+                      <Link
+                        to={to}
+                        className={cx(
+                          'flex items-center gap-2.5 rounded-[5px] px-3 py-1.5 text-[15px] transition-colors',
+                          pathname === to
+                            ? 'bg-[rgba(41,151,247,0.1)] font-medium text-[#2997f7]'
+                            : 'text-foreground hover:bg-lt-hover',
+                        )}
+                        onClick={() => setDrawer(false)}
+                      >
+                        <Icon name={icon} className="size-4 shrink-0 text-brand" />
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {/* 版块宫格（col-4） */}
+                <p className="mb-1.5 mt-4 text-xs font-medium text-lt-grey">{t('all_forums')}</p>
+                <ul className="grid grid-cols-4 gap-1">
+                  {topForums.map((f) => (
+                    <li key={f.fid}>
+                      <Link
+                        to={`/forum/${f.fid}`}
+                        className="flex flex-col items-center gap-1.5 rounded-[5px] px-1 py-2 text-center transition-colors hover:bg-card"
+                        onClick={() => setDrawer(false)}
+                      >
+                        {f.iconUrl ? (
+                          <img
+                            src={f.iconUrl}
+                            alt=""
+                            className="size-9 rounded-full object-contain"
+                          />
+                        ) : (
+                          <span className="grid size-9 place-items-center rounded-full bg-lt-soft">
+                            <Icon name="folder" className="size-4 text-zh-grey" />
+                          </span>
+                        )}
+                        <span className="w-full truncate text-[11px] leading-tight text-foreground">
+                          {fname(f)}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 border-t border-zh-line pt-3">
+                  <Link
+                    to={createTo}
+                    onClick={() => setDrawer(false)}
+                    className="flex h-10 items-center justify-center gap-1.5 rounded-[6px] bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover"
+                  >
+                    <Icon name="edit" className="size-4" /> {t('create_new_thread')}
                   </Link>
-                  <div className="mt-1 flex gap-2 text-[11px] text-lt-grey">
-                    <span>{t('credits_label')} {me.credits ?? 0}</span>
-                    <span>{t('credits_gold')} {me.golds ?? 0}</span>
+                  <div className="mt-2">
+                    <LangSwitch compact />
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="mb-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDrawer(false);
-                    openAuth('login');
-                  }}
-                  className="flex h-9 flex-1 items-center justify-center rounded-[6px] bg-brand text-sm font-medium text-white"
-                >
-                  {t('login')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDrawer(false);
-                    openAuth('register');
-                  }}
-                  className="flex h-9 flex-1 items-center justify-center rounded-[6px] border border-brand text-sm font-medium text-brand"
-                >
-                  {t('register')}
-                </button>
-              </div>
-            )}
-            {/* 社区导航（nav-pills：激活 #2997f7 字 + 10% 底） */}
-            <p className="mb-1.5 mt-4 text-xs font-medium text-lt-grey">{t('community_nav')}</p>
-            <ul className="space-y-0.5">
-              {(
-                [
-                  ['home', t('home'), '/'],
-                  ...(light.discPage ? ([['atom', discLabel, '/discovery']] as [IconName, string, string][]) : []),
-                  ['medal', t('ranking_short'), '/rank'],
-                  ['star', t('my_favorites'), '/me?s=favorites'],
-                  ['bell', t('my_messages'), '/me?s=notices'],
-                  ['user', t('my_home'), '/me'],
-                ] as [IconName, string, string][]
-              ).map(([icon, label, to]) => (
-                <li key={to}>
-                  <Link
-                    to={to}
-                    className={cx(
-                      'flex items-center gap-2.5 rounded-[5px] px-3 py-1.5 text-[15px] transition-colors',
-                      pathname === to ? 'bg-[rgba(41,151,247,0.1)] font-medium text-[#2997f7]' : 'text-foreground hover:bg-lt-hover',
-                    )}
-                    onClick={() => setDrawer(false)}
-                  >
-                    <Icon name={icon} className="size-4 shrink-0 text-brand" />
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            {/* 版块宫格（col-4） */}
-            <p className="mb-1.5 mt-4 text-xs font-medium text-lt-grey">{t('all_forums')}</p>
-            <ul className="grid grid-cols-4 gap-1">
-              {topForums.map((f) => (
-                <li key={f.fid}>
-                  <Link
-                    to={`/forum/${f.fid}`}
-                    className="flex flex-col items-center gap-1.5 rounded-[5px] px-1 py-2 text-center transition-colors hover:bg-card"
-                    onClick={() => setDrawer(false)}
-                  >
-                    {f.iconUrl ? (
-                      <img src={f.iconUrl} alt="" className="size-9 rounded-full object-contain" />
-                    ) : (
-                      <span className="grid size-9 place-items-center rounded-full bg-lt-soft">
-                        <Icon name="folder" className="size-4 text-zh-grey" />
-                      </span>
-                    )}
-                    <span className="w-full truncate text-[11px] leading-tight text-foreground">{fname(f)}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-4 border-t border-zh-line pt-3">
-              <Link
-                to={createTo}
-                onClick={() => setDrawer(false)}
-                className="flex h-10 items-center justify-center gap-1.5 rounded-[6px] bg-brand text-sm font-medium text-white transition-colors hover:bg-brand-hover"
-              >
-                <Icon name="edit" className="size-4" /> {t('create_new_thread')}
-              </Link>
-              <div className="mt-2">
-                <LangSwitch compact />
-              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
         </>
       </ThemeSlot>
 
-      {error && <div className="mx-auto w-full max-w-[1280px] px-4 pt-[100px] text-sm text-destructive lg:pt-[83px]">{error}</div>}
+      {error && (
+        <div className="mx-auto w-full max-w-[1280px] px-4 pt-[100px] text-sm text-destructive lg:pt-[83px]">
+          {error}
+        </div>
+      )}
 
       {/* 内容区：#body（padding-top:75px / 移动 3.93rem+二级行） */}
-      <main id="body" className="mx-auto w-full max-w-[1280px] flex-1 px-4 pb-8 pt-[100px] lg:pt-[83px] max-lg:pb-20">
+      <main
+        id="body"
+        className="mx-auto w-full max-w-[1280px] flex-1 px-4 pb-8 pt-[100px] lg:pt-[83px] max-lg:pb-20"
+      >
         {children}
       </main>
 
       {/* ============ footer（主题插槽：覆写时整块替换） ============ */}
       <ThemeSlot name="footer">
-      <footer className="w-full bg-card py-4 text-[13px] text-lt-grey max-lg:pb-20">
-        <div className="mx-auto w-full max-w-[1280px] px-4">
-          <InsertCode html={insertCodes.footer_start_htm} />
-          <div className="flex flex-wrap items-start justify-between gap-4 max-sm:flex-col max-sm:items-center max-sm:text-center">
-            <div className="min-w-0">
-              {light.footerIconShow &&
-                (setting?.logo_url ? (
-                  <img src={String(setting.logo_url)} alt={setting.sitename} className="mb-2 block h-9 w-auto" />
-                ) : (
-                  <span className="mb-2 block text-base font-bold text-brand">{setting?.sitename || 'FreeIDX'}</span>
+        <footer className="w-full bg-card py-4 text-[13px] text-lt-grey max-lg:pb-20">
+          <div className="mx-auto w-full max-w-[1280px] px-4">
+            <InsertCode html={insertCodes.footer_start_htm} />
+            <div className="flex flex-wrap items-start justify-between gap-4 max-sm:flex-col max-sm:items-center max-sm:text-center">
+              <div className="min-w-0">
+                {light.footerIconShow &&
+                  (setting?.logo_url ? (
+                    <img
+                      src={String(setting.logo_url)}
+                      alt={setting.sitename}
+                      className="mb-2 block h-9 w-auto"
+                    />
+                  ) : (
+                    <span className="mb-2 block text-base font-bold text-brand">
+                      {setting?.sitename || 'FreeIDX'}
+                    </span>
+                  ))}
+                <p className="text-sm leading-[26px] text-foreground">
+                  {setting?.brief || t('no_brief_yet')}
+                </p>
+                {light.footerOneContent && (
+                  <p className="mt-1 whitespace-pre-line text-sm leading-[26px] text-foreground">
+                    {light.footerOneContent}
+                  </p>
+                )}
+                {light.footerTwoContent && (
+                  <p className="whitespace-pre-line text-xs leading-[24px] text-lt-grey">
+                    {light.footerTwoContent}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {contact.map((icon) => (
+                  <span
+                    key={icon}
+                    className="flex size-[50px] items-center justify-center rounded-full bg-lt-soft text-lt-grey"
+                    title={
+                      (icon === 'message'
+                        ? light.footerContactQq
+                        : icon === 'comment'
+                          ? light.footerContactWx
+                          : light.footerContactEmail) ||
+                      setting?.sitename ||
+                      'FreeIDX'
+                    }
+                  >
+                    <Icon name={icon} className="size-5" />
+                  </span>
                 ))}
-              <p className="text-sm leading-[26px] text-foreground">{setting?.brief || t('no_brief_yet')}</p>
-              {light.footerOneContent && <p className="mt-1 whitespace-pre-line text-sm leading-[26px] text-foreground">{light.footerOneContent}</p>}
-              {light.footerTwoContent && <p className="whitespace-pre-line text-xs leading-[24px] text-lt-grey">{light.footerTwoContent}</p>}
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-              {contact.map((icon) => (
-                <span
-                  key={icon}
-                  className="flex size-[50px] items-center justify-center rounded-full bg-lt-soft text-lt-grey"
-                  title={
-                    (icon === 'message' ? light.footerContactQq : icon === 'comment' ? light.footerContactWx : light.footerContactEmail) ||
-                    setting?.sitename ||
-                    'FreeIDX'
-                  }
-                >
-                  <Icon name={icon} className="size-5" />
-                </span>
-              ))}
-            </div>
-          </div>
-          <hr className="my-3 border-zh-line" />
-          <InsertCode html={insertCodes.footer_footer_left_end_htm} />
-          <ul className="flex flex-wrap items-center gap-x-5 gap-y-1 max-sm:justify-center">
-            <li>
-              <Link to="/" className="block py-1 transition-colors hover:text-brand">
-                {t('home')}
-              </Link>
-            </li>
-            {light.discPage && (
+            <hr className="my-3 border-zh-line" />
+            <InsertCode html={insertCodes.footer_footer_left_end_htm} />
+            <ul className="flex flex-wrap items-center gap-x-5 gap-y-1 max-sm:justify-center">
               <li>
-                <Link to="/discovery" className="block py-1 transition-colors hover:text-brand">
-                  {discLabel}
+                <Link to="/" className="block py-1 transition-colors hover:text-brand">
+                  {t('home')}
                 </Link>
               </li>
-            )}
-            <li>
-              <Link to="/rank" className="block py-1 transition-colors hover:text-brand">
-                {t('ranking_short')}
-              </Link>
-            </li>
-            <li>
-              <Link to={createTo} className="block py-1 transition-colors hover:text-brand">
-                {t('want_contribute')}
-              </Link>
-            </li>
-            {light.links.map((l) => (
-              <li key={`${l.name}-${l.url}`}>
-                <a href={l.url} target="_blank" rel="noreferrer" className="block py-1 transition-colors hover:text-brand">
-                  {l.name}
-                </a>
+              {light.discPage && (
+                <li>
+                  <Link to="/discovery" className="block py-1 transition-colors hover:text-brand">
+                    {discLabel}
+                  </Link>
+                </li>
+              )}
+              <li>
+                <Link to="/rank" className="block py-1 transition-colors hover:text-brand">
+                  {t('ranking_short')}
+                </Link>
               </li>
-            ))}
-            {light.themeCopyrightSwitch && (
-              <li className="text-xs text-lt-grey">
-                © {new Date().getFullYear()} {setting?.sitename || 'FreeIDX'} · Powered by FreeIDX
+              <li>
+                <Link to={createTo} className="block py-1 transition-colors hover:text-brand">
+                  {t('want_contribute')}
+                </Link>
               </li>
-            )}
-          </ul>
-          <InsertCode html={insertCodes.footer_footer_right_end_htm} />
-        </div>
-      </footer>
+              {light.links.map((l) => (
+                <li key={`${l.name}-${l.url}`}>
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block py-1 transition-colors hover:text-brand"
+                  >
+                    {l.name}
+                  </a>
+                </li>
+              ))}
+              {light.themeCopyrightSwitch && (
+                <li className="text-xs text-lt-grey">
+                  © {new Date().getFullYear()} {setting?.sitename || 'FreeIDX'} · Powered by FreeIDX
+                </li>
+              )}
+            </ul>
+            <InsertCode html={insertCodes.footer_footer_right_end_htm} />
+          </div>
+        </footer>
       </ThemeSlot>
 
       {/* ============ 移动底部导航栏（dock_switch：55px 五格，中央凸起圆钮）============
           主题插槽：启用主题覆写 dock 时由主题渲染。 */}
       <ThemeSlot name="dock">
-      {light.enabled && light.dockSwitch && (
-        <nav
-          className="fixed inset-x-0 bottom-0 z-[1000] flex h-[55px] items-stretch border-t border-zh-line bg-card lg:hidden"
-          aria-label={t('community_nav')}
-        >
-          <Link to="/" className={cx('flex flex-1 flex-col items-center justify-center gap-0.5', homeActive ? 'text-brand' : 'text-[#9e9e9e]')}>
-            <Icon name="home" className="size-[20px]" />
-            <span className="text-[12px] leading-none">{t('home')}</span>
-          </Link>
-          <Link to={dockSecond.to} className={cx('flex flex-1 flex-col items-center justify-center gap-0.5', dockSecond.active ? 'text-brand' : 'text-[#9e9e9e]')}>
-            <Icon name={dockSecond.icon} className="size-[20px]" />
-            <span className="text-[12px] leading-none">{dockSecond.label}</span>
-          </Link>
-          <Link to={createTo} className="relative flex w-[22%] flex-col items-center justify-center" aria-label={t('create_new_thread')} title={t('create_new_thread')}>
-            <span className="jb-blue absolute -top-[18px] flex size-[46px] items-center justify-center rounded-full text-white shadow-[0_2px_8px_rgba(64,158,255,0.45)]">
-              <Icon name="plus" className="size-6" />
-            </span>
-          </Link>
-          <Link
-            to="/me?s=notices"
-            className={cx('relative flex flex-1 flex-col items-center justify-center gap-0.5', pathname.includes('notices') ? 'text-brand' : 'text-[#9e9e9e]')}
+        {light.enabled && light.dockSwitch && (
+          <nav
+            className="fixed inset-x-0 bottom-0 z-[1000] flex h-[55px] items-stretch border-t border-zh-line bg-card lg:hidden"
+            aria-label={t('community_nav')}
           >
-            <Icon name="message" className="size-[20px]" />
-            {(me?.unreadNotices ?? 0) > 0 && (
-              <span className="absolute right-[18%] top-[6px] min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] leading-4 text-white tabular-nums">
-                {(me?.unreadNotices ?? 0) > 99 ? '99+' : me?.unreadNotices}
+            <Link
+              to="/"
+              className={cx(
+                'flex flex-1 flex-col items-center justify-center gap-0.5',
+                homeActive ? 'text-brand' : 'text-[#9e9e9e]',
+              )}
+            >
+              <Icon name="home" className="size-[20px]" />
+              <span className="text-[12px] leading-none">{t('home')}</span>
+            </Link>
+            <Link
+              to={dockSecond.to}
+              className={cx(
+                'flex flex-1 flex-col items-center justify-center gap-0.5',
+                dockSecond.active ? 'text-brand' : 'text-[#9e9e9e]',
+              )}
+            >
+              <Icon name={dockSecond.icon} className="size-[20px]" />
+              <span className="text-[12px] leading-none">{dockSecond.label}</span>
+            </Link>
+            <Link
+              to={createTo}
+              className="relative flex w-[22%] flex-col items-center justify-center"
+              aria-label={t('create_new_thread')}
+              title={t('create_new_thread')}
+            >
+              <span className="jb-blue absolute -top-[18px] flex size-[46px] items-center justify-center rounded-full text-white shadow-[0_2px_8px_rgba(64,158,255,0.45)]">
+                <Icon name="plus" className="size-6" />
               </span>
-            )}
-            <span className="text-[12px] leading-none">{t('messages_short')}</span>
-          </Link>
-          <Link
-            to="/me"
-            className={cx('flex flex-1 flex-col items-center justify-center gap-0.5', pathname.startsWith('/me') ? 'text-brand' : 'text-[#9e9e9e]')}
-          >
-            <Icon name="user" className="size-[20px]" />
-            <span className="text-[12px] leading-none">{t('dock_my')}</span>
-          </Link>
-        </nav>
-      )}
+            </Link>
+            <Link
+              to="/me?s=notices"
+              className={cx(
+                'relative flex flex-1 flex-col items-center justify-center gap-0.5',
+                pathname.includes('notices') ? 'text-brand' : 'text-[#9e9e9e]',
+              )}
+            >
+              <Icon name="message" className="size-[20px]" />
+              {(me?.unreadNotices ?? 0) > 0 && (
+                <span className="absolute right-[18%] top-[6px] min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] leading-4 text-white tabular-nums">
+                  {(me?.unreadNotices ?? 0) > 99 ? '99+' : me?.unreadNotices}
+                </span>
+              )}
+              <span className="text-[12px] leading-none">{t('messages_short')}</span>
+            </Link>
+            <Link
+              to="/me"
+              className={cx(
+                'flex flex-1 flex-col items-center justify-center gap-0.5',
+                pathname.startsWith('/me') ? 'text-brand' : 'text-[#9e9e9e]',
+              )}
+            >
+              <Icon name="user" className="size-[20px]" />
+              <span className="text-[12px] leading-none">{t('dock_my')}</span>
+            </Link>
+          </nav>
+        )}
       </ThemeSlot>
 
       {light.enabled && light.backTop && <GoTop />}

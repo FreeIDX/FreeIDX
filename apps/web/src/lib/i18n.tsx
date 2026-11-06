@@ -1,17 +1,31 @@
 /** i18n Provider：前台语言 = 用户偏好（右上角切换器，localStorage 持久）> 站点 setting.lang，默认 en-us（§10.3） */
-import { createContext, useContext, useEffect, useMemo, useCallback, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useCallback,
+  useState,
+  type ReactNode,
+} from 'react';
 import { create } from 'zustand';
 import {
   AVAILABLE_LOCALES,
   builtinGroupName,
   createFrontTranslator,
   DEFAULT_LOCALE,
-  forumNameOf,
+  nameI18nOf,
   type ForumNameMap,
   type FrontKey,
   type LocaleBundles,
+  type NameI18nMap,
 } from '@freeidx/shared';
-import { EMPTY_BUNDLES, getLoadedBundle, loadLocaleBundle, subscribeBundles } from '@freeidx/shared/i18n/bundles';
+import {
+  EMPTY_BUNDLES,
+  getLoadedBundle,
+  loadLocaleBundle,
+  subscribeBundles,
+} from '@freeidx/shared/i18n/bundles';
 import { setUiLocale } from './api';
 import { useAuth } from '../store/auth';
 
@@ -59,7 +73,8 @@ export const useLangPref = create<LangPrefState>((set) => ({
     // API 消息语言（lib/api.ts 无需逐请求附加头）。清除偏好时同步过期 cookie，
     // 使 API 消息回到站点语言，与界面行为一致。
     try {
-      if (lang) document.cookie = `lang=${encodeURIComponent(lang)}; path=/; max-age=31536000; samesite=Lax`;
+      if (lang)
+        document.cookie = `lang=${encodeURIComponent(lang)}; path=/; max-age=31536000; samesite=Lax`;
       else document.cookie = 'lang=; path=/; max-age=0; samesite=Lax';
     } catch {
       /* 无 document 环境（SSR）忽略 */
@@ -130,10 +145,22 @@ export function useGroupName(): (gid: number, name: string) => string {
 }
 
 /**
- * 版块名取词（0027）：命中当前界面的多语言名称则用之，否则回退主名称 name。
+ * 可配置名称取词（版块名 / 导航项名）：命中当前界面的译文则用之，否则回退主名称。
  * 依赖 useLang → 语言切换后所有取词点同步重渲染，无需重新请求 bootstrap。
  */
-export function useForumName(): (f: { name: string; nameI18n?: ForumNameMap | null }) => string {
+export function useLocalizedName(): (base: string, map?: NameI18nMap | null) => string {
   const lang = useLang();
-  return useCallback((f: { name: string; nameI18n?: ForumNameMap | null }) => forumNameOf(f.name, f.nameI18n, lang), [lang]);
+  return useCallback(
+    (base: string, map?: NameI18nMap | null) => nameI18nOf(base, map, lang),
+    [lang],
+  );
+}
+
+/** 版块名取词：forum 节点自带 name + nameI18n（0027） */
+export function useForumName(): (f: { name: string; nameI18n?: ForumNameMap | null }) => string {
+  const localized = useLocalizedName();
+  return useCallback(
+    (f: { name: string; nameI18n?: ForumNameMap | null }) => localized(f.name, f.nameI18n),
+    [localized],
+  );
 }

@@ -9,6 +9,7 @@ import {
   GroupId,
   RunLevel,
   effectiveBanScope,
+  normNameI18n,
   normalizeForumLang,
   type NavItem,
   type SiteSetting,
@@ -74,11 +75,14 @@ export function forumLangOf(forumlist: Record<number, ForumForAccess>, fid: numb
   return '';
 }
 
-export async function loadGrouplist(cache: Cache, db: D1b): Promise<Record<number, GroupForAccess>> {
+export async function loadGrouplist(
+  cache: Cache,
+  db: D1b,
+): Promise<Record<number, GroupForAccess>> {
   return remember(cache, 'grouplist', async () => {
     const r = await db
       .prepare<Record<string, number | string>>(
-        'SELECT * FROM bbs_group', /* 后台低频、行数≈13，唯一豁免显式投影处（无宽列） */
+        'SELECT * FROM bbs_group' /* 后台低频、行数≈13，唯一豁免显式投影处（无宽列） */,
       )
       .all();
     const out: Record<number, GroupForAccess> = {};
@@ -92,7 +96,11 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
   return remember(cache, 'forumlist', async () => {
     const [forums, access] = await Promise.all([
       db.prepare<ForumRow>(`SELECT ${FORUM_COLS} FROM bbs_forum ORDER BY rank DESC, fid ASC`).all(),
-      db.prepare<{ fid: number; gid: number } & AccessRow>('SELECT fid,gid,allowread,allowthread,allowpost,allowattach,allowdown FROM bbs_forum_access').all(),
+      db
+        .prepare<{ fid: number; gid: number } & AccessRow>(
+          'SELECT fid,gid,allowread,allowthread,allowpost,allowattach,allowdown FROM bbs_forum_access',
+        )
+        .all(),
     ]);
     const out: Record<number, ForumRow> = {};
     for (const f of forums.results) {
@@ -135,7 +143,15 @@ function parseNavItems(raw: unknown): NavItem[] | undefined {
     const label = String(o.label ?? '').trim();
     const url = String(o.url ?? '').trim();
     if (!label || !url) continue;
-    out.push({ label, url, sort: Number(o.sort ?? 0) || 0, on: o.on === 0 || o.on === '0' ? 0 : 1 });
+    /* 名称多语言（与版块名同结构）：只保留受支持语言与非空值；空映射不落字段 */
+    const labels = normNameI18n(o.labels);
+    out.push({
+      label,
+      ...(Object.keys(labels).length ? { labels } : {}),
+      url,
+      sort: Number(o.sort ?? 0) || 0,
+      on: o.on === 0 || o.on === '0' ? 0 : 1,
+    });
   }
   return out;
 }
@@ -211,7 +227,15 @@ interface ViewerRow {
   ban_reason: string;
 }
 
-const GUEST: Viewer = { uid: 0, gid: 0, username: '', ok: 1, banScope: 0, banUntil: 0, banReason: '' };
+const GUEST: Viewer = {
+  uid: 0,
+  gid: 0,
+  username: '',
+  ok: 1,
+  banScope: 0,
+  banUntil: 0,
+  banReason: '',
+};
 
 /** 结构最小化：Hono Context 泛型对 Variables 不变，路由侧具体类型直接结构兼容 */
 interface ViewerCtx {
@@ -241,7 +265,9 @@ function cookieOf(c: ViewerCtx, name: string): string | undefined {
 
 const isHttps = (siteUrl: string | undefined): boolean => (siteUrl ?? '').startsWith('https://');
 export const reqIp = (c: ViewerCtx): string =>
-  c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? '0.0.0.0';
+  c.req.header('cf-connecting-ip') ??
+  c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+  '0.0.0.0';
 const reqIpLong = (c: ViewerCtx): number => ipToLong(reqIp(c));
 
 function setSidCookie(c: ViewerCtx, sid: string): void {
@@ -281,14 +307,18 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
   let rebuildSession = false;
   if (sid) {
     const sess = await db
-      .prepare<{ uid: number; last_date: number }>('SELECT uid,last_date FROM bbs_session WHERE sid = ?')
+      .prepare<{ uid: number; last_date: number }>(
+        'SELECT uid,last_date FROM bbs_session WHERE sid = ?',
+      )
       .bind(sid)
       .first<{ uid: number; last_date: number }>();
     if (sess && Number(sess.uid) > 0) {
       uid = Number(sess.uid);
       if (Math.floor(Date.now() / 1000) - Number(sess.last_date) > 60) {
         const url = new URL(c.req.url).pathname;
-        const ex = (c as unknown as { executionCtx?: { waitUntil?: (pr: Promise<unknown>) => void } }).executionCtx;
+        const ex = (
+          c as unknown as { executionCtx?: { waitUntil?: (pr: Promise<unknown>) => void } }
+        ).executionCtx;
         if (ex?.waitUntil) ex.waitUntil(touchSession(db, sid, url));
       }
     }
@@ -310,7 +340,9 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
   const loadRow = () =>
     remember(cache, cacheKey, async () => {
       const u = await db
-        .prepare<ViewerRow>(`SELECT ${USER_SESSION_COLS}, token_version FROM bbs_user WHERE uid = ?`)
+        .prepare<ViewerRow>(
+          `SELECT ${USER_SESSION_COLS}, token_version FROM bbs_user WHERE uid = ?`,
+        )
         .bind(uid)
         .first<ViewerRow>();
       return u

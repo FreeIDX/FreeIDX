@@ -17,7 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CONTENT_LANGS, CONTENT_LANG_NATIVE_NAMES, FORUM_LANG_UNRESTRICTED, type ContentLang } from '@freeidx/shared';
 import { createForum, getForums, updateForum, uploadForumIcon, deleteForumIcon } from '../api';
 import type { AccessInput, ForumInput, GroupFullRow } from '../types';
-import { ForumNameI18nModal } from '../ForumNameI18nModal';
+import { NameI18nModal } from '../NameI18nModal';
 import { useAdminT } from '../t';
 import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
@@ -345,7 +345,7 @@ export function ForumEditPage() {
         </SubmitRow>
       </Card>
 
-      <ForumNameI18nModal
+      <NameI18nModal
         open={i18nOpen}
         name={form.name ?? ''}
         value={form.name_i18n}
