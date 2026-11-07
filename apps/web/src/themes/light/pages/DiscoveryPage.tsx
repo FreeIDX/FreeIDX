@@ -26,7 +26,7 @@ import { NotFoundPage } from './NotFoundPage';
 function AggCard({ title, bg, children }: { title: string; bg: string; children: React.ReactNode }) {
   return (
     <section className="zh-card mb-4 overflow-hidden">
-      <div className="flex h-[52px] items-center bg-cover bg-center px-4 text-[15px] font-medium text-white" style={{ backgroundImage: `url(${bg})` }}>
+      <div className="flex h-[52px] items-center bg-cover bg-center px-4 text-[16px] font-medium text-white" style={{ backgroundImage: `url(${bg})` }}>
         {title}
       </div>
       <ul className="max-h-[256px] overflow-y-auto px-4 py-1.5">{children}</ul>
@@ -187,10 +187,10 @@ export function DiscoveryPage() {
                           <Link to={`/forum/${f.fid}`} className="min-w-0 truncate text-sm font-medium text-foreground hover:text-brand" title={fname(f)}>
                             {fname(f)}
                           </Link>
-                          <span className="shrink-0 rounded-full bg-[#303133] px-2 py-0.5 text-[11px] leading-none text-white tabular-nums">
+                          <span className="shrink-0 rounded-full bg-[#303133] px-2 py-0.5 text-[12px] leading-none text-white tabular-nums">
                             {f.threads}
                           </span>
-                          <span className="shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] leading-none text-destructive tabular-nums">
+                          <span className="shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-[12px] leading-none text-destructive tabular-nums">
                             {f.todayposts}
                           </span>
                         </div>
@@ -253,7 +253,7 @@ export function DiscoveryPage() {
                     )}
                     <span className="min-w-0 truncate text-xs text-foreground">{fname(f)}</span>
                   </Link>
-                  <span className="shrink-0 text-[11px] tabular-nums text-lt-grey">{f.threads}</span>
+                  <span className="shrink-0 text-[12px] tabular-nums text-lt-grey">{f.threads}</span>
                 </li>
               ))}
             </ul>

@@ -61,7 +61,7 @@ export function AuthModal() {
                 role="tab"
                 aria-selected={tab === key}
                 className={cx(
-                  '-mb-px border-b-2 pb-2.5 text-[15px] transition-colors',
+                  '-mb-px border-b-2 pb-2.5 text-[16px] transition-colors',
                   tab === key
                     ? 'border-brand font-semibold text-brand'
                     : 'border-transparent text-muted-foreground hover:text-foreground',

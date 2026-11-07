@@ -48,7 +48,7 @@ function NavItem({
 }) {
   const cls = cx(
     'flex items-center gap-1.5 whitespace-nowrap transition-colors',
-    compact ? 'rounded-[3px] px-3 py-1.5 text-sm' : 'h-full px-4 text-[15px]',
+    compact ? 'rounded-[3px] px-3 py-1.5 text-sm' : 'h-full px-4 text-[16px]',
     active ? 'font-medium text-brand' : 'text-[#6c757d] hover:text-brand',
   );
   const inner = (
@@ -306,7 +306,7 @@ function UserMenu() {
               >
                 {me.username}
               </Link>
-              <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] leading-none">
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-[12px] leading-none">
                 <span className="rounded-[3px] bg-brand px-1.5 py-0.5 text-white">
                   UID:{me.uid}
                 </span>
@@ -546,7 +546,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                     >
                       <Icon name="bell" className="size-[18px]" />
                       {(me.unreadNotices ?? 0) > 0 && (
-                        <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-medium leading-4 text-white tabular-nums">
+                        <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-destructive px-1 text-center text-[11px] font-medium leading-4 text-white tabular-nums">
                           {(me.unreadNotices ?? 0) > 99 ? '99+' : me.unreadNotices}
                         </span>
                       )}
@@ -557,14 +557,14 @@ export function Layout({ children }: { children?: ReactNode }) {
                   <div className="flex items-center">
                     <button
                       type="button"
-                      className="px-2.5 py-2 text-[15px] text-ink-soft transition-colors hover:text-brand"
+                      className="px-2.5 py-2 text-[16px] text-ink-soft transition-colors hover:text-brand"
                       onClick={() => openAuth('login')}
                     >
                       {t('login')}
                     </button>
                     <button
                       type="button"
-                      className="px-2.5 py-2 text-[15px] text-ink-soft transition-colors hover:text-brand"
+                      className="px-2.5 py-2 text-[16px] text-ink-soft transition-colors hover:text-brand"
                       onClick={() => openAuth('register')}
                     >
                       {t('register')}
@@ -601,7 +601,7 @@ export function Layout({ children }: { children?: ReactNode }) {
               >
                 <Icon name="bell" className="size-5" />
                 {(me?.unreadNotices ?? 0) > 0 && (
-                  <span className="absolute right-0 top-0 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-medium leading-4 text-white tabular-nums">
+                  <span className="absolute right-0 top-0 min-w-4 rounded-full bg-destructive px-1 text-center text-[11px] font-medium leading-4 text-white tabular-nums">
                     {(me?.unreadNotices ?? 0) > 99 ? '99+' : me?.unreadNotices}
                   </span>
                 )}
@@ -682,7 +682,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                       >
                         {me.username}
                       </Link>
-                      <div className="mt-1 flex gap-2 text-[11px] text-lt-grey">
+                      <div className="mt-1 flex gap-2 text-[12px] text-lt-grey">
                         <span>
                           {t('credits_label')} {me.credits ?? 0}
                         </span>
@@ -735,7 +735,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                       <Link
                         to={to}
                         className={cx(
-                          'flex items-center gap-2.5 rounded-[5px] px-3 py-1.5 text-[15px] transition-colors',
+                          'flex items-center gap-2.5 rounded-[5px] px-3 py-1.5 text-[16px] transition-colors',
                           pathname === to
                             ? 'bg-[rgba(41,151,247,0.1)] font-medium text-[#2997f7]'
                             : 'text-foreground hover:bg-lt-hover',
@@ -770,7 +770,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                           </span>
                         )}
                         {/* 宫格窄（4 列），长名称最多两行并断词，避免单行截断后无法辨认 */}
-                        <span className="line-clamp-2 w-full break-words text-[11px] leading-tight text-foreground" title={fname(f)}>
+                        <span className="line-clamp-2 w-full break-words text-[12px] leading-tight text-foreground" title={fname(f)}>
                           {fname(f)}
                         </span>
                       </Link>
@@ -811,7 +811,7 @@ export function Layout({ children }: { children?: ReactNode }) {
 
       {/* ============ footer（主题插槽：覆写时整块替换） ============ */}
       <ThemeSlot name="footer">
-        <footer className="w-full bg-card py-4 text-[13px] text-lt-grey max-lg:pb-20">
+        <footer className="w-full bg-card py-4 text-[14px] text-lt-grey max-lg:pb-20">
           <div className="mx-auto w-full max-w-[1280px] px-4">
             <InsertCode html={insertCodes.footer_start_htm} />
             <div className="flex flex-wrap items-start justify-between gap-4 max-sm:flex-col max-sm:items-center max-sm:text-center">
@@ -926,7 +926,7 @@ export function Layout({ children }: { children?: ReactNode }) {
               )}
             >
               <Icon name="home" className="size-[20px]" />
-              <span className="text-[12px] leading-none">{t('home')}</span>
+              <span className="text-[13px] leading-none">{t('home')}</span>
             </Link>
             <Link
               to={dockSecond.to}
@@ -936,7 +936,7 @@ export function Layout({ children }: { children?: ReactNode }) {
               )}
             >
               <Icon name={dockSecond.icon} className="size-[20px]" />
-              <span className="text-[12px] leading-none">{dockSecond.label}</span>
+              <span className="text-[13px] leading-none">{dockSecond.label}</span>
             </Link>
             <Link
               to={createTo}
@@ -957,11 +957,11 @@ export function Layout({ children }: { children?: ReactNode }) {
             >
               <Icon name="message" className="size-[20px]" />
               {(me?.unreadNotices ?? 0) > 0 && (
-                <span className="absolute right-[18%] top-[6px] min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] leading-4 text-white tabular-nums">
+                <span className="absolute right-[18%] top-[6px] min-w-4 rounded-full bg-destructive px-1 text-center text-[11px] leading-4 text-white tabular-nums">
                   {(me?.unreadNotices ?? 0) > 99 ? '99+' : me?.unreadNotices}
                 </span>
               )}
-              <span className="text-[12px] leading-none">{t('messages_short')}</span>
+              <span className="text-[13px] leading-none">{t('messages_short')}</span>
             </Link>
             <Link
               to="/me"
@@ -971,7 +971,7 @@ export function Layout({ children }: { children?: ReactNode }) {
               )}
             >
               <Icon name="user" className="size-[20px]" />
-              <span className="text-[12px] leading-none">{t('dock_my')}</span>
+              <span className="text-[13px] leading-none">{t('dock_my')}</span>
             </Link>
           </nav>
         )}

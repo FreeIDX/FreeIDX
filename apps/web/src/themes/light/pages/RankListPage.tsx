@@ -75,7 +75,7 @@ export function RankListPage() {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-lt-soft text-left text-[13px] font-medium text-lt-grey">
+              <tr className="bg-lt-soft text-left text-[14px] font-medium text-lt-grey">
                 <th className="w-[72px] px-4 py-2.5">{t('rank_no')}</th>
                 <th className="px-4 py-2.5">{t('username')}</th>
                 {cols.map(([label], i) => (

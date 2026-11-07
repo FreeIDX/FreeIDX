@@ -205,7 +205,7 @@ export function TagBadge({ name, style = 'primary', to, className }: { name: str
 export function Pill({ children, className, jb, title }: { children: ReactNode; className?: string; jb?: string; title?: string }) {
   return (
     <span
-      className={cx('inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-0.5 text-[11px] leading-none text-white', jb, className)}
+      className={cx('inline-flex shrink-0 items-center rounded-[3px] px-1.5 py-0.5 text-[12px] leading-none text-white', jb, className)}
       title={title}
     >
       {children}
@@ -496,7 +496,7 @@ export function GuestCard() {
     <SidePanel>
       <div className="flex items-stretch gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-[15px] font-bold text-foreground">
+          <div className="flex items-center gap-2 text-[16px] font-bold text-foreground">
             <span className="h-4 w-[3px] shrink-0 rounded bg-brand" /> {t('guest_hello')}
           </div>
           <div className="mt-1.5 text-xs text-muted-foreground">{t('guest_login_tip')}</div>
@@ -582,14 +582,14 @@ export function UserSideCard(props: {
             {me.username}
           </Link>
           {props.groupName && (
-            <span className="mt-1.5 inline-flex rounded bg-brand px-1.5 py-0.5 text-[10px] leading-none text-white">
+            <span className="mt-1.5 inline-flex rounded bg-brand px-1.5 py-0.5 text-[11px] leading-none text-white">
               {props.groupName}
             </span>
           )}
           {/* 等级行：iconpark v{gid} 精灵图简化为蓝字 v{gid} 徽章 */}
           <div className="mt-1.5 flex items-center gap-1 text-xs">
             <span className="font-semibold text-ink-soft">{t('level_label')}</span>
-            <span className="rounded bg-[rgba(41,151,247,0.1)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-brand">
+            <span className="rounded bg-[rgba(41,151,247,0.1)] px-1.5 py-0.5 text-[11px] font-medium leading-none text-brand">
               v{me.gid}
             </span>
           </div>
@@ -608,7 +608,7 @@ export function UserSideCard(props: {
             ).map(([value, label]) => (
               <div key={label} className="rounded-md bg-zh-stat-bg px-1 py-1.5 text-center">
                 <b className="text-sm font-semibold leading-none tabular-nums text-foreground">{value}</b>
-                <p className="mt-1 text-[10px] leading-none text-muted-foreground">{label}</p>
+                <p className="mt-1 text-[11px] leading-none text-muted-foreground">{label}</p>
               </div>
             ))}
           </div>

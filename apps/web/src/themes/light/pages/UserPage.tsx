@@ -196,9 +196,9 @@ export function UserPage() {
                   )}
                 </h1>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="inline-flex rounded-full bg-brand px-2 py-0.5 text-[11px] leading-none text-white">UID:{p.uid}</span>
+                  <span className="inline-flex rounded-full bg-brand px-2 py-0.5 text-[12px] leading-none text-white">UID:{p.uid}</span>
                   {p.groupName && (
-                    <span className="inline-flex rounded-full bg-info px-2 py-0.5 text-[11px] leading-none text-white">{gn(p.gid, p.groupName)}</span>
+                    <span className="inline-flex rounded-full bg-info px-2 py-0.5 text-[12px] leading-none text-white">{gn(p.gid, p.groupName)}</span>
                   )}
                 </div>
                 {followErr && <p className="mt-2 text-xs text-destructive">{followErr}</p>}
@@ -221,24 +221,24 @@ export function UserPage() {
           )
         ) : section === 'replies' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('his_replies')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('his_replies')}</div>
             <UserReplyList uid={uid} active />
           </section>
         ) : section === 'following' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('his_following')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('his_following')}</div>
             {/* Ta 关注的（关注按钮态按当前访问者） */}
             <FollowUserList url={`/api/users/${uid}/following`} emptyText={t('no_follows')} onChanged={() => void qc.invalidateQueries({ queryKey: ['user', uid] })} />
           </section>
         ) : section === 'followers' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('his_followers')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('his_followers')}</div>
             {/* 关注 Ta 的 */}
             <FollowUserList url={`/api/users/${uid}/followers`} emptyText={t('no_fans')} onChanged={() => void qc.invalidateQueries({ queryKey: ['user', uid] })} />
           </section>
         ) : (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('his_posts')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('his_posts')}</div>
             <div>
               {threads.error && <p className="px-5 py-3 text-sm text-destructive">{threads.error}</p>}
               <ThreadList data={{ list: threads.items, page: 1, size: threads.size, totalPage: 1 }} baseHref={() => '#'} />

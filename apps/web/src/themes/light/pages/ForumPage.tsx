@@ -449,7 +449,7 @@ function SortPills({ orderby, nav }: { orderby: string; nav: (patch: Record<stri
             to={nav({ orderby: k === 'tid' ? null : k })}
             aria-current={active ? 'true' : undefined}
             className={cx(
-              'inline-flex h-[31px] items-center justify-center whitespace-nowrap border border-input-line px-2.5 text-[13px] transition-colors outline-none',
+              'inline-flex h-[31px] items-center justify-center whitespace-nowrap border border-input-line px-2.5 text-[14px] transition-colors outline-none',
               i > 0 && '-ml-px',
               i === 0 ? 'rounded-l-[4px]' : 'rounded-r-[4px]',
               active ? 'z-10 border-brand bg-brand text-white' : 'bg-card text-ink-soft hover:bg-zh-row-hover',
@@ -526,7 +526,7 @@ function ForumStats({ forum }: { forum: { threads?: number; todayposts?: number;
     <div className="mt-3 grid grid-cols-3 border-t border-zh-line pt-3 text-center">
       {cells.map(([v, l]) => (
         <div key={l}>
-          <p className="text-[15px] font-bold tabular-nums text-foreground">{v}</p>
+          <p className="text-[16px] font-bold tabular-nums text-foreground">{v}</p>
           <p className="mt-0.5 text-xs text-lt-grey">{l}</p>
         </div>
       ))}

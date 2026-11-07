@@ -108,7 +108,7 @@ export function PostCard(props: {
           onClick={() => props.onLike?.(p)}
         >
           <Icon name="thumbs_up" className="size-3.5" />
-          {p.likes > 0 && <span className="text-[11px] tabular-nums">{p.likes}</span>}
+          {p.likes > 0 && <span className="text-[12px] tabular-nums">{p.likes}</span>}
         </button>
       )}
       {props.onShowReplies && (
@@ -158,7 +158,7 @@ export function PostCard(props: {
             {p.userip !== undefined && <span title={t('ip_visible_tip')}>IP {fmtIp(p.userip)}</span>}
             {/* 楼层号（.floor-parent.badge.badge-secondary：#909399 底白字胶囊；热门回复卡 floor=0 不显示） */}
             {light.postShowFloors && props.floor > 0 && (
-              <span className="rounded-[3px] bg-[#909399] px-1.5 py-0.5 text-[11px] leading-none text-white tabular-nums">
+              <span className="rounded-[3px] bg-[#909399] px-1.5 py-0.5 text-[12px] leading-none text-white tabular-nums">
                 {props.floor}
                 {t('floor')}
               </span>

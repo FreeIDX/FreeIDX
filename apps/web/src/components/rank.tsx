@@ -21,7 +21,7 @@ export function RankNo({ n }: { n: number }) {
   return (
     <span
       className={cx(
-        'mr-[5px] inline-flex h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-full px-[7px] text-[11px] leading-[17px] text-white',
+        'mr-[5px] inline-flex h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-full px-[7px] text-[12px] leading-[17px] text-white',
         jb || 'bg-[#909399]',
       )}
     >
@@ -160,7 +160,7 @@ export function RankUserCard() {
             className="mb-3 w-1/4 rounded-[7px] text-center transition-colors hover:bg-[rgba(41,151,247,0.1)] hover:font-semibold hover:text-brand"
           >
             <Avatar uid={u.uid} avatar={u.avatar} username={u.username} dim="39px" className="mx-auto" />
-            <span className="mt-1 block truncate text-[12px]">{u.username}</span>
+            <span className="mt-1 block truncate text-[13px]">{u.username}</span>
           </Link>
         ))}
       </div>

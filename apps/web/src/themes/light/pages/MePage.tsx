@@ -276,9 +276,9 @@ export function MePage() {
           <div className="min-w-0">
             <div className="truncate text-lg font-bold text-foreground">{me.username}</div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex rounded-full bg-brand px-2 py-0.5 text-[11px] leading-none text-white">UID:{me.uid}</span>
+              <span className="inline-flex rounded-full bg-brand px-2 py-0.5 text-[12px] leading-none text-white">UID:{me.uid}</span>
               {groupName && (
-                <span className="inline-flex rounded-full bg-info px-2 py-0.5 text-[11px] leading-none text-white">{groupName}</span>
+                <span className="inline-flex rounded-full bg-info px-2 py-0.5 text-[12px] leading-none text-white">{groupName}</span>
               )}
             </div>
           </div>
@@ -327,7 +327,7 @@ export function MePage() {
               )}
               <div className="mt-3 max-w-full truncate text-base font-bold text-foreground">{me.username}</div>
               {groupName && (
-                <span className="mt-2 inline-flex rounded-full bg-brand px-2 py-0.5 text-[11px] leading-none text-white">{groupName}</span>
+                <span className="mt-2 inline-flex rounded-full bg-brand px-2 py-0.5 text-[12px] leading-none text-white">{groupName}</span>
               )}
             </div>
             <div className="border-t border-zh-line px-2 py-1.5">
@@ -514,7 +514,7 @@ export function MePage() {
           </Card>
         ) : section === 'threads' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('my_posts')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('my_posts')}</div>
             <div>
               {threads.error && <p className="px-5 py-3 text-sm text-destructive">{threads.error}</p>}
               <ThreadList data={{ list: threads.items, page: 1, size: threads.size, totalPage: 1 }} baseHref={() => '#'} />
@@ -530,12 +530,12 @@ export function MePage() {
           </section>
         ) : section === 'replies' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('my_replies')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('my_replies')}</div>
             <UserReplyList active />
           </section>
         ) : section === 'favorites' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('my_favorites')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('my_favorites')}</div>
             <div>
               {favorites.isError && <p className="px-5 py-3 text-sm text-destructive">{(favorites.error as Error).message}</p>}
               <ThreadList
@@ -561,7 +561,7 @@ export function MePage() {
           </section>
         ) : section === 'likes' ? (
           <section className="zh-card mb-4 overflow-hidden">
-            <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('my_likes')}</div>
+            <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('my_likes')}</div>
             <div>
               {likes.isError && <p className="px-5 py-3 text-sm text-destructive">{(likes.error as Error).message}</p>}
               <ThreadList
@@ -929,7 +929,7 @@ function RanklistSection({ active }: { active: boolean }) {
           {/* bootstrap .table：表头浅底灰字、行底发丝线 + hover 换底色 */}
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-lt-soft text-[13px] text-lt-grey">
+              <tr className="bg-lt-soft text-[14px] text-lt-grey">
                 <th className="px-3 py-3 text-left font-medium">{t('username_label')}</th>
                 {RANK_COLS.map((c) => (
                   <th key={c.k} className={cx('px-3 py-3 text-left font-medium', c.k !== sort && 'hidden lg:table-cell')}>
@@ -1003,7 +1003,7 @@ function CreditsSection() {
                 <div className="min-w-0">
                   <span className="text-sm font-medium text-foreground">{d.username}</span>
                   <div className="mt-1.5 text-xs text-ink-soft">
-                    {t('user_group_colon_space')} <span className="inline-flex rounded bg-brand px-1.5 py-0.5 text-[10px] leading-none text-white">{gn(d.gid, d.groupName)}</span>
+                    {t('user_group_colon_space')} <span className="inline-flex rounded bg-brand px-1.5 py-0.5 text-[11px] leading-none text-white">{gn(d.gid, d.groupName)}</span>
                   </div>
                 </div>
               </div>
@@ -1075,7 +1075,7 @@ function PointsSection() {
         {/* bootstrap .table：表头浅底灰字、行底发丝线 + hover 换底色（与「记录」同款） */}
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-lt-soft text-[13px] text-lt-grey">
+            <tr className="bg-lt-soft text-[14px] text-lt-grey">
               <th className="px-3 py-3 text-left font-medium">{t('time_label')}</th>
               <th className="px-3 py-3 text-left font-medium">{t('type_label')}</th>
               <th className="px-3 py-3 text-left font-medium">{t('point_log_change')}</th>
@@ -1263,7 +1263,7 @@ function RecordSection() {
         {/* bootstrap .table：表头浅底灰字、行底发丝线 + hover 换底色 */}
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="bg-lt-soft text-[13px] text-lt-grey">
+            <tr className="bg-lt-soft text-[14px] text-lt-grey">
               <th className="px-3 py-3 text-left font-medium">{t('time_label')}</th>
               <th className="px-3 py-3 text-left font-medium">{t('type_label')}</th>
               <th className="px-3 py-3 text-left font-medium">{t('credits_label')}</th>
@@ -1299,7 +1299,7 @@ function PurchasedSection({ active }: { active: boolean }) {
   const href = (p: number) => `/me?s=purchased${p > 1 ? `&p=${p}` : ''}`;
   return (
     <section className="zh-card mb-4 overflow-hidden">
-      <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('purchased_label')}</div>
+      <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('purchased_label')}</div>
       <div>
         {q.isError && <p className="px-5 py-3 text-sm text-destructive">{(q.error as Error).message}</p>}
         <ThreadList data={{ list: q.data?.list ?? [], page: 1, size: q.data?.size ?? 20, totalPage: 1 }} baseHref={() => '#'} loading={q.isLoading} />
@@ -1398,7 +1398,7 @@ function VapplySection() {
 
   return (
     <section className="zh-card mb-4 overflow-hidden">
-      <div className="zh-card-header px-5 py-3 text-[15px] font-bold">{t('v_verify_label')}</div>
+      <div className="zh-card-header px-5 py-3 text-[16px] font-bold">{t('v_verify_label')}</div>
       <div className="px-5 py-4">
         {q.isError && <p className="text-sm text-destructive">{(q.error as Error).message}</p>}
         {q.isLoading && <p className="py-6 text-center text-sm text-lt-grey">{t('loading')}</p>}

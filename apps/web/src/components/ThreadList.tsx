@@ -117,7 +117,7 @@ function TagRow({ th }: { th: ThreadListItem }) {
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
       {langName && (
         <span
-          className="inline-flex shrink-0 items-center rounded-full border border-zh-line bg-lt-soft px-2 py-[2px] text-[11px] leading-none text-ink-soft"
+          className="inline-flex shrink-0 items-center rounded-full border border-zh-line bg-lt-soft px-2 py-[2px] text-[12px] leading-none text-ink-soft"
           title={langName}
         >
           {langName}
@@ -289,12 +289,12 @@ export function ThreadList(props: {
           {props.loading ? (
             <>
               <Icon name="refresh" className="mx-auto size-10 text-[#dcdcdc]" />
-              <span className="mt-2 block text-[15px] text-lt-grey">{t('loading')}</span>
+              <span className="mt-2 block text-[16px] text-lt-grey">{t('loading')}</span>
             </>
           ) : (
             <>
               <Icon name="bug" className="mx-auto size-10 text-[#dcdcdc]" />
-              <span className="mt-2 block text-[15px] text-lt-grey">{t('undeveloped_land')}</span>
+              <span className="mt-2 block text-[16px] text-lt-grey">{t('undeveloped_land')}</span>
             </>
           )}
         </li>

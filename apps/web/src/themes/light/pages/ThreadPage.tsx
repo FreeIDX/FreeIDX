@@ -90,7 +90,7 @@ const barBtnSm =
   'flex size-10 items-center justify-center rounded-full border border-zh-line bg-card text-lt-grey transition-colors hover:text-brand disabled:opacity-50';
 /** 左侧悬浮工具栏计数徽标（圆钮下方，胶囊形灰蓝底白字） */
 const barBadge =
-  'inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#8a94a6] px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white tabular-nums';
+  'inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#8a94a6] px-1.5 py-0.5 text-[12px] leading-none font-semibold text-white tabular-nums';
 
 /** 标题样式（h4 级：text-base font-medium；关闭话题置灰） */
 function getTitleCls(th: { digest: number; closed: number }): string {
@@ -1276,18 +1276,18 @@ export function ThreadPage() {
                       {th.username}
                     </Link>
                     <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
-                      <span className="inline-flex rounded-[3px] bg-brand px-1.5 py-0.5 text-[11px] leading-none text-white">
+                      <span className="inline-flex rounded-[3px] bg-brand px-1.5 py-0.5 text-[12px] leading-none text-white">
                         {t('uid')}:{th.uid}
                       </span>
                       {au?.groupName && (
-                        <span className="inline-flex rounded-[3px] bg-[#00b8d8] px-1.5 py-0.5 text-[11px] leading-none text-white">
+                        <span className="inline-flex rounded-[3px] bg-[#00b8d8] px-1.5 py-0.5 text-[12px] leading-none text-white">
                           {gn(au.gid, au.groupName)}
                         </span>
                       )}
                     </div>
                     {/* A6 在线态（bbs_session 15min 窗口，服务端下发） */}
                     {au?.online && (
-                      <span className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-[#00b96b]">
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-[#00b96b]">
                         <span className="size-1.5 rounded-full bg-[#00b96b]" />
                         {t('online_now')}
                       </span>

@@ -230,6 +230,33 @@ html[lang^='zh'] {
   font-family: var(--font-app);
 }
 
+/*
+ * 字号整体加大一号。
+ * Tailwind 4 的字号工具类编译为 `font-size: var(--text-*)`（行高走 `var(--text-*--line-height)`），
+ * 因此在容器级重映射这套令牌即可把简蓝主题的文字整体上移一级；后台 .theme-adm 不在本作用域内，不受影响。
+ * 台阶（根字号 14px）：xs 10.5→12.25 / sm 12.25→14 / base 14→15.75 / lg 15.75→17.5 / xl 17.5→21 / 2xl 21→24.5，
+ * 行高沿用上一级的比例（Tailwind 默认值同为 calc 比例）。
+ * 注：纯 px 写法（text-[11px] 等）不吃这套令牌，已按同一口径逐个 +1px；
+ * 裸文字（帖子正文等没有字号工具类的节点）由本条 font-size 兜底，与新的 text-base 同档。
+ */
+.theme-zh {
+  font-size: 1.125rem;
+  --text-xs: 0.875rem;
+  --text-xs--line-height: calc(1.25 / 0.875);
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1.125rem;
+  --text-base--line-height: calc(1.75 / 1.125);
+  --text-lg: 1.25rem;
+  --text-lg--line-height: calc(1.75 / 1.25);
+  --text-xl: 1.5rem;
+  --text-xl--line-height: calc(2 / 1.5);
+  --text-2xl: 1.875rem;
+  --text-2xl--line-height: calc(2.25 / 1.875);
+  --text-3xl: 2.25rem;
+  --text-3xl--line-height: calc(2.5 / 2.25);
+}
+
 /* 固定色相的装饰色（主题语义色） */
 .theme-zh {
   --color-success: #67c23a;
@@ -513,7 +540,7 @@ html[lang^='zh'] {
 .theme-zh .zh-card.card-postlist {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
-  font-size: 14px;
+  font-size: 1.125rem;
 }
 
 /* 侧栏等级进度（bootstrap .progress-bar-striped.progress-bar-animated，内联 line-height:20px 撑高） */
@@ -594,7 +621,7 @@ html[lang^='zh'] {
 .theme-zh .post-body h2 {
   position: relative;
   font-weight: 700;
-  font-size: 18px;
+  font-size: 20px;
   padding-left: 18px;
   line-height: 1.46;
   border: 0;
@@ -653,13 +680,13 @@ html {
   padding: 0.75rem;
   border-radius: 6px;
   overflow-x: auto;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
 }
 .post-body code {
   background: #f1f5f9;
   padding: 0.1rem 0.25rem;
   border-radius: 3px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
 }
 .post-body pre code {
   background: transparent;
