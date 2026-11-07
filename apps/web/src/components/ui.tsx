@@ -313,7 +313,7 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   const itemCls = (active: boolean) =>
     cx(
       /* min-h + py：单行仍为 40px；多语言长名称换行后自然撑高，不截断 */
-      'flex min-h-10 items-center gap-2.5 rounded-[5px] px-3 py-2 text-base leading-6 transition-colors outline-none',
+      'flex min-h-10 items-center gap-2.5 rounded-[5px] px-3 py-2 text-sm leading-6 transition-colors outline-none',
       collapsed && 'justify-center gap-0 px-0 py-0',
       active ? 'bg-[rgba(41,151,247,0.1)] font-medium text-[#2997f7]' : 'text-foreground hover:bg-lt-hover',
     );
