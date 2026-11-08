@@ -350,17 +350,20 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
         <div className={cx('flex gap-1 px-2', collapsed ? 'flex-col items-center' : 'items-center')}>
           <ul className={cx('min-w-0', collapsed ? 'w-full' : 'flex-1')}>
             {items.map((it) => (
-              <li key={it.k}>
+              /* px-2 与下方版块项一致：图标左边缘对齐 */
+              <li key={it.k} className="px-2">
                 <Link
                   to={it.to}
                   title={collapsed ? it.label : undefined}
                   aria-current={it.active ? 'page' : undefined}
                   className={itemCls(!!it.active)}
                 >
-                  {/* 与版块图标同尺寸同风格：28×28 主色圆角方块 + 白色图标 */}
-                  <span className={cx(iconBox, 'bg-brand text-white')} aria-hidden="true">
-                    <Icon name={it.icon} className="size-[18px]" />
-                  </span>
+                  {/* 与版块图标同尺寸（28px）、同灰色调，不加底色方块 */}
+                  <Icon
+                    name={it.icon}
+                    className={cx('size-7 shrink-0', it.active ? 'text-brand' : 'text-zh-grey')}
+                    aria-hidden="true"
+                  />
                   {!collapsed && <span className="min-w-0 flex-1 break-words">{it.label}</span>}
                 </Link>
               </li>
