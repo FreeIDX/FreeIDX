@@ -340,7 +340,8 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   return (
     <div
       className={cx(
-        'hidden shrink-0 self-start transition-[width] duration-200 lg:sticky lg:top-4 lg:z-10 lg:block',
+        /* 吸顶偏移取 main 的 pt-[83px]（顶栏 75px + 8px 间距）：上滑时停在顶栏之下，不再被顶栏压住顶部几项 */
+        'hidden shrink-0 self-start transition-[width] duration-200 lg:sticky lg:top-[83px] lg:z-10 lg:block',
         collapsed ? 'w-[56px]' : 'w-[190px]',
       )}
     >
@@ -432,7 +433,7 @@ export function TwoCol({
     <div className="flex flex-col gap-4 lg:flex-row">
       {left}
       <div className="min-w-0 flex-[3]">{children}</div>
-      <aside className={cx('hidden w-[285px] shrink-0 lg:block', asideSticky && 'self-start lg:sticky lg:top-4 lg:z-10')}>
+      <aside className={cx('hidden w-[285px] shrink-0 lg:block', asideSticky && 'self-start lg:sticky lg:top-[83px] lg:z-10')}>
         {aside}
       </aside>
     </div>
