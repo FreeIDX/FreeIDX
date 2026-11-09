@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuthModal } from '../store/authModal';
+import { useAuth } from '../store/auth';
 import { LoginForm, RegisterForm } from './AuthForms';
 import { Icon } from './icons';
 import { cx } from './ui';
@@ -18,6 +19,15 @@ export function AuthModal() {
   const closeAuth = useAuthModal((s) => s.closeAuth);
   const t = useT();
   const navigate = useNavigate();
+  const load = useAuth((s) => s.load);
+
+  /**
+   * 每次打开弹窗刷新一次 bootstrap：`setting.userCreateEmailOn` 与 `mailOn`（SMTP 池是否可用）都是服务端算出来的，
+   * 页面首屏那份是快照——站长刚在后台开启「邮箱验证」/刚存好邮箱池时，用旧快照会让注册表单少渲染整块验证码。
+   */
+  useEffect(() => {
+    if (open) void load(true);
+  }, [open, load]);
 
   /* Esc 关闭 */
   useEffect(() => {

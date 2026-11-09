@@ -110,6 +110,9 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
     } else {
       await saveExtConfig(db, cache, 'email', { pool: rows });
     }
+    // bootstrap 用 `email:on`（60s 读穿）下发「邮件通道是否可用」，前台据此决定注册表单渲不渲染验证码框；
+    // 池刚存好时必须主动失效，否则最长 60s 内前台仍按「无邮件」隐藏整块验证码（保存成功却看不到输入框）。
+    await cache.del('email:on');
 
     return ok(c, t('admin.emailSaved'), { data: await getEmailSettingState(c.env, db, cache) });
   });
