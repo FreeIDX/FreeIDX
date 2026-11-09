@@ -9,7 +9,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { Code, PageSize, normalizeContentLang, normForumNameI18n, type AttachItem, type FavoriterItem, type PostItem, type PostReplyItem, type SearchUserHit, type ThreadListItem, type ThreadDetail } from '@freeidx/shared';
+import { Code, PageSize, normalizeContentLang, normForumNameI18n, normNameI18n, type AttachItem, type FavoriterItem, type PostItem, type PostReplyItem, type SearchUserHit, type ThreadListItem, type ThreadDetail } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
 import type { Cache } from '../../core/cache';
@@ -306,10 +306,13 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
                 /* 版块名多语言（0027）：整份 map 下发，前端按当前界面语言取词 */
                 nameI18n: normForumNameI18n(forumlist[fid].name_i18n),
                 brief: forumlist[fid].brief,
+                /* 简介 / 公告多语言（0028）：整份 map 下发，前端按当前界面语言取词 */
+                briefI18n: normNameI18n(forumlist[fid].brief_i18n),
                 moduids: forumlist[fid].moduids,
                 icon: forumlist[fid].icon,
                 iconUrl: forumlist[fid].icon_url,
                 announcement: forumlist[fid].announcement,
+                announcementI18n: normNameI18n(forumlist[fid].announcement_i18n),
                 threads: forumlist[fid].threads,
                 todayposts: forumlist[fid].todayposts,
                 todaythreads: forumlist[fid].todaythreads,

@@ -20,7 +20,9 @@ import {
   GroupId,
   normalizeForumLang,
   normForumNameI18n,
+  normNameI18n,
   stringifyForumNameI18n,
+  stringifyNameI18n,
 } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import type { D1b, Stmt } from '../../core/db';
@@ -134,11 +136,19 @@ export function adminForumRoutes(): Hono<ReadEnv> {
   app.get('/api/admin/forums', async (c) => {
     const { db, cache } = core(c);
     const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
-    /* name_i18n 原样是 JSON 串，这里解析成对象直接给后台表单用（解析失败按未配置处理）；
+    /* *_i18n 原样是 JSON 串，这里解析成对象直接给后台表单用（解析失败按未配置处理）；
        与前台同一排序口径（rank 升序），后台表格保存后可见真实展示顺序 */
     const forums = Object.values(forumlist)
       .sort(forumRankCompare)
-      .map((f) => ({ ...f, name_i18n: normForumNameI18n(f.name_i18n) }));
+      .map((f) => ({
+        ...f,
+        name_i18n: normForumNameI18n(f.name_i18n),
+        /* 0028：简介 / 公告 / SEO 标题 / SEO 关键词多语言，与名称同一结构 */
+        brief_i18n: normNameI18n(f.brief_i18n),
+        announcement_i18n: normNameI18n(f.announcement_i18n),
+        seo_title_i18n: normNameI18n(f.seo_title_i18n),
+        seo_keywords_i18n: normNameI18n(f.seo_keywords_i18n),
+      }));
     return ok(c, 'ok', { data: { forums, groups: Object.values(grouplist) } });
   });
 
@@ -155,7 +165,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     const ts = now();
     const r = await db
       .prepare<{ fid: number }>(
-        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,name_i18n,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
+        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,name_i18n,brief_i18n,announcement_i18n,seo_title_i18n,seo_keywords_i18n,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
       )
       .bind(
         name,
@@ -171,6 +181,11 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         parentFid,
         lang,
         nameI18n,
+        /* 0028：简介 / 公告 / SEO 标题 / SEO 关键词多语言（空映射存空串 = 未配置） */
+        stringifyNameI18n(b.brief_i18n),
+        stringifyNameI18n(b.announcement_i18n),
+        stringifyNameI18n(b.seo_title_i18n),
+        stringifyNameI18n(b.seo_keywords_i18n),
         ts,
       )
       .first<{ fid: number }>();
@@ -242,6 +257,11 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     if ('lang' in b) put('lang', normForumLang(b.lang, parentFid));
     /* 版块名多语言（0027）：显式携带才写，空对象/空串 = 清空（展示回退主名称） */
     if ('name_i18n' in b) put('name_i18n', stringifyForumNameI18n(b.name_i18n));
+    /* 0028：简介 / 公告 / SEO 标题 / SEO 关键词多语言，同一 merge 语义（携带才写，空 = 清空回退主字段） */
+    if ('brief_i18n' in b) put('brief_i18n', stringifyNameI18n(b.brief_i18n));
+    if ('announcement_i18n' in b) put('announcement_i18n', stringifyNameI18n(b.announcement_i18n));
+    if ('seo_title_i18n' in b) put('seo_title_i18n', stringifyNameI18n(b.seo_title_i18n));
+    if ('seo_keywords_i18n' in b) put('seo_keywords_i18n', stringifyNameI18n(b.seo_keywords_i18n));
 
     if (!sets.length && !('access' in b)) throw new AppError(Code.VALIDATION_ERROR, t('common.noFieldsToUpdate'));
     if (sets.length) {

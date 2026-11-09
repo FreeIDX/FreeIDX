@@ -49,6 +49,11 @@ export interface ForumRow extends ForumForAccess {
   parent_fid: number;
   /** 版块名多语言 JSON（0027）：空串 = 未配置；展示取词见 shared/forum-name.ts */
   name_i18n: string;
+  /** 简介 / 公告 / SEO 标题 / SEO 关键词多语言 JSON（0028）：空串 = 未配置，展示回退主字段 */
+  brief_i18n: string;
+  announcement_i18n: string;
+  seo_title_i18n: string;
+  seo_keywords_i18n: string;
 }
 
 /**
@@ -117,6 +122,10 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
       f.icon_url = f.icon_file ? `/files/${f.icon_file}?v=${f.icon_time}` : '';
       f.parent_fid = Number(f.parent_fid ?? 0);
       f.name_i18n = String(f.name_i18n ?? '');
+      f.brief_i18n = String(f.brief_i18n ?? '');
+      f.announcement_i18n = String(f.announcement_i18n ?? '');
+      f.seo_title_i18n = String(f.seo_title_i18n ?? '');
+      f.seo_keywords_i18n = String(f.seo_keywords_i18n ?? '');
       out[f.fid] = { ...f, accesson: Number(f.accesson), accesslist: {} };
     }
     for (const a of access.results) {

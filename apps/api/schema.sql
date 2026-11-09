@@ -131,7 +131,11 @@ CREATE TABLE bbs_forum (
   edit_check INTEGER NOT NULL DEFAULT 0,
   parent_fid INTEGER NOT NULL DEFAULT 0,
   lang TEXT NOT NULL DEFAULT '',
-  name_i18n TEXT NOT NULL DEFAULT ''
+  name_i18n TEXT NOT NULL DEFAULT '',
+  brief_i18n TEXT NOT NULL DEFAULT '',
+  announcement_i18n TEXT NOT NULL DEFAULT '',
+  seo_title_i18n TEXT NOT NULL DEFAULT '',
+  seo_keywords_i18n TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE bbs_forum_access (

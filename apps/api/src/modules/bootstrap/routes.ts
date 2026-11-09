@@ -3,7 +3,7 @@
  * 合并版头渲染依赖的 forumlist/grouplist/当前用户为单请求（§7 首屏 RTT 收敛）。
  */
 import { Hono } from 'hono';
-import { effectiveBanScope, normForumNameI18n } from '@freeidx/shared';
+import { effectiveBanScope, normForumNameI18n, normNameI18n } from '@freeidx/shared';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
 import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
@@ -40,14 +40,19 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         nameI18n: normForumNameI18n(f.name_i18n),
         rank: f.rank,
         brief: f.brief,
+        /* 简介 / 公告 / SEO 标题 / SEO 关键词多语言（0028）：整份 map 下发，前端按当前界面语言取词 */
+        briefI18n: normNameI18n(f.brief_i18n),
         threads: f.threads,
         todayposts: f.todayposts,
         todaythreads: f.todaythreads,
         icon: f.icon,
         iconUrl: f.icon_url,
         announcement: f.announcement,
+        announcementI18n: normNameI18n(f.announcement_i18n),
         seoTitle: f.seo_title,
+        seoTitleI18n: normNameI18n(f.seo_title_i18n),
         seoKeywords: f.seo_keywords,
+        seoKeywordsI18n: normNameI18n(f.seo_keywords_i18n),
         /* 二级版块：上级版块 fid，0 = 一级版块（前端据此归并二级导航） */
         parentFid: f.parent_fid,
         /* 生效内容语言（0024，已含父版块继承）：非空时发帖页锁定语言选择，服务端强制该语言 */

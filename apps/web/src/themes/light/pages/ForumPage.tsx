@@ -6,7 +6,7 @@ import { useAuth } from '../../../store/auth';
 import { useLight } from '../../../store/theme';
 import { ApiError, apiGet, modThreads } from '../../../lib/api';
 import { posInt } from '../../../lib/params';
-import { useForumName, useT } from '../../../lib/i18n';
+import { useForumName, useLocalizedName, useT } from '../../../lib/i18n';
 import { NotFoundPage } from './NotFoundPage';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
@@ -24,11 +24,15 @@ interface ForumPageData extends ThreadPageData {
     /** 版块名多语言（0027）：前端按当前界面语言取词 */
     nameI18n?: Record<string, string>;
     brief: string;
+    /** 简介多语言（0028）：未配置当前语言时回退 brief */
+    briefI18n?: Record<string, string>;
     moduids: string;
     icon?: number;
     /** 自定义图标直链（后台上传，/files/forum/{fid}.xxx）；空 = 内置默认图 */
     iconUrl?: string;
     announcement?: string;
+    /** 公告多语言（0028）：未配置当前语言时回退 announcement */
+    announcementI18n?: Record<string, string>;
     threads?: number;
     todayposts?: number;
     todaythreads?: number;
@@ -65,8 +69,9 @@ export function ForumPage() {
   const light = useLight();
   const tags = light.tags;
   const t = useT();
-  /* 版块名多语言（0027）：按当前界面语言取词 */
+  /* 版块文案多语言（0027 名称 / 0028 简介·公告）：按当前界面语言取词 */
   const fname = useForumName();
+  const localized = useLocalizedName();
   const [noticeOff, setNoticeOff] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   /* 版主批量操作：勾选 → 底部动作条 → POST /api/mod/threads */
@@ -111,8 +116,8 @@ export function ForumPage() {
   const node = forumlist.find((f) => f.fid === fid);
   const forum = { ...node, ...q.data?.forum };
   const name = fname({ name: forum.name ?? '', nameI18n: forum.nameI18n });
-  const brief = forum.brief ?? '';
-  const announcement = forum.announcement ?? '';
+  const brief = localized(forum.brief ?? '', forum.briefI18n);
+  const announcement = localized(forum.announcement ?? '', forum.announcementI18n);
   const mods = parseModuids(forum.moduids);
   /* 置顶主题：列表首页已并入 top（服务端 threadListHandler），取前 5 条展示 */
   const topList = (q.data?.list ?? []).filter((x) => x.top > 0).slice(0, 5);

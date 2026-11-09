@@ -27,7 +27,11 @@ export interface AdminForumRow {
   todayposts: number;
   todaythreads: number;
   brief: string;
+  /** 版块简介多语言（0028）：locale → 简介；{} = 未配置（前台回退 brief） */
+  brief_i18n: Record<string, string>;
   announcement: string;
+  /** 版块公告多语言（0028）：{} = 未配置（前台回退 announcement） */
+  announcement_i18n: Record<string, string>;
   accesson: number;
   orderby: number;
   icon: number;
@@ -40,7 +44,11 @@ export interface AdminForumRow {
   /** 逗号分隔的版主 uid */
   moduids: string;
   seo_title: string;
+  /** SEO 标题多语言（0028）：{} = 未配置（前台/SEO 回退 seo_title） */
+  seo_title_i18n: Record<string, string>;
   seo_keywords: string;
+  /** SEO 关键词多语言（0028）：{} = 未配置（回退 seo_keywords） */
+  seo_keywords_i18n: Record<string, string>;
   /** 上级版块 fid，0 = 一级版块（0018_forum_parent，仅两级） */
   parent_fid: number;
   /** 绑定内容语言原始值（0024）：'' = 未绑定（子版块继承父版块，顶级版块不限制）；'none' = 显式不限制（仅子版块）；其余 = 强制该语言 */
@@ -84,13 +92,21 @@ export interface ForumInput {
   name: string;
   rank?: number;
   brief?: string;
+  /** 简介多语言（0028）：缺省 = 保持原值（PUT），{} = 清空（展示回退 brief） */
+  brief_i18n?: Record<string, string>;
   announcement?: string;
+  /** 公告多语言（0028）：同上 merge 语义 */
+  announcement_i18n?: Record<string, string>;
   accesson?: number;
   orderby?: number;
   icon?: number;
   moduids?: string;
   seo_title?: string;
+  /** SEO 标题多语言（0028） */
+  seo_title_i18n?: Record<string, string>;
   seo_keywords?: string;
+  /** SEO 关键词多语言（0028） */
+  seo_keywords_i18n?: Record<string, string>;
   /** 上级版块 fid：0/缺省 = 一级版块；>0 挂到该一级版块下（仅两级） */
   parent_fid?: number;
   /** 绑定内容语言原始值（0024）：''/缺省 = 未绑定（子版块继承父版块，顶级版块不限制）；'none' = 显式不限制（仅子版块）；其余 = 强制该语言 */

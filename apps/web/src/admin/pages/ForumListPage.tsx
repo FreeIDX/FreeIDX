@@ -42,18 +42,28 @@ function scalarInput(r: AdminForumRow): ForumInput {
     seo_keywords: r.seo_keywords,
     parent_fid: r.parent_fid,
     lang: r.lang,
-    /* 版块名多语言（0027）：对象按内容比较（见 changed），未改动时与 q.data 同引用 */
+    /* 版块文案多语言（0027 名称 / 0028 简介·公告·SEO）：对象按内容比较（见 changed），未改动时与 q.data 同引用 */
     name_i18n: r.name_i18n ?? {},
+    brief_i18n: r.brief_i18n ?? {},
+    announcement_i18n: r.announcement_i18n ?? {},
+    seo_title_i18n: r.seo_title_i18n ?? {},
+    seo_keywords_i18n: r.seo_keywords_i18n ?? {},
   };
 }
 
 const DIFF_KEYS: (keyof ForumInput)[] = [
-  'name', 'name_i18n', 'rank', 'brief', 'announcement', 'accesson', 'orderby', 'icon', 'moduids', 'seo_title', 'seo_keywords', 'parent_fid', 'lang',
+  'name', 'name_i18n', 'rank',
+  'brief', 'brief_i18n',
+  'announcement', 'announcement_i18n',
+  'accesson', 'orderby', 'icon', 'moduids',
+  'seo_title', 'seo_title_i18n',
+  'seo_keywords', 'seo_keywords_i18n',
+  'parent_fid', 'lang',
 ];
 
-/** 字段值比较：name_i18n 是对象，必须按内容比（引用会随 patch 变化） */
+/** 字段值比较：`*_i18n` 是对象，必须按内容比（引用会随 patch 变化） */
 function sameField(k: keyof ForumInput, a: ForumInput, b: ForumInput): boolean {
-  if (k === 'name_i18n') return JSON.stringify(a.name_i18n ?? {}) === JSON.stringify(b.name_i18n ?? {});
+  if (k.endsWith('_i18n')) return JSON.stringify(a[k] ?? {}) === JSON.stringify(b[k] ?? {});
   return a[k] === b[k];
 }
 
@@ -80,7 +90,9 @@ function BLANK_FORUM(): AdminForumRow {
     todayposts: 0,
     todaythreads: 0,
     brief: '',
+    brief_i18n: {},
     announcement: '',
+    announcement_i18n: {},
     accesson: 0,
     orderby: 0,
     icon: 0,
@@ -89,7 +101,9 @@ function BLANK_FORUM(): AdminForumRow {
     icon_url: '',
     moduids: '',
     seo_title: '',
+    seo_title_i18n: {},
     seo_keywords: '',
+    seo_keywords_i18n: {},
     parent_fid: 0,
     lang: '',
     name_i18n: {},

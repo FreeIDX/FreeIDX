@@ -39,17 +39,25 @@ export interface ForumNode {
   nameI18n?: Record<string, string>;
   rank: number;
   brief: string;
+  /** 版块简介多语言（0028）：locale → 简介；缺省/空 = 未配置，展示回退 brief */
+  briefI18n?: Record<string, string>;
   threads: number;
   todayposts: number;
   todaythreads?: number;
   seoTitle: string;
+  /** SEO 标题多语言（0028）：前台按当前界面语言取词，SEO 产物按站点语言取词 */
+  seoTitleI18n?: Record<string, string>;
   seoKeywords: string;
+  /** SEO 关键词多语言（0028） */
+  seoKeywordsI18n?: Record<string, string>;
   /** 版块图标版本号（存"最后更新时间"，>0 即有图标） */
   icon?: number;
   /** 自定义图标直链（后台上传，/files/forum/{fid}.xxx?v=ts）；空 = 前台用内置默认图 */
   iconUrl?: string;
   /** 版块公告（公告卡/绿底 alert） */
   announcement?: string;
+  /** 版块公告多语言（0028）：locale → 公告；缺省/空 = 未配置，展示回退 announcement */
+  announcementI18n?: Record<string, string>;
   /** 上级版块 fid，0/缺省 = 一级版块（0018_forum_parent，仅两级） */
   parentFid?: number;
   /** 生效内容语言（0024，已含父版块继承与「显式不限制」哨兵解析）：空/缺省 = 不限制；

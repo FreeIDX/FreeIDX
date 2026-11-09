@@ -61,9 +61,25 @@ const EMPTY: ForumInput = {
   parent_fid: 0,
   lang: '',
   name_i18n: {},
+  brief_i18n: {},
+  announcement_i18n: {},
+  seo_title_i18n: {},
+  seo_keywords_i18n: {},
 };
 
 type Matrix = Record<number, Record<string, number>>;
+
+/** 可多语言的版块文案字段（0027 名称 + 0028 简介/公告/SEO 标题/关键词） */
+type I18nField = 'name' | 'brief' | 'announcement' | 'seo_title' | 'seo_keywords';
+
+/** 文案字段 → 多语言映射列（同一结构：locale → 文本） */
+const I18N_MAPS: Record<I18nField, 'name_i18n' | 'brief_i18n' | 'announcement_i18n' | 'seo_title_i18n' | 'seo_keywords_i18n'> = {
+  name: 'name_i18n',
+  brief: 'brief_i18n',
+  announcement: 'announcement_i18n',
+  seo_title: 'seo_title_i18n',
+  seo_keywords: 'seo_keywords_i18n',
+};
 
 export function ForumEditPage() {
   const t = useAdminT();
@@ -78,8 +94,8 @@ export function ForumEditPage() {
   /** 版块图标直链（选图即传，不随表单提交；''=内置默认图） */
   const [iconUrl, setIconUrl] = useState('');
   const [iconNotice, setIconNotice] = useState('');
-  /** 版块名多语言弹窗（0027）：与列表页同一组件，确认后写回表单 */
-  const [i18nOpen, setI18nOpen] = useState(false);
+  /** 版块文案多语言弹窗（0027 名称 / 0028 简介·公告·SEO）：与列表页同一组件，确认后写回表单 */
+  const [i18nField, setI18nField] = useState<I18nField | null>(null);
 
   useEffect(() => {
     if (!q.data || form) return;
@@ -107,6 +123,10 @@ export function ForumEditPage() {
       parent_fid: row.parent_fid,
       lang: row.lang ?? '',
       name_i18n: row.name_i18n ?? {},
+      brief_i18n: row.brief_i18n ?? {},
+      announcement_i18n: row.announcement_i18n ?? {},
+      seo_title_i18n: row.seo_title_i18n ?? {},
+      seo_keywords_i18n: row.seo_keywords_i18n ?? {},
     });
     setIconUrl(row.icon_url);
     const seed: Matrix = {};
@@ -184,8 +204,28 @@ export function ForumEditPage() {
   if (q.isError) return <ErrorState error={q.error} />;
   if (!form && !q.isPending) return <Card>{t('forum_not_found_id', '版块 {fid} 不存在。', { fid: routeFid })}</Card>;
   if (!form) return <Card>{t('loading', '加载中…')}</Card>;
-  /** 已配置的界面语言数（仅用于按钮上的提示标记） */
-  const i18nCount = Object.keys(form.name_i18n ?? {}).length;
+  /** 文案字段的展示标签（弹窗标题「{字段}多语言」与默认内容字段标签共用） */
+  const i18nLabel = (field: I18nField): string =>
+    field === 'name'
+      ? t('forum_name', '名称')
+      : field === 'brief'
+        ? t('forum_brief', '简介')
+        : field === 'announcement'
+          ? t('forum_anouncement', '版块公告')
+          : field === 'seo_title'
+            ? t('forum_seo_title', 'SEO 标题')
+            : t('forum_seo_keywords', 'SEO 关键词');
+  /** 字段旁的「语言」按钮：显示已配置语言数，点开该字段的多语言弹窗 */
+  const i18nButton = (field: I18nField) => {
+    const count = Object.keys(form[I18N_MAPS[field]] ?? {}).length;
+    const title = t('site_text_i18n_title', '{field}多语言', { field: i18nLabel(field) });
+    return (
+      <Button variant="default" className="shrink-0" title={title} onClick={() => setI18nField(field)}>
+        {t('forum_name_i18n', '语言')}
+        {count > 0 ? ` (${count})` : ''}
+      </Button>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -206,10 +246,7 @@ export function ForumEditPage() {
           hint={t('forum_name_i18n_hint', '按站点当前语言自动显示对应名称；未填写的语言回退到默认名称。')}
           controlClass="sm:w-4/12"
         >
-          <Button variant="default" onClick={() => setI18nOpen(true)}>
-            {t('forum_name_i18n_title', '版块名称多语言')}
-            {i18nCount > 0 ? ` (${i18nCount})` : ''}
-          </Button>
+          {i18nButton('name')}
         </Field>
         <Field
           label={t('forum_parent', '父版块')}
@@ -239,11 +276,26 @@ export function ForumEditPage() {
         <Field label={t('rank', '排序')} htmlFor="f-rank" controlClass="sm:w-3/12" hint={t('forum_rank_hint', '数字越小越靠前')}>
           <Input id="f-rank" type="number" value={String(form.rank ?? 0)} onChange={(e) => set('rank', Number(e.target.value || 0))} />
         </Field>
+        {/* 简介 / 公告多语言（0028）：与名称同一弹窗，未填写的语言回退主字段 */}
         <Field label={t('forum_brief', '简介')} hint={t('forum_brief_hint', '前台版块页标题下方一行')}>
-          <Textarea className="h-[80px] min-h-0" value={form.brief ?? ''} onChange={(e) => set('brief', e.target.value)} />
+          <div className="flex items-start gap-2">
+            <Textarea
+              className="h-[80px] min-h-0 min-w-0 flex-1"
+              value={form.brief ?? ''}
+              onChange={(e) => set('brief', e.target.value)}
+            />
+            {i18nButton('brief')}
+          </div>
         </Field>
         <Field label={t('forum_anouncement', '版块公告')} hint={t('forum_announcement_hint', '进入本版块的置顶公告条')}>
-          <Textarea className="h-[80px] min-h-0" value={form.announcement ?? ''} onChange={(e) => set('announcement', e.target.value)} />
+          <div className="flex items-start gap-2">
+            <Textarea
+              className="h-[80px] min-h-0 min-w-0 flex-1"
+              value={form.announcement ?? ''}
+              onChange={(e) => set('announcement', e.target.value)}
+            />
+            {i18nButton('announcement')}
+          </div>
         </Field>
         <Field label={t('moderator', '版主')} hint={t('forum_moderator_hint', '逗号分隔的用户 ID，如 3,17；版主可在前台管理本版块')}>
           <Input value={form.moduids ?? ''} onChange={(e) => set('moduids', e.target.value)} placeholder="3,17" />
@@ -328,11 +380,18 @@ export function ForumEditPage() {
           </div>
           {iconNotice && <p className="mt-2 text-xs text-destructive">{iconNotice}</p>}
         </Field>
+        {/* SEO 标题 / 关键词多语言（0028）：前台按界面语言取词，SEO 静态产物固定按站点语言取词 */}
         <Field label={t('forum_seo_title', 'SEO 标题')} hint={t('forum_seo_title_hint', '留空则用「版块名 - 站点名」')}>
-          <Input value={form.seo_title ?? ''} onChange={(e) => set('seo_title', e.target.value)} />
+          <div className="flex items-center gap-2">
+            <Input className="min-w-0 flex-1" value={form.seo_title ?? ''} onChange={(e) => set('seo_title', e.target.value)} />
+            {i18nButton('seo_title')}
+          </div>
         </Field>
         <Field label={t('forum_seo_keywords', 'SEO 关键词')}>
-          <Input value={form.seo_keywords ?? ''} onChange={(e) => set('seo_keywords', e.target.value)} />
+          <div className="flex items-center gap-2">
+            <Input className="min-w-0 flex-1" value={form.seo_keywords ?? ''} onChange={(e) => set('seo_keywords', e.target.value)} />
+            {i18nButton('seo_keywords')}
+          </div>
         </Field>
 
         <SubmitRow>
@@ -346,15 +405,21 @@ export function ForumEditPage() {
       </Card>
 
       <NameI18nModal
-        open={i18nOpen}
-        name={form.name ?? ''}
-        value={form.name_i18n}
+        open={i18nField !== null}
+        name={i18nField ? String(form[i18nField] ?? '') : ''}
+        value={i18nField ? form[I18N_MAPS[i18nField]] : undefined}
+        title={i18nField ? t('site_text_i18n_title', '{field}多语言', { field: i18nLabel(i18nField) }) : ''}
+        hint={t('site_text_i18n_hint', '按站点当前语言自动显示对应内容；未填写的语言回退到默认内容。')}
+        defaultLabel={i18nField ? i18nLabel(i18nField) : undefined}
+        multiline={i18nField === 'brief' || i18nField === 'announcement'}
         onSave={(next, defaultName) => {
-          set('name_i18n', next);
-          set('name', defaultName);
-          setI18nOpen(false);
+          if (!i18nField) return;
+          set(i18nField, defaultName);
+          const mapKey = I18N_MAPS[i18nField];
+          setForm((f) => (f ? { ...f, [mapKey]: next } : f));
+          setI18nField(null);
         }}
-        onClose={() => setI18nOpen(false)}
+        onClose={() => setI18nField(null)}
       />
     </div>
   );

@@ -10,6 +10,7 @@ import {
   forumNameOf,
   localizedSetting,
   normForumNameI18n,
+  normNameI18n,
   type PageMeta,
   type RobotsContribution,
   type SiteSetting,
@@ -192,26 +193,41 @@ async function buildFallback(
 
   if (route.kind === 'forum' && route.id) {
     const fid = route.id;
+    type ForumSeoRow = {
+      name: string;
+      brief: string;
+      seo_title: string;
+      seo_keywords: string;
+      name_i18n: string;
+      brief_i18n: string;
+      seo_title_i18n: string;
+      seo_keywords_i18n: string;
+    };
     const f = await db
-      .prepare<{ name: string; brief: string; seo_title: string; name_i18n: string }>(
-        'SELECT name,brief,seo_title,name_i18n FROM bbs_forum WHERE fid = ?',
+      .prepare<ForumSeoRow>(
+        'SELECT name,brief,seo_title,seo_keywords,name_i18n,brief_i18n,seo_title_i18n,seo_keywords_i18n FROM bbs_forum WHERE fid = ?',
       )
       .bind(fid)
-      .first<{ name: string; brief: string; seo_title: string; name_i18n: string }>();
+      .first<ForumSeoRow>();
     if (!f) return null;
-    /* 版块名多语言（0027）：SEO 产物固定用站点语言取词（与 setting.lang 一致，不随访客 cookie 变） */
+    /* 版块文案多语言（0027 / 0028）：SEO 产物固定用站点语言取词（与 setting.lang 一致，不随访客 cookie 变） */
     const forumName = forumNameOf(f.name, normForumNameI18n(f.name_i18n), setting.lang);
+    const forumBrief = forumNameOf(f.brief, normNameI18n(f.brief_i18n), setting.lang);
+    const seoTitle = forumNameOf(f.seo_title, normNameI18n(f.seo_title_i18n), setting.lang) || forumName;
+    const seoKeywords = forumNameOf(f.seo_keywords, normNameI18n(f.seo_keywords_i18n), setting.lang);
     const rows = await db
       .prepare<{ tid: number; subject: string }>(
         'SELECT tid,subject FROM bbs_thread WHERE fid = ? AND ok = 1 ORDER BY last_date DESC LIMIT 50',
       )
       .bind(fid)
       .all();
-    const meta = newPageMeta('forum', rt, setting, { fid, seoTitle: f.seo_title || forumName, seoKeywords: '' });
+    const meta = newPageMeta('forum', rt, setting, { fid, seoTitle, seoKeywords });
+    /* 版块简介（0028 多语言）优先作本页 description：版块页各自有简介时不该全部复用站点描述 */
+    if (forumBrief.trim()) meta.description = forumBrief;
     const list = rows.results
       .map((t) => `<li><a href="/thread/${t.tid}">${escAttr(t.subject)}</a></li>`)
       .join('');
-    return { meta, body: `<main><h1>${escAttr(forumName)}</h1><p>${escAttr(f.brief)}</p><ul>${list}</ul></main>` };
+    return { meta, body: `<main><h1>${escAttr(forumName)}</h1><p>${escAttr(forumBrief)}</p><ul>${list}</ul></main>` };
   }
 
   if (route.kind === 'user' && route.id) {

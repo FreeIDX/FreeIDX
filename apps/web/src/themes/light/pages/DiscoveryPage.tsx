@@ -11,7 +11,7 @@ import { Link } from 'react-router';
 import type { ThreadListItem } from '@freeidx/shared';
 import { apiGet, fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../../../lib/api';
 import { useAuth } from '../../../store/auth';
-import { useForumName, useT } from '../../../lib/i18n';
+import { useForumName, useLocalizedName, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 import { Carousel } from '../../../components/Carousel';
 import { Avatar } from '../../../components/Avatar';
@@ -103,8 +103,9 @@ function UserRankCard({ type, title, icon }: { type: 'active' | 'posts' | 'wealt
 
 export function DiscoveryPage() {
   const t = useT();
-  /* 版块名多语言（0027）：按当前界面语言取词 */
+  /* 版块文案多语言（0027 名称 / 0028 简介）：按当前界面语言取词 */
   const fname = useForumName();
+  const localized = useLocalizedName();
   const light = useLight();
   const forumlist = useAuth((s) => s.forumlist);
   const runtime = useAuth((s) => s.runtime);
@@ -194,7 +195,7 @@ export function DiscoveryPage() {
                             {f.todayposts}
                           </span>
                         </div>
-                        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-lt-grey">{f.brief}</p>
+                        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-lt-grey">{localized(f.brief, f.briefI18n)}</p>
                         {mods && (
                           <p className="mt-1 flex items-center gap-1 text-xs text-lt-grey">
                             <Icon name="user" className="size-3" />
