@@ -511,6 +511,13 @@ export interface MailAttempt {
   error?: string;
 }
 
+/** 运行时 DNS 解析结果（DoH 探测，仅测试发信时返回；用于区分「DNS 被改写」与「环境禁止出站」） */
+export interface DnsProbe {
+  host: string;
+  ips: string[];
+  error?: string;
+}
+
 /** 一次发信报告：POST /api/admin/email-setting/test 回包，以及 GET 的 last（最近一次发信，含正式发码） */
 export interface MailReport {
   ok: boolean;
@@ -520,6 +527,8 @@ export interface MailReport {
   /** true = 后台手动测试 */
   test: boolean;
   attempts: MailAttempt[];
+  /** 仅测试发信时带：目标主机的运行时解析结果 */
+  dns?: DnsProbe;
 }
 
 export interface EmailSettingView {

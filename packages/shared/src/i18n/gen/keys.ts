@@ -685,6 +685,7 @@ export type AdminKey =
   | 'admin_delete_success'
   | 'admin_email_connect_hint'
   | 'admin_email_daily_limit'
+  | 'admin_email_dns_probe'
   | 'admin_email_from'
   | 'admin_email_help'
   | 'admin_email_host'

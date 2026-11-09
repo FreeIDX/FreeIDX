@@ -4,6 +4,8 @@
  *  - `cloudflare:sockets` 出站 TCP：25 端口被封，465（隐式 TLS）/587（STARTTLS）可用；非 465/587 按明文（仅限本地假 SMTP 联调）。
  *  - 内置最小 SMTP 客户端：EHLO → STARTTLS? → AUTH（LOGIN / PLAIN，按 EHLO 通告能力选）→ MAIL FROM → RCPT TO → DATA → QUIT。
  *  - 多账号 **round-robin 轮询**（单账号免费额度 → N 倍，数量突破）；当前账号失败自动顺延下一账号（failover）。
+ *  - **端口互备**：同一账号在 465（隐式 TLS）与 587（STARTTLS）之间，仅在**连接阶段**失败时互试一次
+ *    （认证/投递类失败换端口无意义）；某些企业网/运营商只放行其中一条。
  *    轮询指针存 D1 kv 行 `ext:email:rr`（单语句自增 RETURNING；竞态下偶发重复选号无害，仅轮转偏移）。
  *  - **每账号每日发送上限**（dailyLimit，0 不限）：达到上限的账号当天轮询自动跳过（顺延下一账号），
  *    当日计数存 D1 kv `ext:email:cnt:{ymd}:{host}:{user}`（UTC 日切；**发前预约、失败归还**，
@@ -66,6 +68,18 @@ export interface MailAttempt {
   error?: string;
 }
 
+/**
+ * 运行时 DNS 解析结果（DoH 探测，走 HTTPS 不依赖出站 TCP）。
+ * 用途：区分「域名被解析改写到 Cloudflare 网段」与「域名正常但 socket 被策略拒绝」——
+ * 前者是账户侧的 DNS/网关策略，后者是平台出站限制，处置方式完全不同。
+ */
+export interface DnsProbe {
+  host: string;
+  ips: string[];
+  /** 探测失败原因（不阻断发信，仅作参考） */
+  error?: string;
+}
+
 /** 一次发信报告（成功即止；全部失败则列出每个账号的原因） */
 export interface MailReport {
   ok: boolean;
@@ -75,6 +89,8 @@ export interface MailReport {
   /** true = 后台「测试邮箱」手动触发 */
   test: boolean;
   attempts: MailAttempt[];
+  /** 仅在后台测试发信时附带：目标主机的运行时解析结果 */
+  dns?: DnsProbe;
 }
 
 /** 最近一次发信报告落 bbs_kv（单行覆盖，无历史累积） */
@@ -293,29 +309,22 @@ class SmtpPoolProvider implements EmailProvider {
           continue;
         }
       }
-      const trace: { stage: string } = { stage: 'connect' };
-      try {
-        await smtpSendOne(acct, to, subject, text, { trace });
-      } catch (e) {
-        // 账号级失败顺延下一个；失败原因落日志（否则 waitUntil 静默无从排查）
-        const err = e instanceof Error ? e.message : String(e);
-        attempts.push({ account: labelOf(acct), ok: false, stage: trace.stage, error: err });
-        console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(acct), err })}`);
-        if (limited) {
-          // 没发出去就归还名额（服务商拒绝不算消耗额度）
-          try {
-            await releaseDailyCount(this.db, acct.host, acct.user);
-          } catch (e2) {
-            console.warn(`[email] daily release failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
-          }
-        }
-        continue;
+      const tries = await attemptAccount(acct, to, subject, text);
+      attempts.push(...tries);
+      if (tries.some((t) => t.ok)) {
+        // DATA 后的 250 已确认投递：名额保留，且此后任何失败都不得顺延下一个账号，
+        // 否则同一封信会被第二台重发一次（对方收到两封）。
+        await recordMailReport(this.db, { ok: true, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
+        return true;
       }
-      // DATA 后的 250 已确认投递：名额保留，且此后任何失败都不得顺延下一个账号，
-      // 否则同一封信会被第二台重发一次（对方收到两封）。
-      attempts.push({ account: labelOf(acct), ok: true });
-      await recordMailReport(this.db, { ok: true, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
-      return true;
+      // 该账号（含端口互备）全部失败 → 顺延下一个账号；服务商拒绝不算消耗额度，归还名额
+      if (limited) {
+        try {
+          await releaseDailyCount(this.db, acct.host, acct.user);
+        } catch (e2) {
+          console.warn(`[email] daily release failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
+        }
+      }
     }
     if (overLimit === n) console.error(`[email] ${t0('email.allOverLimit', { n })}`);
     await recordMailReport(this.db, { ok: false, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
@@ -328,6 +337,89 @@ function tlsMode(port: number): 'on' | 'starttls' | 'off' {
   if (port === 465) return 'on';
   if (port === 587) return 'starttls';
   return 'off';
+}
+
+/**
+ * 端口互备顺序：465（隐式 TLS）与 587（STARTTLS）是同一套凭证的两条通道，
+ * 某些网络环境只放行其中一条（企业网关/运营商策略）。
+ * 只在**连接阶段**失败时才换端口重试——认证/投递阶段的失败换端口没有意义，只会白跑一次。
+ */
+function portsOf(port: number): number[] {
+  if (port === 465) return [465, 587];
+  if (port === 587) return [587, 465];
+  return [port];
+}
+
+/**
+ * 单账号投递（含端口互备），返回该账号的逐次尝试明细；成功即停止。
+ * 失败原因除返回给调用方外仍落日志（waitUntil 旁路场景没有别的地方能看到）。
+ */
+async function attemptAccount(
+  acct: SmtpAccount,
+  to: string,
+  subject: string,
+  text: string,
+  opts: { sessionTimeout?: number } = {},
+): Promise<MailAttempt[]> {
+  const out: MailAttempt[] = [];
+  for (const port of portsOf(acct.port)) {
+    const target: SmtpAccount = { ...acct, port };
+    const trace: { stage: string } = { stage: 'connect' };
+    try {
+      await smtpSendOne(target, to, subject, text, { trace, sessionTimeout: opts.sessionTimeout });
+      out.push({ account: labelOf(target), ok: true });
+      return out;
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      out.push({ account: labelOf(target), ok: false, stage: trace.stage, error: err });
+      console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(target), err })}`);
+      // 非连接阶段失败（认证被拒/收件人被拒/超时）→ 换端口毫无意义
+      if (trace.stage !== 'connect') return out;
+    }
+  }
+  return out;
+}
+
+/** DoH 探测超时（单端点） */
+const DNS_PROBE_TIMEOUT = 4_000;
+
+/**
+ * 用 DoH 查目标主机的 A 记录（`fetch` 走 443 HTTPS，不受出站 TCP socket 策略影响）。
+ *
+ * 为什么需要它：`TCP Loop detected` 的官方语义是「出站连接被打回 Cloudflare 自身网络」，
+ * 而 Cloudflare 只可能在自己解析出的地址上做这个判定。于是「运行时到底把 smtp.qq.com
+ * 解析成了什么」就是唯一能把责任分清的证据：
+ *  - 解析结果是服务商的真实 IP → 域名没问题，是平台对该出站连接的策略判定；
+ *  - 解析结果是 104.x / 172.6x / 162.158.x 等 Cloudflare 段 → 账户侧 DNS 被改写
+ *    （Zero Trust Gateway / 家族防护 / 自定义解析规则），改这些策略才能真正修复。
+ */
+async function probeDns(host: string): Promise<DnsProbe> {
+  const urls = [
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`,
+    `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`,
+  ];
+  let last = '';
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: { accept: 'application/dns-json' },
+        signal: AbortSignal.timeout(DNS_PROBE_TIMEOUT),
+      });
+      if (!r.ok) {
+        last = `HTTP ${r.status}`;
+        continue;
+      }
+      const j = (await r.json()) as { Answer?: { type: number; data: string }[] };
+      const ips = (j.Answer ?? [])
+        .filter((a) => a.type === 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(a.data))
+        .map((a) => a.data);
+      if (ips.length) return { host, ips };
+      last = 'no A record';
+    } catch (e) {
+      last = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return { host, ips: [], error: last };
 }
 
 const utf8 = new TextEncoder();
@@ -551,6 +643,7 @@ export async function sendTestMail(
   const site = str(opts.site) || 'SMTP';
   const maxAccounts = Math.max(1, Math.floor(opts.maxAccounts ?? 3));
   const attempts: MailAttempt[] = [];
+  let dns: DnsProbe | undefined;
 
   for (const [i, r] of rawPool.entries()) {
     if (attempts.length >= maxAccounts) break;
@@ -577,21 +670,17 @@ export async function sendTestMail(
       });
       continue;
     }
-    const trace: { stage: string } = { stage: 'connect' };
-    try {
-      await smtpSendOne(
+    // 解析证据只查一次（多账号通常同主机），且在实发之前取：解析异常时能立刻看出原因
+    if (!dns) dns = await probeDns(acct.host);
+    attempts.push(
+      ...(await attemptAccount(
         acct,
         to,
         t0('email.testSubject', { site }),
         t0('email.testBody', { account: labelOf(acct), host: acct.host, port: acct.port }),
-        { trace, sessionTimeout: 20_000 },
-      );
-      attempts.push({ account: labelOf(acct), ok: true });
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(acct), err })}`);
-      attempts.push({ account: labelOf(acct), ok: false, stage: trace.stage, error: err });
-    }
+        { sessionTimeout: 20_000 },
+      )),
+    );
   }
 
   const report: MailReport = {
@@ -600,6 +689,7 @@ export async function sendTestMail(
     at: Math.floor(Date.now() / 1000),
     test: true,
     attempts,
+    dns,
   };
   await recordMailReport(db, report);
   return report;

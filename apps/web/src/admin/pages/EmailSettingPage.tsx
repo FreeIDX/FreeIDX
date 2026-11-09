@@ -60,6 +60,14 @@ function ReportView({ report }: { report: MailReport }) {
   const t = useAdminT();
   /** 连接阶段失败（TCP Loop / 目标被拦截）与凭证无关，给出定向提示，避免管理员反复改密码 */
   const connectFailed = report.attempts.some((a) => !a.ok && a.stage === 'connect');
+  /** 运行时解析结果：判「DNS 被改写」还是「环境禁止出站」的关键证据 */
+  const dns = report.dns;
+  const dnsText = dns
+    ? t('admin_email_dns_probe', '运行时解析 {host} → {ips}', {
+        host: dns.host,
+        ips: dns.ips.length ? dns.ips.join(', ') : `✗ ${dns.error ?? ''}`,
+      })
+    : '';
   return (
     <div className="mt-2 rounded-[6px] border border-line px-3 py-2 text-sm">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -69,6 +77,7 @@ function ReportView({ report }: { report: MailReport }) {
         <span className="break-all font-mono text-xs text-ink-soft">{report.to}</span>
         <span className="text-xs text-muted-2">{new Date(report.at * 1000).toLocaleString()}</span>
       </div>
+      {dnsText && <p className="mt-1 break-all font-mono text-[11px] text-muted">{dnsText}</p>}
       {report.attempts.length > 0 && (
         <ul className="mt-2 space-y-1">
           {report.attempts.map((a, i) => (
