@@ -161,11 +161,11 @@ Generate a random value locally and paste one at a time:
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Without `SECRETS_MASTER_KEY`, saving an SMTP account **with a password** on the admin **Email settings** page fails with `SECRETS_MASTER_KEY not configured; cannot save passwords`. Once it has encrypted passwords, **do not replace it**: the old ciphertext can no longer be decrypted (every saved password breaks, sending returns 535) and all passwords must be re-entered. The value must be base64 of exactly 32 bytes (44 chars); hex or a short string fails the save with `SECRETS_MASTER_KEY must be a base64-encoded 32-byte key`.
+> Without `SECRETS_MASTER_KEY`, saving an SMTP account **with a password** on the admin **Email settings** page fails with `SECRETS_MASTER_KEY not configured; cannot save passwords`. The value may be **base64 of exactly 32 bytes (44 chars) or 64-char hex**; anything else (the command itself, quotes, a short string) fails with `SECRETS_MASTER_KEY must be a base64-encoded 32-byte key`. Once it has encrypted passwords, **do not replace it**: the old ciphertext can no longer be decrypted (every saved password breaks, sending returns 535) and all passwords must be re-entered. No Node.js on the machine? Generate it in the browser console (F12): `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 #### Step 5: Stay Up to Date
 

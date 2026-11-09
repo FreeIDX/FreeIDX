@@ -159,11 +159,11 @@ Générez une valeur aléatoire en local et collez-en une à la fois :
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Sans `SECRETS_MASTER_KEY`, enregistrer un compte SMTP **avec mot de passe** dans la page d’administration « Paramètres e-mail » échoue avec « SECRETS_MASTER_KEY non configuré ; impossible d’enregistrer les mots de passe ». Une fois qu’elle a chiffré des mots de passe, **ne la remplacez pas** : les anciens chiffrés deviennent indéchiffrables (tous les mots de passe enregistrés sont perdus, l’envoi renvoie 535) et il faut les ressaisir. La valeur doit être du base64 de 32 octets exactement (44 caractères) ; un hex ou une chaîne courte fait échouer l’enregistrement avec « SECRETS_MASTER_KEY doit être une clé de 32 octets encodée en base64 ».
+> Sans `SECRETS_MASTER_KEY`, enregistrer un compte SMTP **avec mot de passe** dans la page d’administration « Paramètres e-mail » échoue avec « SECRETS_MASTER_KEY non configuré ; impossible d’enregistrer les mots de passe ». La valeur peut être du **base64 de 32 octets exactement (44 caractères) ou 64 caractères hex** ; toute autre forme (la commande elle-même, des guillemets, une chaîne courte) échoue avec « SECRETS_MASTER_KEY doit être une clé de 32 octets encodée en base64 ». Une fois qu’elle a chiffré des mots de passe, **ne la remplacez pas** : les anciens chiffrés deviennent indéchiffrables (tous les mots de passe enregistrés sont perdus, l’envoi renvoie 535) et il faut les ressaisir. Pas de Node ? Générez-la dans la console du navigateur (F12) : `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 ### Méthode 2 : développement en local
 

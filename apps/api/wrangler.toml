@@ -49,10 +49,14 @@ SITE_URL = ""
 #     落 ext:email:config / ext:email:secret；README 旧文档中的 EMAIL_API_KEY 已废弃）
 #   wrangler secret put TURNSTILE_SECRET
 #   wrangler secret put SECRETS_MASTER_KEY  # 邮箱 SMTP 密码 / 插件私密字段 AES-GCM master key（§15.5）
-#   该值必须是 base64 编码的 32 字节（node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"），
-#   填 hex 会在保存密码时报「SECRETS_MASTER_KEY 需为 base64 编码的 32 字节密钥」；不配置则后台「邮箱设置」保存带密码的
-#   SMTP 账号会报「未配置 SECRETS_MASTER_KEY，无法保存密码」。首次加密密码后不要再更换（旧密文将无法解密、发信 535）。
-#   注意：这是 Worker 上的 Secret，写进 GitHub 仓库的 Actions Secrets 不会生效（deploy.yml 不透传）。
+#   值可为 base64 编码的 32 字节（node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"，44 字符），
+#   或 64 位 hex —— 两者是同一份熵，代码统一归一化后接受；其他形态（命令原文/带引号/短串）会报
+#   「SECRETS_MASTER_KEY 需为 base64 编码的 32 字节密钥」。没有 Node 时可在浏览器 F12 → Console 执行
+#   btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))) 生成。
+#   不配置则后台「邮箱设置」保存带密码的 SMTP 账号会报「未配置 SECRETS_MASTER_KEY，无法保存密码」；
+#   首次加密密码后不要再更换（旧密文将无法解密、发信 535）。
+#   注意：这是 Worker 上的 Secret，Dashboard → Workers → freeidx-api → Settings → Variables and secrets 也能加（无需本地
+#   CLI）；写进 GitHub 仓库的 Actions Secrets 不会生效（deploy.yml 不透传）。
 
 [observability]
 enabled = true

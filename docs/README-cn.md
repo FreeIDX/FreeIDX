@@ -159,11 +159,11 @@
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> 未配置 `SECRETS_MASTER_KEY` 时，后台「邮箱设置」保存**带密码**的 SMTP 账号会报「未配置 SECRETS_MASTER_KEY，无法保存密码」。该值一旦用于加密过密码就**不要再更换**：旧密文将无法解密（已存密码全部失效、发信 535），必须把所有密码重新填一遍。值必须是 base64 的 32 字节（44 字符），误填 hex／短串会在保存时直接报「SECRETS_MASTER_KEY 需为 base64 编码的 32 字节密钥」。
+> 未配置 `SECRETS_MASTER_KEY` 时，后台「邮箱设置」保存**带密码**的 SMTP 账号会报「未配置 SECRETS_MASTER_KEY，无法保存密码」。值填 **base64 的 32 字节（44 字符）或 64 位 hex** 均可，其他形态（命令原文、带引号、短串）会报「SECRETS_MASTER_KEY 需为 base64 编码的 32 字节密钥」。该值一旦加密过密码就**不要再更换**：旧密文将无法解密（已存密码全部失效、发信 535），必须把所有密码重新填一遍。本机没有 Node 时可在浏览器 F12 → Console 生成：`btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`。
 
 ### 方法 2：本地开发
 

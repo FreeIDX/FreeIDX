@@ -14,7 +14,7 @@ import { Hono, type Context } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtConfigAndSecret } from '../../core/ext-store';
-import { isMasterKeyValid } from '../../core/crypto';
+import { normalizeMasterKey } from '../../core/crypto';
 import { getEmailSettingState } from '../../core/email';
 import { isEmail } from '../../core/auth/validate';
 import type { ApiT } from '../../core/i18n';
@@ -68,11 +68,11 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
 
     // 既有密码按账号身份（host+user）对应：整池重写时行可删可增可重排，
     // 密码行「留空保持、填了覆盖」；身份变化（换了 SMTP 主机/登录名）必须重填。
-    const master = c.env.SECRETS_MASTER_KEY;
-    // 形态校验前移：密钥存在但不是「base64 的 32 字节」（常见于误填 hex/短串/带引号）时，
-    // 加密阶段抛的是裸 Error → 前端只看到「服务器错误」；这里直接给可操作的 400。
-    // 空池是文档化的「关闭发信」方式，不需要加解密，故不受此限制。
-    if (master && !isMasterKeyValid(master) && rawPool.length > 0) {
+    // 归一化后再用：44 字符 base64 与 64 位 hex（README 里 JWT_SECRET 那条命令的产物）都算合法，
+    // 它们代表同一把 32 字节密钥；其余形态（命令原文/带引号/短串）在非空池保存时给可操作的 400，
+    // 而不是让加密阶段抛裸 Error 变成 500「服务器错误」。空池=关闭发信，不需要加解密，不受限制。
+    const master = normalizeMasterKey(c.env.SECRETS_MASTER_KEY);
+    if (c.env.SECRETS_MASTER_KEY && !master && rawPool.length > 0) {
       throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
     }
     const [oldCfg, oldSec] = await Promise.all([
@@ -109,8 +109,8 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
     });
 
     // 池与密码单事务提交（两者按下标对齐，分两次写中间失败会留下错配）；
-    // 密钥形态非法时只有空池能走到这里（上面已拦），此时不碰加密、只落明文配置
-    if (master && isMasterKeyValid(master)) {
+    // 密钥缺失/形态非法时只有空池能走到这里（上面已拦），此时不碰加密、只落明文配置
+    if (master) {
       await saveExtConfigAndSecret(db, cache, 'email', { pool: rows }, { passes }, master);
     } else {
       await saveExtConfig(db, cache, 'email', { pool: rows });

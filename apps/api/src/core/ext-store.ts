@@ -3,7 +3,7 @@
  * 落 bbs_kv（与 'setting'/'extensions' 同库，启停/配置零部署）；config 走三层缓存，secret 绝不缓存明文。
  * ads 插件与后台扩展管理页共用本模块，核心不硬编码任何广告参数。
  */
-import { decryptSecret, encryptSecret } from './crypto';
+import { decryptSecret, encryptSecret, normalizeMasterKey } from './crypto';
 import { remember } from './cache';
 import type { Cache } from './cache';
 import type { D1b } from './db';
@@ -34,10 +34,12 @@ export function loadExtConfig(cache: Cache, db: D1b, id: string): Promise<Record
 
 /** 私密配置：master key 缺失或解密失败 → {}（安全失败，绝不回退明文、不缓存） */
 export async function loadExtSecret(db: D1b, id: string, masterKey?: string): Promise<Record<string, unknown>> {
-  if (!masterKey) return {};
+  // 先归一化：base64（44 字符）与 64 位 hex 视为同一把密钥（见 crypto.normalizeMasterKey）
+  const key = normalizeMasterKey(masterKey);
+  if (!key) return {};
   const token = await readKv(db, extSecretKey(id));
   if (!token) return {};
-  const plain = await decryptSecret(token, masterKey);
+  const plain = await decryptSecret(token, key);
   return plain ? parseObj(plain) : {};
 }
 
@@ -48,9 +50,11 @@ export async function saveExtConfig(db: D1b, cache: Cache, id: string, config: R
   await cache.del(key);
 }
 
-/** 加密写入私密配置（master key 必需，缺失即抛由调用侧转 400） */
+/** 加密写入私密配置（master key 必需，调用侧须先用 normalizeMasterKey 校验并转 400） */
 export async function saveExtSecret(db: D1b, id: string, secret: Record<string, unknown>, masterKey: string): Promise<void> {
-  const token = await encryptSecret(JSON.stringify(secret), masterKey);
+  const key = normalizeMasterKey(masterKey);
+  if (!key) throw new Error('SECRETS_MASTER_KEY missing or malformed');
+  const token = await encryptSecret(JSON.stringify(secret), key);
   await db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind(extSecretKey(id), token).run();
 }
 
@@ -67,7 +71,9 @@ export async function saveExtConfigAndSecret(
   secret: Record<string, unknown>,
   masterKey: string,
 ): Promise<void> {
-  const token = await encryptSecret(JSON.stringify(secret), masterKey);
+  const key = normalizeMasterKey(masterKey);
+  if (!key) throw new Error('SECRETS_MASTER_KEY missing or malformed');
+  const token = await encryptSecret(JSON.stringify(secret), key);
   await db.batch([
     db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind(extSecretKey(id), token),
     db.prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)').bind(extConfigKey(id), JSON.stringify(config)),

@@ -159,11 +159,11 @@ GitHub リポジトリの **Actions** ページで以下を行います：
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> `SECRETS_MASTER_KEY` が未設定の場合、管理画面の「メール設定」で**パスワード付き**の SMTP アカウントを保存すると「SECRETS_MASTER_KEY未設定のためパスワードを保存できません」で失敗します。一度パスワードの暗号化に使った値は**変更しないでください**：既存の暗号文は復号できなくなり（保存済みパスワードが無効化され、送信は 535）、すべてのパスワードを再入力する必要があります。値は base64 の 32 バイト（44 文字）である必要があり、hex や短い文字列を入れると保存時に「SECRETS_MASTER_KEY は base64 エンコードされた 32 バイトの鍵である必要があります」で失敗します。
+> `SECRETS_MASTER_KEY` が未設定の場合、管理画面の「メール設定」で**パスワード付き**の SMTP アカウントを保存すると「SECRETS_MASTER_KEY未設定のためパスワードを保存できません」で失敗します。値は **base64 の 32 バイト（44 文字）または 64 桁の hex** のいずれでも構いませんが、それ以外（コマンド文字列・引用符付き・短い文字列）は「SECRETS_MASTER_KEY は base64 エンコードされた 32 バイトの鍵である必要があります」で失敗します。一度パスワードの暗号化に使った値は**変更しないでください**：既存の暗号文は復号できなくなり（保存済みパスワードが無効化され、送信は 535）、すべてのパスワードを再入力する必要があります。Node がない環境ではブラウザの F12 → Console で生成できます：`btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`。
 
 ### 方法 2: ローカル開発
 

@@ -159,11 +159,11 @@ Lokal einen Zufallswert generieren und jeweils einen einfügen:
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Ohne `SECRETS_MASTER_KEY` schlägt das Speichern eines SMTP-Kontos **mit Passwort** in den Admin-**E-Mail-Einstellungen** mit „SECRETS_MASTER_KEY fehlt; Passwörter nicht speicherbar“ fehl. Nachdem der Schlüssel Passwörter verschlüsselt hat, **nicht mehr ersetzen**: alte Chiffrate sind dann nicht mehr entschlüsselbar (alle gespeicherten Passwörter ungültig, Versand liefert 535) und müssen neu eingegeben werden. Der Wert muss base64 mit genau 32 Byte sein (44 Zeichen); Hex oder eine kurze Zeichenkette lässt das Speichern mit „SECRETS_MASTER_KEY muss ein base64-kodierter 32-Byte-Schlüssel sein“ fehlschlagen.
+> Ohne `SECRETS_MASTER_KEY` schlägt das Speichern eines SMTP-Kontos **mit Passwort** in den Admin-**E-Mail-Einstellungen** mit „SECRETS_MASTER_KEY fehlt; Passwörter nicht speicherbar“ fehl. Der Wert darf **base64 mit genau 32 Byte (44 Zeichen) oder 64-stelliges Hex** sein; alles andere (der Befehl selbst, Anführungszeichen, eine kurze Zeichenkette) scheitert mit „SECRETS_MASTER_KEY muss ein base64-kodierter 32-Byte-Schlüssel sein“. Nachdem der Schlüssel Passwörter verschlüsselt hat, **nicht mehr ersetzen**: alte Chiffrate sind dann nicht mehr entschlüsselbar (alle gespeicherten Passwörter ungültig, Versand liefert 535) und müssen neu eingegeben werden. Kein Node? In der Browser-Konsole (F12) erzeugen: `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 ### Methode 2: Lokale Entwicklung
 

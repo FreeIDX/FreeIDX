@@ -159,11 +159,11 @@ Genera un valor aleatorio localmente y pega uno cada vez:
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Sin `SECRETS_MASTER_KEY`, guardar una cuenta SMTP **con contraseña** en la página de administración «Ajustes de correo» falla con «SECRETS_MASTER_KEY no configurado; no se pueden guardar contraseñas». Una vez que ha cifrado contraseñas, **no la cambies**: el cifrado antiguo deja de descifrarse (todas las contraseñas guardadas quedan inutilizables, el envío devuelve 535) y hay que volver a introducirlas. El valor debe ser base64 de exactamente 32 bytes (44 caracteres); un hex o una cadena corta hace fallar el guardado con «SECRETS_MASTER_KEY debe ser una clave de 32 bytes codificada en base64».
+> Sin `SECRETS_MASTER_KEY`, guardar una cuenta SMTP **con contraseña** en la página de administración «Ajustes de correo» falla con «SECRETS_MASTER_KEY no configurado; no se pueden guardar contraseñas». El valor puede ser **base64 de exactamente 32 bytes (44 caracteres) o 64 caracteres hex**; cualquier otra forma (la orden en sí, comillas, una cadena corta) falla con «SECRETS_MASTER_KEY debe ser una clave de 32 bytes codificada en base64». Una vez que ha cifrado contraseñas, **no la cambies**: el cifrado antiguo deja de descifrarse (todas las contraseñas guardadas quedan inutilizables, el envío devuelve 535) y hay que volver a introducirlas. ¿Sin Node? Genérala en la consola del navegador (F12): `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 ### Método 2: Desarrollo local
 

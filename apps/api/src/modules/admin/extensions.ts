@@ -11,7 +11,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import { ADMIN_CATALOG, extSchemaOf } from '../../core/extensions';
 import { loadExtensionsState } from '../../core/extensions/registry';
 import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtSecret, extSecretKey } from '../../core/ext-store';
-import { isMasterKeyValid } from '../../core/crypto';
+import { normalizeMasterKey } from '../../core/crypto';
 import type { ApiT } from '../../core/i18n';
 import { core, readJsonObject, type ReadEnv } from '../shared';
 
@@ -153,6 +153,19 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
     if (!mod) throw new AppError(Code.NOT_FOUND, t('common.extNotFound'));
     const body = await readJsonObject(c);
 
+    /**
+     * 私密项写入用的主密钥：缺失与形态非法分别对应两条文案；
+     * 44 字符 base64 与 64 位 hex 等价（见 crypto.normalizeMasterKey），其余形态一律可读 400，
+     * 不让加密阶段抛裸 Error 变成 500「服务器错误」。
+     */
+    const secretMasterKey = (): string => {
+      const raw = c.env.SECRETS_MASTER_KEY;
+      if (!raw) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissing'));
+      const key = normalizeMasterKey(raw);
+      if (!key) throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
+      return key;
+    };
+
     const patch: { installed?: 0 | 1; enable?: 0 | 1 } = {};
     const enable = asFlag(body.enable);
     const installed = asFlag(body.installed);
@@ -171,20 +184,14 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
     if (body.secret !== undefined) {
       const sec = body.secret;
       if (!sec || typeof sec !== 'object' || Array.isArray(sec)) throw new AppError(Code.VALIDATION_ERROR, t('admin.secretInvalid'));
-      const master = c.env.SECRETS_MASTER_KEY;
-      if (!master) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissing'));
-      // 形态不对（hex/短串/带引号）时加密会抛裸 Error → 500「服务器错误」，这里先转 400
-      if (!isMasterKeyValid(master)) throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
-      await saveExtSecret(db, id, sec as Record<string, unknown>, master);
+      await saveExtSecret(db, id, sec as Record<string, unknown>, secretMasterKey());
     }
 
     // 结构化表单用的增量合并：只改提交的键，值为 null 表示删除该键；未提交的键原样保留
     if (body.secretPatch !== undefined) {
       const patch = body.secretPatch;
       if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new AppError(Code.VALIDATION_ERROR, t('admin.secretPatchInvalid'));
-      const master = c.env.SECRETS_MASTER_KEY;
-      if (!master) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissing'));
-      if (!isMasterKeyValid(master)) throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
+      const master = secretMasterKey();
       const merged = await loadExtSecret(db, id, master);
       for (const [k, v] of Object.entries(patch)) {
         if (v === null) delete merged[k];

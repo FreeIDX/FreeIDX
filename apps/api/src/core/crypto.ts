@@ -36,6 +36,27 @@ export function isMasterKeyValid(masterB64?: string): boolean {
   }
 }
 
+const HEX64 = /^[0-9a-fA-F]{64}$/;
+
+/**
+ * 把运维实际填进来的值归一化成「base64 的 32 字节」，不认识则返回 null。
+ *
+ * 为什么要宽容 hex：README 里 JWT_SECRET 的生成命令是 `randomBytes(32).toString('hex')`，
+ * 紧挨着的 master key 命令才是 base64 —— 管理员照着第一条做（脚本/习惯）时贴进来的就是 64 位 hex。
+ * 同一份随机熵，两种写法都代表 32 字节密钥，这里统一接受，避免"配了却说格式不对"的反复；
+ * 其余形态（命令原文、带引号、短串）仍然拒绝，由调用侧报可读的 400。
+ */
+export function normalizeMasterKey(value?: string): string | null {
+  const v = (value ?? '').trim();
+  if (!v) return null;
+  if (HEX64.test(v)) {
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) bytes[i] = Number.parseInt(v.slice(i * 2, i * 2 + 2), 16);
+    return toB64(bytes.buffer as ArrayBuffer);
+  }
+  return isMasterKeyValid(v) ? v : null;
+}
+
 async function aesKey(masterB64: string): Promise<CryptoKey> {
   const raw = fromB64(masterB64);
   if (raw.length !== 32) throw new Error(t0('sec.masterKeyInvalid'));
