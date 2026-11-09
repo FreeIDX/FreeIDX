@@ -163,7 +163,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Sans `SECRETS_MASTER_KEY`, enregistrer un compte SMTP **avec mot de passe** dans la page d’administration « Paramètres e-mail » échoue avec « SECRETS_MASTER_KEY non configuré ; impossible d’enregistrer les mots de passe ». Une fois qu’elle a chiffré des mots de passe, **ne la remplacez pas** : les anciens chiffrés deviennent indéchiffrables (tous les mots de passe enregistrés sont perdus, l’envoi renvoie 535) et il faut les ressaisir.
+> Sans `SECRETS_MASTER_KEY`, enregistrer un compte SMTP **avec mot de passe** dans la page d’administration « Paramètres e-mail » échoue avec « SECRETS_MASTER_KEY non configuré ; impossible d’enregistrer les mots de passe ». Une fois qu’elle a chiffré des mots de passe, **ne la remplacez pas** : les anciens chiffrés deviennent indéchiffrables (tous les mots de passe enregistrés sont perdus, l’envoi renvoie 535) et il faut les ressaisir. La valeur doit être du base64 de 32 octets exactement (44 caractères) ; un hex ou une chaîne courte fait échouer l’enregistrement avec « SECRETS_MASTER_KEY doit être une clé de 32 octets encodée en base64 ».
 
 ### Méthode 2 : développement en local
 

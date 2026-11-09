@@ -165,7 +165,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Without `SECRETS_MASTER_KEY`, saving an SMTP account **with a password** on the admin **Email settings** page fails with `SECRETS_MASTER_KEY not configured; cannot save passwords`. Once it has encrypted passwords, **do not replace it**: the old ciphertext can no longer be decrypted (every saved password breaks, sending returns 535) and all passwords must be re-entered.
+> Without `SECRETS_MASTER_KEY`, saving an SMTP account **with a password** on the admin **Email settings** page fails with `SECRETS_MASTER_KEY not configured; cannot save passwords`. Once it has encrypted passwords, **do not replace it**: the old ciphertext can no longer be decrypted (every saved password breaks, sending returns 535) and all passwords must be re-entered. The value must be base64 of exactly 32 bytes (44 chars); hex or a short string fails the save with `SECRETS_MASTER_KEY must be a base64-encoded 32-byte key`.
 
 #### Step 5: Stay Up to Date
 

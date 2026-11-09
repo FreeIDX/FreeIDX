@@ -163,7 +163,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> `SECRETS_MASTER_KEY`가 없으면 관리자 **메일 설정**에서 **비밀번호가 있는** SMTP 계정을 저장할 때 「SECRETS_MASTER_KEY가 설정되지 않아 비밀번호를 저장할 수 없습니다」 오류가 납니다. 한 번 비밀번호를 암호화한 값은 **교체하지 마세요**: 기존 암호문을 복호화할 수 없어(저장된 비밀번호 전부 무효, 발송 535) 모든 비밀번호를 다시 입력해야 합니다.
+> `SECRETS_MASTER_KEY`가 없으면 관리자 **메일 설정**에서 **비밀번호가 있는** SMTP 계정을 저장할 때 「SECRETS_MASTER_KEY가 설정되지 않아 비밀번호를 저장할 수 없습니다」 오류가 납니다. 한 번 비밀번호를 암호화한 값은 **교체하지 마세요**: 기존 암호문을 복호화할 수 없어(저장된 비밀번호 전부 무효, 발송 535) 모든 비밀번호를 다시 입력해야 합니다. 값은 base64 32바이트(44자)여야 하며, hex나 짧은 문자열을 넣으면 저장 시 「SECRETS_MASTER_KEY는 base64로 인코딩된 32바이트 키여야 합니다」 오류가 납니다.
 
 ### 방법 2: 로컬 개발
 

@@ -163,7 +163,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> 未設定 `SECRETS_MASTER_KEY` 時，後台「信箱設定」儲存**含密碼**的 SMTP 帳號會回報「未設定 SECRETS_MASTER_KEY，無法儲存密碼」。此值一旦加密過密碼就**不要再更換**：舊密文將無法解密（已存密碼全部失效、寄信回 535），必須重新填寫所有密碼。
+> 未設定 `SECRETS_MASTER_KEY` 時，後台「信箱設定」儲存**含密碼**的 SMTP 帳號會回報「未設定 SECRETS_MASTER_KEY，無法儲存密碼」。此值一旦加密過密碼就**不要再更換**：舊密文將無法解密（已存密碼全部失效、寄信回 535），必須重新填寫所有密碼。值必須是 base64 的 32 位元組（44 字元），誤填 hex／短字串會在儲存時直接回報「SECRETS_MASTER_KEY 需為 base64 編碼的 32 位元組密鑰」。
 
 ### 方法 2：本機開發
 
