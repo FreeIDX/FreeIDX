@@ -1247,6 +1247,6 @@
   "mcp_token_created": "トークンを作成しました。すぐにコピーしてください",
   "mcp_scope_read_hint": "フォーラム・スレッド・返信の一覧/閲覧、検索",
   "mcp_scope_write_hint": "スレッド作成と返信（フォーラム審査は従来どおり）",
-  "mcp_scope_admin_hint": "モデレーション（ピン留め・閉鎖・削除など）"
+  "mcp_scope_admin_hint": "モデレーション（ピン留め・閉鎖・削除など）とフォーラム文案（概要・告知・SEO）の編集"
  }
 }

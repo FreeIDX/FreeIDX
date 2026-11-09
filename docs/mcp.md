@@ -75,6 +75,15 @@ Authorization: Bearer fi_mcp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 `/mcp` 在中间件层被豁免（无 Cookie，`loadViewer` 判不出身份），因此档位语义在 `auth.ts` 中复刻。**改动 `middleware/runlevel.ts` 或 `middleware/ban.ts` 时必须同步这两处**，否则会出现「网页拦住、AI 照样写」的绕过面。
 
+### 5.1 版块配置工具（`forum_get` / `forum_update`）的额外闸门
+
+这类工具改的是**站点配置**而非内容，因此在上述三层之外再加两道，任一不满足即不可见或返回 `isError`：
+
+4. **站点点开关** `forumWriteOn`（出厂关闭）：关闭时两个工具直接不进 `tools/list`；
+5. **持有者必须是管理员**：`admin` 档位由管理员发放，但拿令牌的人未必是管理员，因此请求期再校验令牌持有者 `gid=1`。
+
+`enabledScopes` 未含 `admin`、或站点处于只读档位（`runlevel`）时，同样不可见/不可调用 —— 与写工具共用同一套请求期裁剪。
+
 ## 6 工具清单
 
 ### 6.1 只读（scope=`read`）
@@ -97,6 +106,18 @@ Authorization: Bearer fi_mcp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | `reply_create` | 回帖 |
 
 写工具**照常贡献**到运行时，可见性由请求期「令牌档位 ∩ 站点 `enabledScopes` ∩ 站点写闸门」裁剪。默认配置 `enabledScopes=read`，因此出厂状态下客户端看不到任何写工具。
+
+### 6.3 版块配置（scope=`admin`，出厂关闭）
+
+| 工具 | 用途 |
+|---|---|
+| `forum_get` | 读取版块简介、公告、SEO 标题、SEO 关键词及其多语言映射 |
+| `forum_update` | 修改上述字段（merge 语义：只写显式传入的键；空串/空对象 = 清空，展示回退主字段） |
+
+- 需同时满足：站点开关 `forumWriteOn=1` + `enabledScopes` 含 `admin` + 令牌含 `admin` + 持有者 `gid=1`。
+- 多语言键只接受站点支持的语言（`AVAILABLE_LOCALES`），非法语言静默丢弃；文本归一化与后台表单同一实现（`normNameI18n` / `stringifyNameI18n`）。
+- 写后主动失效 `forumlist` 缓存，前台与 SEO 产物下一次请求即读到新文案（版块页预渲染 HTML 的 Cache API 副本仍按 1 小时 TTL 自然过期）。
+- 调用会落 `bbs_mcp_audit`（`scope != read` 的写类工具统一审计）。
 
 ## 7 资源模板
 
@@ -137,6 +158,7 @@ Authorization: Bearer fi_mcp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | `toolDenylist` | 文本（逗号分隔） | 空 | 命中即不向客户端展示的工具名（如 `search`） |
 | `rateLimitPerMin` | 文本 | `60` | 每令牌每分钟调用数，0=不限 |
 | `exposeResources` | 开关 | 开 | 是否允许客户端以 `freeidx://` 挂载内容 |
+| `forumWriteOn` | 开关 | 关 | 是否暴露 `forum_get` / `forum_update`（版块文案配置）；打开后仍需 `admin` 档位与管理员持有者 |
 
 出厂 `enable: 0`：未配置令牌前不暴露任何入口。
 
@@ -198,6 +220,7 @@ CORS 已放行 `Authorization`、`Mcp-Protocol-Version`、`MCP-Protocol-Version`
 | 客户端报「无法解析响应」 | 确认地址是 `/mcp`（不是 `/api/mcp`），且插件已启用；停用时返回 JSON-RPC 404 而非 HTML |
 | `401` | 令牌是否已吊销/过期；前缀是否为 `fi_mcp_` |
 | 看不到写工具 | 检查令牌 `scopes`、站点 `enabledScopes`（默认 `read`），以及 `toolDenylist` 是否含该工具 |
+| 看不到 `forum_update` | 站点开关 `forumWriteOn` 是否打开；`enabledScopes` 是否含 `admin`；令牌 `scopes` 是否含 `admin`；令牌持有者是否 `gid=1` |
 | 写操作用 `403` 拒绝 | 站点 `runlevel` 是否只读、账号是否被禁言/待审核 |
 | `429` | 命中 `rateLimitPerMin`；注意计数是 per-isolate 的，多节点各自计数 |
 | 工具列表里少了某个插件的能力 | 该插件是否启用；它的 `setup` 是否调用了 `contributeMcpTool` |

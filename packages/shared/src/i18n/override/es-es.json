@@ -1246,6 +1246,6 @@
   "mcp_token_created": "Token creado; cópielo ahora",
   "mcp_scope_read_hint": "Listar y leer foros, temas, respuestas y búsqueda",
   "mcp_scope_write_hint": "Crear temas y respuestas (la moderación del foro sigue aplicando)",
-  "mcp_scope_admin_hint": "Acciones de moderación como fijar, cerrar y eliminar"
+  "mcp_scope_admin_hint": "Acciones de moderación como fijar, cerrar y eliminar, y edición de textos del foro (descripción, anuncio, SEO)"
  }
 }

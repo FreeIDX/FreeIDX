@@ -1246,6 +1246,6 @@
   "mcp_token_created": "Token created — copy it now",
   "mcp_scope_read_hint": "List and read forums, threads, replies and search",
   "mcp_scope_write_hint": "Create threads and replies (forum moderation still applies)",
-  "mcp_scope_admin_hint": "Moderation actions such as pin, close and delete"
+  "mcp_scope_admin_hint": "Moderation actions such as pin, close and delete, plus forum text (brief, announcement, SEO) editing"
  }
 }

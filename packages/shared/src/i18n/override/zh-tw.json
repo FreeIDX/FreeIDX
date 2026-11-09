@@ -1246,6 +1246,6 @@
   "mcp_token_created": "權杖已建立，請立即複製",
   "mcp_scope_read_hint": "列出/閱讀版塊、主題、回覆、搜尋",
   "mcp_scope_write_hint": "發帖與回帖（版塊審核照常生效）",
-  "mcp_scope_admin_hint": "置頂/關閉/刪除等版務動作"
+  "mcp_scope_admin_hint": "置頂/關閉/刪除等版務動作，以及版塊文案（簡介/公告/SEO）設定"
  }
 }

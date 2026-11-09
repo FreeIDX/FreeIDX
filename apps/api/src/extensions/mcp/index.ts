@@ -37,6 +37,7 @@ import {
 import { MCP_PROTOCOL_VERSION, RPC_ERROR, rpcError } from './protocol';
 import { dispatchBatch, parseConfig, type DispatchDeps, type McpConfig } from './server';
 import { CORE_MCP_RESOURCES, CORE_MCP_TOOLS } from './tools';
+import { MCP_FORUM_TOOL_NAMES, MCP_FORUM_TOOLS } from './forum';
 import { MCP_WRITE_TOOLS } from './write';
 import { ipToLong } from '../../core/auth/session';
 import type { ApiT } from '../../core/i18n';
@@ -88,6 +89,37 @@ const MCP_SCHEMA: ExtSchema = {
         '쉼표 구분: read=읽기 전용, write=쓰기 허용, admin=관리 허용. 쓰기 도구는 토큰 범위도 충족해야 하며 기본값은 read만.',
         'Separado por comas: read = solo lectura, write = permitir escritura, admin = permitir moderación. Las herramientas de escritura también requieren el token; por defecto solo read.',
         'Séparés par des virgules : read = lecture seule, write = écriture autorisée, admin = modération autorisée. Les outils d’écriture exigent aussi le niveau du jeton ; read seul par défaut.',
+      ),
+    },
+    {
+      key: 'forumWriteOn',
+      type: 'switch',
+      label: L(
+        '允许修改版块文案',
+        '允許修改版塊文案',
+        'Allow forum text editing',
+        'Разрешить правку текстов разделов',
+        'อนุญาตแก้ไขข้อความบอร์ด',
+        'Forumtexte bearbeiten erlauben',
+        'フォーラム文案の編集を許可',
+        '게시판 문구 수정 허용',
+        'Permitir editar textos del foro',
+        'Autoriser la modification des textes du forum',
+      ),
+      onValue: 1,
+      offValue: 0,
+      defaultOn: false,
+      help: L(
+        '打开后，具备 admin 档位的管理员令牌可调用 forum_get / forum_update 读写版块简介、公告、SEO 标题与关键词（含多语言）。需同时把「开放档位」设为含 admin；默认关闭。',
+        '開啟後，具備 admin 檔位的管理員權杖可呼叫 forum_get / forum_update 讀寫版塊簡介、公告、SEO 標題與關鍵詞（含多語言）。需同時把「開放檔位」設為含 admin；預設關閉。',
+        'When on, an administrator token with the admin scope may call forum_get / forum_update to read and edit forum brief, announcement, SEO title and keywords (including translations). "Enabled scopes" must also include admin; off by default.',
+        'Если включено, токен администратора с уровнем admin может вызывать forum_get / forum_update для чтения и правки описания, объявления, SEO-заголовка и ключевых слов раздела (включая переводы). В «Разрешённых уровнях» должен быть admin; по умолчанию выключено.',
+        'เมื่อเปิด โทเคนผู้ดูแลที่มีระดับ admin จะเรียก forum_get / forum_update เพื่ออ่านและแก้ไขคำอธิบาย ประกาศ SEO title และ keywords ของบอร์ด (รวมหลายภาษา) ได้ ต้องตั้ง "ระดับที่เปิด" ให้มี admin ด้วย ค่าเริ่มต้นปิด',
+        'Wenn aktiv, darf ein Admin-Token mit Stufe admin forum_get / forum_update aufrufen, um Kurzbeschreibung, Ankündigung, SEO-Titel und Keywords (inkl. Übersetzungen) zu lesen und zu ändern. „Freigegebene Stufen“ muss admin enthalten; standardmäßig aus.',
+        'オンの場合、admin レベルの管理者トークンが forum_get / forum_update でフォーラムの概要・告知・SEO タイトル・キーワード（多言語含む）を読み書きできます。「公開レベル」にも admin が必要です。既定はオフ。',
+        '켜면 admin 범위의 관리자 토큰이 forum_get / forum_update로 게시판 설명, 공지, SEO 제목, 키워드(다국어 포함)를 읽고 수정할 수 있습니다. "허용 범위"에도 admin이 있어야 하며 기본값은 꺼짐입니다.',
+        'Si está activo, un token de administrador con nivel admin puede llamar a forum_get / forum_update para leer y editar la descripción, el anuncio, el título SEO y las palabras clave del foro (incluidas traducciones). «Niveles habilitados» debe incluir admin; desactivado por defecto.',
+        'Si activé, un jeton administrateur de niveau admin peut appeler forum_get / forum_update pour lire et modifier la description, l’annonce, le titre SEO et les mots-clés d’un forum (traductions incluses). « Niveaux autorisés » doit inclure admin ; désactivé par défaut.',
       ),
     },
     {
@@ -203,6 +235,8 @@ export const mcpPlugin: ExtensionModule = {
     for (const tool of CORE_MCP_TOOLS) api.contributeMcpTool(tool);
     // 写工具照常贡献：可见性由「令牌档位 ∩ 站点 enabledScopes ∩ 站点写闸门」在请求期裁剪
     for (const tool of MCP_WRITE_TOOLS) api.contributeMcpTool(tool);
+    // 版块文案配置（admin）：另受站点点开关 forumWriteOn 控制，关闭时请求期整组摘除
+    for (const tool of MCP_FORUM_TOOLS) api.contributeMcpTool(tool);
     for (const res of CORE_MCP_RESOURCES) api.contributeMcpResource(res);
     api.registerRoute('POST', '/mcp', makeHandler(config));
 
@@ -260,6 +294,8 @@ function makeHandler(bootConfig: McpConfig) {
     // ⑤ 工具表：请求期读已装配好的运行时（此时所有启用插件的 setup 都已完成，顺序无关）
     const rt = await getExtensions(cache, db, c.env);
     const clientIp = c.req.header('cf-connecting-ip') ?? '';
+    // 版块文案工具受站点点开关控制：关闭时整组摘除（tools/list 与 tools/call 同源，模型不会误选）
+    const tools = cfg.forumWriteOn ? rt.mcpTools : rt.mcpTools.filter((t) => !MCP_FORUM_TOOL_NAMES.includes(t.name));
     const deps: DispatchDeps = {
       db,
       cache,
@@ -267,7 +303,7 @@ function makeHandler(bootConfig: McpConfig) {
       lang: String(setting.lang ?? 'zh-cn'),
       actor,
       config: { ...cfg, enabledScopes: writeDeny ? 'read' : cfg.enabledScopes },
-      tools: rt.mcpTools,
+      tools,
       resources: rt.mcpResources,
       ipHash: await ipFingerprint(clientIp),
       // 写工具要把 IP 落到 userip 等风控列，口径与 HTTP 端 ipLongOf(c) 完全一致

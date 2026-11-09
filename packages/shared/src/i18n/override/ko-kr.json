@@ -1246,6 +1246,6 @@
   "mcp_token_created": "토큰이 생성되었습니다. 지금 복사하세요",
   "mcp_scope_read_hint": "게시판·스레드·답글 목록/읽기, 검색",
   "mcp_scope_write_hint": "스레드 작성 및 답글 (게시판 심사는 그대로 적용)",
-  "mcp_scope_admin_hint": "관리 동작(고정, 닫기, 삭제 등)"
+  "mcp_scope_admin_hint": "관리 동작(고정, 닫기, 삭제 등) 및 게시판 문구(설명·공지·SEO) 수정"
  }
 }

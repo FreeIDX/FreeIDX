@@ -1246,6 +1246,6 @@
   "mcp_token_created": "Jeton créé — copiez-le maintenant",
   "mcp_scope_read_hint": "Lister et lire forums, sujets, réponses et recherche",
   "mcp_scope_write_hint": "Créer des sujets et réponses (la modération du forum s’applique)",
-  "mcp_scope_admin_hint": "Actions de modération : épingler, fermer, supprimer"
+  "mcp_scope_admin_hint": "Actions de modération (épingler, fermer, supprimer) et modification des textes du forum (description, annonce, SEO)"
  }
 }

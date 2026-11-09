@@ -1246,6 +1246,6 @@
   "mcp_token_created": "Token erstellt – jetzt kopieren",
   "mcp_scope_read_hint": "Foren, Themen, Antworten auflisten und lesen, Suche",
   "mcp_scope_write_hint": "Themen und Antworten erstellen (Foren-Moderation gilt weiter)",
-  "mcp_scope_admin_hint": "Moderation: anpinnen, schließen, löschen"
+  "mcp_scope_admin_hint": "Moderation: anpinnen, schließen, löschen – sowie Forumtexte (Kurzbeschreibung, Ankündigung, SEO) bearbeiten"
  }
 }

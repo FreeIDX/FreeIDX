@@ -1246,6 +1246,6 @@
   "mcp_token_created": "令牌已创建，请立即复制",
   "mcp_scope_read_hint": "列出/阅读版块、主题、回复、搜索",
   "mcp_scope_write_hint": "发帖与回帖（版块审核照常生效）",
-  "mcp_scope_admin_hint": "置顶/关闭/删除等版务动作"
+  "mcp_scope_admin_hint": "置顶/关闭/删除等版务动作，以及版块文案（简介/公告/SEO）配置"
  }
 }

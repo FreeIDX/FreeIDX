@@ -45,6 +45,12 @@ export interface McpConfig {
   /** 每令牌每分钟工具调用上限（0 = 不限） */
   rateLimitPerMin: number;
   exposeResources: boolean;
+  /**
+   * 版块文案配置工具总开关（forum_get / forum_update）。
+   * 出厂关闭：关闭时两个工具直接不进 tools/list，模型不会误选；
+   * 打开后仍需令牌 admin 档位 + 站点 enabledScopes 含 admin + 持有者 gid=1。
+   */
+  forumWriteOn: boolean;
 }
 
 export function parseConfig(raw: Record<string, unknown>): McpConfig {
@@ -63,6 +69,8 @@ export function parseConfig(raw: Record<string, unknown>): McpConfig {
     toolDenylist: denylist,
     rateLimitPerMin: Number.isFinite(perMin) && perMin >= 0 ? Math.trunc(perMin) : 60,
     exposeResources: raw.exposeResources === true || raw.exposeResources === 1 || raw.exposeResources === '1',
+    // 缺省关闭（安全默认值）：后台开关未显式打开时，版块文案工具一律不暴露
+    forumWriteOn: raw.forumWriteOn === true || raw.forumWriteOn === 1 || raw.forumWriteOn === '1',
   };
 }
 
