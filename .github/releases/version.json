@@ -1,5 +1,18 @@
 [
   {
+    "tagName": "v2.1.0",
+    "name": "FreeIDX v2.1.0",
+    "htmlUrl": "https://github.com/FreeIDX/FreeIDX/releases/tag/v2.1.0",
+    "changelogPath": ".github/releases/changelog/v2.1.0.md",
+    "publishedAt": "2026-11-09T10:46:25+08:00",
+    "createdAt": "2026-11-09T10:46:25+08:00",
+    "updatedAt": "2026-11-09T10:46:25+08:00",
+    "targetCommitish": "66ecc1c4814ddceffe7924b516c8a7643192754c",
+    "authorLogin": "FreeIDX",
+    "draft": false,
+    "prerelease": false
+  },
+  {
     "tagName": "v2.0.0",
     "name": "FreeIDX v2.0.0",
     "htmlUrl": "https://github.com/FreeIDX/FreeIDX/releases/tag/v2.0.0",
