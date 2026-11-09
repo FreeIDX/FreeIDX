@@ -76,7 +76,7 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
     if (rawMaster && !master && rawPool.length > 0) {
       // 附上形态摘要（长度/解码字节数/是否含非 ASCII，不含内容），管理员据此就能判断是贴错还是粘脏了
       const shape = masterKeyShape(rawMaster);
-      console.warn(`[secrets] SECRETS_MASTER_KEY 形态非法（${shape}），保存邮箱密码被拒`);
+      console.warn(`[secrets] SECRETS_MASTER_KEY malformed (${shape}); refusing to save mailbox passwords`);
       throw new AppError(Code.VALIDATION_ERROR, `${t('sec.masterKeyInvalid')}（${shape}）`);
     }
     const [oldCfg, oldSec] = await Promise.all([

@@ -164,7 +164,7 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
       const key = normalizeMasterKey(raw);
       if (!key) {
         const shape = masterKeyShape(raw);
-        console.warn(`[secrets] SECRETS_MASTER_KEY 形态非法（${shape}），保存插件私钥被拒`);
+        console.warn(`[secrets] SECRETS_MASTER_KEY malformed (${shape}); refusing to save extension secrets`);
         throw new AppError(Code.VALIDATION_ERROR, `${t('sec.masterKeyInvalid')}（${shape}）`);
       }
       return key;
