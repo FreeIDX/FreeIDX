@@ -14,6 +14,9 @@
  *    （AES-GCM 按下标对应，永不回显）；后台「邮箱设置」整池提交（池与密码单事务），零部署生效。
  *  - 发送由 auth 路由经 waitUntil 旁路调用（绝不请求内阻塞发信，§D.6）；降级：池为空返回 null，
  *    等价 user_create_email_on=0（bootstrap 以 `setting.mailOn` 把该降级同步给前端）。
+ *  - **HTTP 邮件 API 兜底**：若 Worker 出站环境把到 SMTP 的 TCP 判为「TCP Loop」（DNS 正常、
+ *    465/587 均在 connect 阶段被拒），配置 HTTP 通道（resend/sendgrid/brevo/custom）即可改走 443 HTTPS，
+ *    见 core/email-http.ts；配置了 HTTP 通道时优先级高于 SMTP 池。
  *  - 可观测性：正式发信（验证码/找回密码）与后台测试信都把「逐账号尝试结果」写 kv `ext:email:last`，
  *    后台「邮箱设置」页回显最近一次结果；POST /api/admin/email-setting/test 同步实发一封并回 SMTP 原文。
  *    旁路发信失败对用户不可见（前端一律「已发送」），没有这条链路就无从判断是凭证、端口还是反垃圾。
@@ -22,6 +25,7 @@ import type { Env } from '../types/env';
 import type { Cache } from './cache';
 import type { D1b } from './db';
 import { loadExtConfig, loadExtSecret } from './ext-store';
+import { HTTP_PROVIDERS, sendViaHttp, type HttpMailConfig, type HttpProvider } from './email-http';
 import { t0 } from './i18n';
 import { connect } from 'cloudflare:sockets';
 
@@ -52,6 +56,17 @@ interface SmtpAccountView {
 interface SmtpAccount extends SmtpAccountView {
   pass: string;
 }
+
+/** 后台「HTTP 邮件 API」回显行（Key 永不回显，只回 hasKey） */
+export interface HttpMailView {
+  /** '' = 未启用（仅走 SMTP 池） */
+  provider: HttpProvider | '';
+  from: string;
+  /** provider=custom 时的接口地址 */
+  url: string;
+  hasKey: boolean;
+}
+
 
 /**
  * 单账号一次投递尝试的诊断结果。
@@ -156,7 +171,7 @@ export async function getEmailSettingState(
   env: Env,
   db: D1b,
   cache: Cache,
-): Promise<{ pool: SmtpAccountView[]; last: MailReport | null }> {
+): Promise<{ pool: SmtpAccountView[]; http: HttpMailView; last: MailReport | null }> {
   const [cfg, sec] = await Promise.all([
     loadExtConfig(cache, db, EMAIL_EXT_ID),
     loadExtSecret(db, EMAIL_EXT_ID, env),
@@ -171,13 +186,69 @@ export async function getEmailSettingState(
     dailyLimit: Math.max(0, Math.floor(Number(r?.dailyLimit ?? 0)) || 0),
     hasPass: str(passes[i]) !== '',
   }));
+  const raw = (cfg.http ?? {}) as Record<string, unknown>;
+  const provider = str(raw.provider);
+  const http: HttpMailView = {
+    provider: (HTTP_PROVIDERS as readonly string[]).includes(provider) ? (provider as HttpProvider) : '',
+    from: str(raw.from),
+    url: str(raw.url),
+    hasKey: str(sec.httpKey) !== '',
+  };
   // 最近一次发信结果一并回显：注册验证码走 waitUntil 旁路，失败不会反馈给用户，
   // 后台若不展示这一行，管理员只能靠「用户说没收到」猜。
-  return { pool, last: await readMailReport(db) };
+  return { pool, http, last: await readMailReport(db) };
 }
 
-/** 池为空 → null（调用方按 §11.3 降级，而非报错） */
+/**
+ * 读取 HTTP 邮件 API 配置（可用才返回；缺 Key/发件人/custom 缺地址即视为未启用）。
+ * HTTP 通道优先于 SMTP 池：它是 SMTP 出站被环境拦截时的兜底，配置了就是明确要用。
+ */
+async function readHttpMail(
+  env: Env,
+  db: D1b,
+  cache: Cache,
+): Promise<{ cfg: HttpMailConfig; key: string } | null> {
+  const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
+  const raw = (cfg.http ?? {}) as Record<string, unknown>;
+  const provider = str(raw.provider);
+  const from = str(raw.from);
+  const url = str(raw.url);
+  const key = str(sec.httpKey);
+  if (!(HTTP_PROVIDERS as readonly string[]).includes(provider) || !from || !key) return null;
+  if (provider === 'custom' && !url) return null;
+  return { cfg: { provider: provider as HttpProvider, from, url }, key };
+}
+
+/** HTTP 邮件 API 通道：一次 POST 即一封（无连接复用，无需轮询与额度计数） */
+class HttpMailProvider implements EmailProvider {
+  readonly name = 'http-api';
+
+  constructor(
+    private readonly db: D1b,
+    private readonly cfg: HttpMailConfig,
+    private readonly key: string,
+  ) {}
+
+  async send(to: string, subject: string, text: string): Promise<boolean> {
+    const account = `http:${this.cfg.provider}`;
+    const at = Math.floor(Date.now() / 1000);
+    try {
+      await sendViaHttp(this.cfg, this.key, to, subject, text);
+      await recordMailReport(this.db, { ok: true, to, at, test: false, attempts: [{ account, ok: true }] });
+      return true;
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.error(`[email] ${t0('email.acctSendFailed', { account, err })}`);
+      await recordMailReport(this.db, { ok: false, to, at, test: false, attempts: [{ account, ok: false, stage: 'http', error: err }] });
+      return false;
+    }
+  }
+}
+
+/** 无可用通道 → null（调用方按 §11.3 降级，而非报错）；HTTP 通道优先 */
 export async function getEmailProvider(env: Env, db: D1b, cache: Cache): Promise<EmailProvider | null> {
+  const http = await readHttpMail(env, db, cache);
+  if (http) return new HttpMailProvider(db, http.cfg, http.key);
   const pool = await readPool(env, db, cache);
   return pool.length ? new SmtpPoolProvider(db, pool) : null;
 }
@@ -644,6 +715,33 @@ export async function sendTestMail(
   const maxAccounts = Math.max(1, Math.floor(opts.maxAccounts ?? 3));
   const attempts: MailAttempt[] = [];
   let dns: DnsProbe | undefined;
+
+  /**
+   * HTTP 通道优先（与 getEmailProvider 的优先级一致）：配置了就只测它。
+   * 这里不探 DNS、不试端口——它走的是 443 HTTPS，出站 TCP 的限制对它无意义。
+   */
+  const http = await readHttpMail(env, db, cache);
+  if (http) {
+    const account = `http:${http.cfg.provider}`;
+    const at = Math.floor(Date.now() / 1000);
+    try {
+      await sendViaHttp(
+        http.cfg,
+        http.key,
+        to,
+        t0('email.testSubject', { site }),
+        t0('email.testBody', { account, host: http.cfg.provider, port: 443 }),
+      );
+      attempts.push({ account, ok: true });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.error(`[email] ${t0('email.acctSendFailed', { account, err })}`);
+      attempts.push({ account, ok: false, stage: 'http', error: err });
+    }
+    const report: MailReport = { ok: attempts.some((a) => a.ok), to, at, test: true, attempts };
+    await recordMailReport(db, report);
+    return report;
+  }
 
   for (const [i, r] of rawPool.entries()) {
     if (attempts.length >= maxAccounts) break;

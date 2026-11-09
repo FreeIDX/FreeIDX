@@ -15,12 +15,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEmailSetting, putEmailSetting, testEmailSetting } from '../api';
-import type { EmailSettingView, MailReport, SmtpAccountInput } from '../types';
+import type { EmailSettingView, HttpMailProvider, MailReport, SmtpAccountInput } from '../types';
 import { apiErrorMessage } from '../../lib/errors';
 import { useAdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { SETTING_TABS } from '../tabs';
-import { Alert, Button, Card, ErrorState, Input, PageTitle, SubmitRow, TabBar } from '../ui';
+import { Alert, Button, Card, ErrorState, Input, PageTitle, Select, SubmitRow, TabBar } from '../ui';
 
 interface PoolRow {
   from: string;
@@ -49,6 +49,23 @@ const rowsOf = (v: EmailSettingView): PoolRow[] =>
     : [emptyRow()];
 
 const th = 'px-2 py-2 text-left font-medium text-muted';
+
+/** HTTP 邮件 API 表单行（Key 永不下发，只留 hasKey 决定占位文案） */
+interface HttpRow {
+  provider: HttpMailProvider;
+  from: string;
+  url: string;
+  key: string;
+  hasKey: boolean;
+}
+
+const httpOf = (v: EmailSettingView): HttpRow => ({
+  provider: v.http?.provider ?? '',
+  from: v.http?.from ?? '',
+  url: v.http?.url ?? '',
+  key: '',
+  hasKey: Boolean(v.http?.hasKey),
+});
 
 /**
  * 一份发信报告：收件人 + 结果 + 逐账号尝试明细（失败时带阶段与 SMTP 原文）。
@@ -106,6 +123,7 @@ export function EmailSettingPage() {
   const t = useAdminT();
   const q = useQuery({ queryKey: ['admin', 'email-setting'], queryFn: getEmailSetting });
   const [rows, setRows] = useState<PoolRow[]>([emptyRow()]);
+  const [http, setHttp] = useState<HttpRow>({ provider: '', from: '', url: '', key: '', hasKey: false });
   const loaded = q.data;
   /**
    * 仅首次装载灌入表单：任何来源的重取（invalidate，以及全局 refetchOnWindowFocus 若恢复开启）都会拿到新 q.data，
@@ -116,6 +134,7 @@ export function EmailSettingPage() {
     if (initedRef.current || !loaded) return;
     initedRef.current = true;
     setRows(rowsOf(loaded));
+    setHttp(httpOf(loaded));
   }, [loaded]);
 
   const save = useAdminAction(
@@ -132,13 +151,22 @@ export function EmailSettingPage() {
           dailyLimit: Math.floor(Number(r.limit)) || 0,
           pass: r.pass.trim() || undefined,
         }));
-      return putEmailSetting(pool);
+      return putEmailSetting(pool, {
+        provider: http.provider,
+        from: http.from.trim(),
+        url: http.url.trim(),
+        // 留空 = 保持原 Key（服务端按「填了覆盖、空着不动」处理，与密码同口径）
+        key: http.key.trim() || undefined,
+      });
     },
     {
       ok: t('admin_email_save_ok', '保存成功，发信配置即时生效'),
       invalidate: [['admin', 'email-setting']],
-      // 用回包重置表单：清掉已验证保存的明文密码、把 hasPass 刷成最新（否则占位仍显示「授权码/密码」）
-      onData: (d) => setRows(rowsOf(d)),
+      // 用回包重置表单：清掉已验证保存的明文密码/Key、把 hasPass/hasKey 刷成最新
+      onData: (d) => {
+        setRows(rowsOf(d));
+        setHttp(httpOf(d));
+      },
     },
   );
 
@@ -303,15 +331,74 @@ export function EmailSettingPage() {
         >
           [+]{t('add_line', '增加一行')}
         </button>
-
-        <SubmitRow>
-          <Button block loading={save.pending} onClick={() => save.mutate()}>
-            {t('confirm', '确定')}
-          </Button>
-        </SubmitRow>
       </Card>
+
+      {/* HTTP 邮件 API：SMTP 出站被 Cloudflare 判定 TCP Loop 时的唯一可用通道（443 HTTPS） */}
+      <Card title={t('admin_email_http_title', 'HTTP 邮件 API（SMTP 出站被拦截时使用）')} bodyClass="space-y-2">
+        <p className="text-xs leading-relaxed text-muted-2">
+          {t(
+            'admin_email_http_help',
+            '若 SMTP 测试停在「connect / TCP Loop」阶段，说明该 Worker 环境禁止这条出站 TCP，换 SMTP 服务商同样失败；此时改用服务商的 HTTPS 接口即可发信。启用后优先走本通道，SMTP 池仅作备用。',
+          )}
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">{t('admin_email_http_provider', '服务商')}</span>
+            <Select
+              value={http.provider}
+              onChange={(e) => setHttp((h) => ({ ...h, provider: e.target.value as HttpMailProvider }))}
+            >
+              <option value="">{t('admin_email_http_none', '不使用（仅 SMTP）')}</option>
+              <option value="resend">Resend</option>
+              <option value="sendgrid">SendGrid</option>
+              <option value="brevo">Brevo</option>
+              <option value="custom">{t('admin_email_http_custom', '自定义接口')}</option>
+            </Select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-muted">{t('admin_email_http_from', '发件地址（需在服务商处已验证）')}</span>
+            <Input
+              type="email"
+              value={http.from}
+              placeholder="no-reply@example.com"
+              disabled={http.provider === ''}
+              onChange={(e) => setHttp((h) => ({ ...h, from: e.target.value }))}
+            />
+          </label>
+          {http.provider === 'custom' && (
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-sm text-muted">{t('admin_email_http_url', '接口地址（https）')}</span>
+              <Input
+                value={http.url}
+                placeholder="https://mail.example.com/send"
+                autoComplete="off"
+                onChange={(e) => setHttp((h) => ({ ...h, url: e.target.value }))}
+              />
+            </label>
+          )}
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-sm text-muted">{t('admin_email_http_key', 'API Key')}</span>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              spellCheck={false}
+              value={http.key}
+              disabled={http.provider === ''}
+              placeholder={http.hasKey ? t('admin_email_pass_configured', '已配置——留空保持不变') : 'API Key'}
+              onChange={(e) => setHttp((h) => ({ ...h, key: e.target.value }))}
+            />
+          </label>
+        </div>
+      </Card>
+
+      {/* 两块配置一次提交：PUT 是整池 + 通道整体重写，分开保存会互相覆盖 */}
+      <SubmitRow indentClass="">
+        <Button block loading={save.pending} onClick={() => save.mutate()}>
+          {t('confirm', '确定')}
+        </Button>
+      </SubmitRow>
       <p className="text-xs text-muted-2">
-        {t('admin_email_note', '注：密码仅加密存储、永不回显。QQ/163 等个人邮箱需在邮箱设置里开启 SMTP 并使用「授权码」作为密码；发件地址须与登录账号一致（多数服务商强制校验）。')}
+        {t('admin_email_note', '注：密码与 API Key 仅加密存储、永不回显。QQ/163 等个人邮箱需在邮箱设置里开启 SMTP 并使用「授权码」作为密码；发件地址须与登录账号一致（多数服务商强制校验）。')}
       </p>
     </div>
   );

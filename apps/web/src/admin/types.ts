@@ -531,8 +531,30 @@ export interface MailReport {
   dns?: DnsProbe;
 }
 
+/** HTTP 邮件 API 服务商（与后端 HTTP_PROVIDERS 对齐；'' = 未启用） */
+export type HttpMailProvider = '' | 'resend' | 'sendgrid' | 'brevo' | 'custom';
+
+/** GET 回显：Key 永不回显，只回 hasKey */
+export interface HttpMailSetting {
+  provider: HttpMailProvider;
+  from: string;
+  /** provider=custom 时的接口地址 */
+  url: string;
+  hasKey: boolean;
+}
+
+/** PUT 提交：key 留空即保持原值 */
+export interface HttpMailInput {
+  provider: HttpMailProvider;
+  from: string;
+  url: string;
+  key?: string;
+}
+
 export interface EmailSettingView {
   pool: SmtpAccountView[];
+  /** HTTP 邮件 API 通道（SMTP 出站被环境拦截时的兜底） */
+  http: HttpMailSetting;
   /** 最近一次发信结果（无记录为 null） */
   last: MailReport | null;
 }

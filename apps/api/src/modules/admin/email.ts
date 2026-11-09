@@ -1,21 +1,25 @@
 /**
- * 邮箱设置后台接口：SMTP 账号池（§11.3，§19 决策 4）。
+ * 邮箱设置后台接口：SMTP 账号池 + HTTP 邮件 API 通道（§11.3，§19 决策 4）。
  * 整池提交落 kv：
- *   - `ext:email:config{pool:[{from,host,port,user,dailyLimit}]}`（明文，走三层缓存）
- *   - `ext:email:secret{passes:[]}`（AES-GCM 按池下标对应，永不回显）
- *   GET  /api/admin/email-setting        池回显（hasPass 标记，密码不出库）+ 最近一次发信结果
- *   PUT  /api/admin/email-setting        整池提交
- *   POST /api/admin/email-setting/test   实发一封测试邮件（同步返回逐账号失败原因）
+ *   - `ext:email:config{pool:[{from,host,port,user,dailyLimit}], http:{provider,from,url}}`（明文，走三层缓存）
+ *   - `ext:email:secret{passes:[], httpKey}`（AES-GCM，按池下标对应，永不回显）
+ *   GET  /api/admin/email-setting        池回显（hasPass 标记，密码不出库）+ HTTP 通道 + 最近一次发信结果
+ *   PUT  /api/admin/email-setting        整池 + 通道提交
+ *   POST /api/admin/email-setting/test   实发一封测试邮件（同步返回逐账号/通道的失败原因）
  * 挂载于 adminGuard 之后（app.use('/api/admin/*') 已先注册）。
  *
  * 密码「留空保持」按账号身份（host+user）而不是下标匹配：后台删掉中间一行或调整顺序后，
  * 按下标会让 A 账号的授权码被写到 B 账号上（保存看似成功、发信全部 535），且无从排查。
+ *
+ * HTTP 通道存在的理由：部分 Worker 出站环境把到 SMTP 的 TCP 连接判为「TCP Loop」直接拒绝
+ * （DNS 正常、465/587 全败，与授权码无关），此时只有 443 的 HTTPS API 能发信。
  */
 import { Hono, type Context } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { hasSecretsKey, loadExtConfig, loadExtSecret, saveExtConfig, saveExtConfigAndSecret } from '../../core/ext-store';
 import { getEmailSettingState, sendTestMail } from '../../core/email';
+import { HTTP_PROVIDERS, type HttpProvider } from '../../core/email-http';
 import { isEmail } from '../../core/auth/validate';
 import { loadSetting } from '../../core/loaders';
 import type { ApiT } from '../../core/i18n';
@@ -50,6 +54,27 @@ function validateRow(raw: unknown, idx: number, t: ApiT): {
   if (!user) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailRowUser', { row: idx + 1 }));
   if (!(dailyLimit >= 0 && dailyLimit <= 100000)) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailRowLimit', { row: idx + 1 }));
   return { from, host, port, user, dailyLimit, pass };
+}
+
+/**
+ * 校验 HTTP 邮件 API 通道配置。
+ * provider 为空 = 关闭该通道（仅走 SMTP 池）；Key 不在这里校验（单独按「留空保持」处理）。
+ * custom 必须是 https 地址：Worker 到 http:// 的出站既不安全也常被拦，没必要支持。
+ */
+function validateHttp(raw: unknown, t: ApiT): { provider: HttpProvider | ''; from: string; url: string } {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const provider = String(r.provider ?? '').trim().toLowerCase();
+  if (!provider) return { provider: '', from: '', url: '' };
+  if (!(HTTP_PROVIDERS as readonly string[]).includes(provider))
+    throw new AppError(Code.VALIDATION_ERROR, t('admin.httpProviderInvalid'));
+  const from = String(r.from ?? '').trim();
+  const ferr = isEmail(from, t);
+  if (ferr) throw new AppError(Code.FORM_INVALID_EMAIL, ferr);
+  const url = String(r.url ?? '').trim();
+  if (provider === 'custom') {
+    if (!/^https:\/\/[^\s]+$/i.test(url)) throw new AppError(Code.VALIDATION_ERROR, t('admin.httpUrlInvalid'));
+  }
+  return { provider: provider as HttpProvider, from, url: provider === 'custom' ? url : '' };
 }
 
 export function adminEmailRoutes(): Hono<ReadEnv> {
@@ -105,12 +130,20 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
       passes.push(pass);
     });
 
-    // 池与密码单事务提交（两者按下标对齐，分两次写中间失败会留下错配）；
-    // 连 JWT_SECRET 都没有（canEncrypt=false）时只有空池能走到这里，此时不碰加密、只落明文配置
+    // HTTP 邮件 API 通道（可选）：provider='' 表示关闭；Key 走密文「留空保持」
+    const httpCfg = validateHttp(body.http, t);
+    const httpKeyInput = String((body.http as Record<string, unknown> | undefined)?.key ?? '').trim();
+    const oldHttpKey = String(oldSec.httpKey ?? '');
+    const httpKey = httpKeyInput || oldHttpKey;
+    if (httpCfg.provider && !httpKey) throw new AppError(Code.VALIDATION_ERROR, t('admin.httpKeyRequired'));
+    if (httpKeyInput && !canEncrypt) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissingPw'));
+
+    // 池与密码、HTTP 配置与 Key 单事务提交（彼此关联，分两次写中间失败会留下错配）；
+    // 连 JWT_SECRET 都没有（canEncrypt=false）时只有空池 + 无 Key 能走到这里，此时不碰加密、只落明文配置
     if (canEncrypt) {
-      await saveExtConfigAndSecret(db, cache, 'email', { pool: rows }, { passes }, c.env);
+      await saveExtConfigAndSecret(db, cache, 'email', { pool: rows, http: httpCfg }, { passes, httpKey }, c.env);
     } else {
-      await saveExtConfig(db, cache, 'email', { pool: rows });
+      await saveExtConfig(db, cache, 'email', { pool: rows, http: httpCfg });
     }
     // bootstrap 用 `email:on`（60s 读穿）下发「邮件通道是否可用」，前台据此决定注册表单渲不渲染验证码框；
     // 池刚存好时必须主动失效，否则最长 60s 内前台仍按「无邮件」隐藏整块验证码（保存成功却看不到输入框）。
@@ -135,9 +168,14 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
     const t = c.get('t');
     const body = await readJsonObject(c);
     const [state, setting] = await Promise.all([getEmailSettingState(c.env, db, cache), loadSetting(cache, db)]);
-    if (!state.pool.length) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailPoolEmpty'));
-    // 默认收件人取池中第一个合法 from（坏行不参与，否则一按测试就报「邮箱格式不对」而不是真正的发信问题）
-    const dflt = state.pool.map((p) => p.from).find((f) => f !== '' && isEmail(f, t) === null) ?? '';
+    // 两条通道都可发信：HTTP 优先（与运行时一致），SMTP 池仅在它没启用时兜底
+    const httpOn = state.http.provider !== '' && state.http.hasKey;
+    if (!httpOn && !state.pool.length) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailPoolEmpty'));
+    // 默认收件人：HTTP 通道用自己的发件地址，否则取池中第一个合法 from
+    // （坏行不参与，否则一按测试就报「邮箱格式不对」而不是真正的发信问题）
+    const dflt = httpOn
+      ? state.http.from
+      : (state.pool.map((p) => p.from).find((f) => f !== '' && isEmail(f, t) === null) ?? '');
     const to = String(body.to ?? '').trim().toLowerCase() || dflt;
     if (!to) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailPoolEmpty'));
     const ferr = isEmail(to, t);
