@@ -127,6 +127,8 @@ User visits: forum.example.com
 | `CLOUDFLARE_API_TOKEN`  | Cloudflare API Token      | 1단계에서 만든 Token   | 예  |
 | `CLOUDFLARE_ACCOUNT_ID` | 본인의 Cloudflare Account ID | 계정 홈페이지 오른쪽 사이드바 | 예  |
 
+> 이 표는 Cloudflare API Token / Account ID 전용입니다. `JWT_SECRET`, `SECRETS_MASTER_KEY` 같은 **런타임 시크릿은 여기서 설정할 수 없습니다** — 배포 파이프라인이 Worker로 전달하지 않습니다. 4단계에서 Worker에 직접 추가하세요.
+
 **변수:**
 
 | 변수 이름               | 값                             | 설명                                                                                                                                          | 필수  |
@@ -150,7 +152,7 @@ GitHub 저장소의 **Actions** 페이지에서:
 | -------------------- | -------------------------------------------- | ------------------ |
 | `JWT_SECRET`         | 로그인 토큰 / CSRF 서명                             | 예                  |
 | `TURNSTILE_SECRET`   | 서버 측 캡차 검증 (`TURNSTILE_SITEKEY`와 반드시 짝으로 설정) | 아니요                |
-| `SECRETS_MASTER_KEY` | 플러그인 결제 시크릿용 AES-GCM 마스터 키                   | 아니요                |
+| `SECRETS_MASTER_KEY` | 플러그인 결제 시크릿 / 메일 SMTP 비밀번호용 AES-GCM 마스터 키 | 아니요(설정하지 않으면 메일 비밀번호를 저장할 수 없음) |
 
 로컬에서 무작위 값을 생성해 하나씩 붙여넣습니다:
 
@@ -160,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+> `SECRETS_MASTER_KEY`가 없으면 관리자 **메일 설정**에서 **비밀번호가 있는** SMTP 계정을 저장할 때 「SECRETS_MASTER_KEY가 설정되지 않아 비밀번호를 저장할 수 없습니다」 오류가 납니다. 한 번 비밀번호를 암호화한 값은 **교체하지 마세요**: 기존 암호문을 복호화할 수 없어(저장된 비밀번호 전부 무효, 발송 535) 모든 비밀번호를 다시 입력해야 합니다.
 
 ### 방법 2: 로컬 개발
 
@@ -172,7 +176,7 @@ pnpm --filter @freeidx/api dev
 ```
 
 - 로컬에서 miniflare로 실행; 실제 리소스 ID 불필요
-- 시크릿은 `apps/api/.dev.vars`에 넣습니다
+- 시크릿은 `apps/api/.dev.vars`에 넣습니다(`JWT_SECRET`, `SECRETS_MASTER_KEY` 등). `wrangler dev`는 시작 시 한 번만 읽으므로 수정 후 재시작해야 합니다
 - 데이터베이스: `pnpm db:apply`로 마이그레이션 적용, `pnpm db:seed`로 초기 데이터 적재
 
 ## 방법 3: Cloudflare Dashboard에서 직접 구축

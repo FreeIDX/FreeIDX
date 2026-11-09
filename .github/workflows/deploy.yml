@@ -157,5 +157,6 @@ jobs:
             echo ""
             echo "- 站点：${SITE_URL:-https://freeidx-api.<你的子域>.workers.dev}"
             echo "- D1/KV ID 由本次构建解析并回填，仓库里保持占位值"
-            echo "- 运行时密钥（JWT_SECRET 等）在 Cloudflare 后台 Secrets，本流水线不覆盖"
+            echo "- 运行时密钥（JWT_SECRET / TURNSTILE_SECRET / SECRETS_MASTER_KEY）在 Cloudflare 后台该 Worker 的 Settings → Variables and secrets 里配，本流水线不覆盖；GitHub 仓库 Secrets 里加它们是无效的"
+            echo "- 不配 SECRETS_MASTER_KEY 时，后台「邮箱设置」保存带密码的 SMTP 账号会报「未配置 SECRETS_MASTER_KEY，无法保存密码」（值需为 base64 的 32 字节）"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -127,6 +127,8 @@ User visits: forum.example.com
 | `CLOUDFLARE_API_TOKEN`  | Cloudflare API Token      | ステップ 1 で作成した Token | はい |
 | `CLOUDFLARE_ACCOUNT_ID` | 自分の Cloudflare Account ID | アカウントホーム画面の右サイドバー  | はい |
 
+> この表は Cloudflare API Token / Account ID 専用です。`JWT_SECRET` や `SECRETS_MASTER_KEY` などの**ランタイムシークレットはここでは設定できません**（デプロイパイプラインは Worker に転送しません）。ステップ 4 で Worker 側に追加してください。
+
 **変数：**
 
 | 変数名                 | 値                               | 説明                                                                                                                                            | 必須  |
@@ -150,7 +152,7 @@ GitHub リポジトリの **Actions** ページで以下を行います：
 | -------------------- | --------------------------------------------------------- | ---------------------- |
 | `JWT_SECRET`         | ログイントークン / CSRF の署名                                       | はい                     |
 | `TURNSTILE_SECRET`   | サーバーサイドでの CAPTCHA 検証（`TURNSTILE_SITEKEY` とペアで設定する必要があります） | いいえ                    |
-| `SECRETS_MASTER_KEY` | プラグインの決済シークレット用の AES-GCM マスターキー                           | いいえ                    |
+| `SECRETS_MASTER_KEY` | プラグイン決済シークレット / メール SMTP パスワードの AES-GCM マスターキー | いいえ（未設定だとメールパスワードを保存できません） |
 
 ローカルでランダムな値を生成し、1 つずつ貼り付けてください：
 
@@ -160,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+> `SECRETS_MASTER_KEY` が未設定の場合、管理画面の「メール設定」で**パスワード付き**の SMTP アカウントを保存すると「SECRETS_MASTER_KEY未設定のためパスワードを保存できません」で失敗します。一度パスワードの暗号化に使った値は**変更しないでください**：既存の暗号文は復号できなくなり（保存済みパスワードが無効化され、送信は 535）、すべてのパスワードを再入力する必要があります。
 
 ### 方法 2: ローカル開発
 
@@ -172,7 +176,7 @@ pnpm --filter @freeidx/api dev
 ```
 
 - ローカルでは miniflare で動作し、実際のリソース ID は不要です
-- secrets は `apps/api/.dev.vars` に記述します
+- secrets は `apps/api/.dev.vars` に記述します（`JWT_SECRET`、`SECRETS_MASTER_KEY` など）。`wrangler dev` は起動時に一度だけ読み込むため、編集後は再起動が必要です
 - データベース: `pnpm db:apply` でマイグレーションを適用、`pnpm db:seed` で初期データを読み込みます
 
 ## 方法 3: Cloudflare Dashboard での画面操作による構築

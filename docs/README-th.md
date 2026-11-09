@@ -127,6 +127,8 @@ Fork โปรเจกต์ไปยัง repository ของคุณเอ
 | `CLOUDFLARE_API_TOKEN`  | Cloudflare API Token       | Token ที่สร้างในขั้นตอนที่ 1          | ใช่      |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID ของคุณ | แถบด้านขวาของหน้าแรกบัญชี            | ใช่      |
 
+> ตารางนี้สำหรับ Cloudflare API Token / Account ID เท่านั้น runtime secret อย่าง `JWT_SECRET` และ `SECRETS_MASTER_KEY` **ไม่ได้ตั้งค่าที่นี่** — pipeline การ deploy จะไม่ส่งต่อไปยัง Worker ให้เพิ่มที่ Worker ในขั้นตอนที่ 4
+
 **ตัวแปร:**
 
 | ชื่อตัวแปร          | ค่า                           | คำอธิบาย                                                                                                                                                                                                              | จำเป็น   |
@@ -150,7 +152,7 @@ Fork โปรเจกต์ไปยัง repository ของคุณเอ
 | -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
 | `JWT_SECRET`         | เซ็น login token / CSRF                                                    | ใช่                                               |
 | `TURNSTILE_SECRET`   | ตรวจสอบ CAPTCHA ฝั่งเซิร์ฟเวอร์ (ต้องใช้คู่กับ `TURNSTILE_SITEKEY`)         | ไม่                                               |
-| `SECRETS_MASTER_KEY` | คีย์หลัก AES-GCM สำหรับความลับการชำระเงินของปลั๊กอิน                        | ไม่                                               |
+| `SECRETS_MASTER_KEY` | คีย์หลัก AES-GCM สำหรับความลับการชำระเงินของปลั๊กอินและรหัสผ่าน SMTP | ไม่ (ถ้าไม่ตั้งจะบันทึกรหัสผ่านอีเมลไม่ได้) |
 
 สร้างค่าแบบสุ่มในเครื่องแล้วคัดลอกไปวางทีละค่า:
 
@@ -160,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+> หากไม่มี `SECRETS_MASTER_KEY` การบันทึกบัญชี SMTP **ที่มีรหัสผ่าน** ในหน้า «ตั้งค่าอีเมล» ของผู้ดูแลจะล้มเหลวด้วยข้อความ «ยังไม่ได้ตั้งค่า SECRETS_MASTER_KEY จึงบันทึกรหัสผ่านไม่ได้» เมื่อคีย์นี้ใช้เข้ารหัสรหัสผ่านแล้ว **อย่าเปลี่ยน**: ข้อความเข้ารหัสเดิมจะถอดไม่ได้ (รหัสผ่านที่บันทึกไว้ใช้ไม่ได้ทั้งหมด การส่งเมลจะได้ 535) ต้องกรอกรหัสผ่านใหม่ทั้งหมด
 
 ### วิธีที่ 2: การพัฒนาแบบ local
 
@@ -172,7 +176,7 @@ pnpm --filter @freeidx/api dev
 ```
 
 - รันด้วย miniflare บนเครื่อง ไม่ต้องใช้ resource ID จริง
-- ใส่ secrets ไว้ใน `apps/api/.dev.vars`
+- ใส่ secrets ไว้ใน `apps/api/.dev.vars` (`JWT_SECRET`, `SECRETS_MASTER_KEY` ฯลฯ) `wrangler dev` อ่านครั้งเดียวตอนเริ่มทำงาน ต้องรีสตาร์ทหลังแก้ไข
 - ฐานข้อมูล: `pnpm db:apply` เพื่อ apply migrations, `pnpm db:seed` เพื่อโหลดข้อมูลเริ่มต้น
 
 ## วิธีที่ 3: สร้างผ่านหน้าเว็บ Cloudflare Dashboard

@@ -127,6 +127,8 @@ Forkez le projet dans votre propre dépôt. Dans votre dépôt GitHub :
 | `CLOUDFLARE_API_TOKEN`  | Token d'API Cloudflare      | Le token créé à l'étape 1                            | Oui         |
 | `CLOUDFLARE_ACCOUNT_ID` | Votre Account ID Cloudflare | Barre latérale droite de la page d'accueil du compte | Oui         |
 
+> Ce tableau ne concerne que le token d’API Cloudflare / l’Account ID. Les secrets d’exécution comme `JWT_SECRET` et `SECRETS_MASTER_KEY` **ne se configurent pas ici** — le pipeline de déploiement ne les transmet pas au Worker. Ajoutez-les sur le Worker à l’étape 4.
+
 **Variables :**
 
 | Nom de la variable  | Valeur                        | Description                                                                                                                                                                                                                                             | Obligatoire |
@@ -150,7 +152,7 @@ Une fois le premier déploiement au vert, `freeidx-api` apparaît dans la liste 
 | -------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------- |
 | `JWT_SECRET`         | Signature des tokens de connexion / CSRF                                             | Oui                                                     |
 | `TURNSTILE_SECRET`   | Vérification CAPTCHA côté serveur (à associer obligatoirement à `TURNSTILE_SITEKEY`) | Non                                                     |
-| `SECRETS_MASTER_KEY` | Clé maîtresse AES-GCM pour les secrets de paiement des plugins                       | Non                                                     |
+| `SECRETS_MASTER_KEY` | Clé maîtresse AES-GCM pour les secrets de paiement des plugins et les mots de passe SMTP | Non (indispensable pour enregistrer les mots de passe SMTP) |
 
 Générez une valeur aléatoire en local et collez-en une à la fois :
 
@@ -160,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+> Sans `SECRETS_MASTER_KEY`, enregistrer un compte SMTP **avec mot de passe** dans la page d’administration « Paramètres e-mail » échoue avec « SECRETS_MASTER_KEY non configuré ; impossible d’enregistrer les mots de passe ». Une fois qu’elle a chiffré des mots de passe, **ne la remplacez pas** : les anciens chiffrés deviennent indéchiffrables (tous les mots de passe enregistrés sont perdus, l’envoi renvoie 535) et il faut les ressaisir.
 
 ### Méthode 2 : développement en local
 
@@ -172,7 +176,7 @@ pnpm --filter @freeidx/api dev
 ```
 
 - Exécute miniflare en local ; aucun ID de ressource réel nécessaire
-- Placez les secrets dans `apps/api/.dev.vars`
+- Placez les secrets dans `apps/api/.dev.vars` (`JWT_SECRET`, `SECRETS_MASTER_KEY`…) ; `wrangler dev` ne le lit qu’au démarrage, redémarrez après modification
 - Base de données : `pnpm db:apply` pour appliquer les migrations, `pnpm db:seed` pour charger les données initiales
 
 ## Méthode 3 : création visuelle via le tableau de bord Cloudflare

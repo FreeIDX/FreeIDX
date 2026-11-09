@@ -11,6 +11,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import { ADMIN_CATALOG, extSchemaOf } from '../../core/extensions';
 import { loadExtensionsState } from '../../core/extensions/registry';
 import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtSecret, extSecretKey } from '../../core/ext-store';
+import { isMasterKeyValid } from '../../core/crypto';
 import type { ApiT } from '../../core/i18n';
 import { core, readJsonObject, type ReadEnv } from '../shared';
 
@@ -172,6 +173,8 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
       if (!sec || typeof sec !== 'object' || Array.isArray(sec)) throw new AppError(Code.VALIDATION_ERROR, t('admin.secretInvalid'));
       const master = c.env.SECRETS_MASTER_KEY;
       if (!master) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissing'));
+      // 形态不对（hex/短串/带引号）时加密会抛裸 Error → 500「服务器错误」，这里先转 400
+      if (!isMasterKeyValid(master)) throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
       await saveExtSecret(db, id, sec as Record<string, unknown>, master);
     }
 
@@ -181,6 +184,7 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
       if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new AppError(Code.VALIDATION_ERROR, t('admin.secretPatchInvalid'));
       const master = c.env.SECRETS_MASTER_KEY;
       if (!master) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissing'));
+      if (!isMasterKeyValid(master)) throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
       const merged = await loadExtSecret(db, id, master);
       for (const [k, v] of Object.entries(patch)) {
         if (v === null) delete merged[k];

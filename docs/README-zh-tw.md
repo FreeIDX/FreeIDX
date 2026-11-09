@@ -127,6 +127,8 @@
 | `CLOUDFLARE_API_TOKEN`  | Cloudflare API Token     | 第一步建立的 Token | 必需   |
 | `CLOUDFLARE_ACCOUNT_ID` | 你的 Cloudflare Account ID | 帳號首頁右側欄      | 必需   |
 
+> 這張表只放 Cloudflare API Token / Account ID。`JWT_SECRET`、`SECRETS_MASTER_KEY` 等**執行階段密鑰不在這裡設定**——部署流程不會把它們傳給 Worker，請在第四步加到 Worker 上。
+
 **Variables：**
 
 | Variable 名稱         | 值                             | 描述                                                                                                      | 是否必需 |
@@ -150,7 +152,7 @@
 | -------------------- | --------------------------------------- | ------------ |
 | `JWT_SECRET`         | 登入權杖 / CSRF 簽章                          | 必需           |
 | `TURNSTILE_SECRET`   | 人機驗證伺服器端驗證（需與 `TURNSTILE_SITEKEY` 成對設定） | 非必需          |
-| `SECRETS_MASTER_KEY` | 外掛支付金鑰的 AES-GCM 主金鑰                     | 非必需          |
+| `SECRETS_MASTER_KEY` | 外掛支付金鑰 / 信箱 SMTP 密碼的 AES-GCM 主金鑰 | 非必需（未設定則無法儲存信箱密碼） |
 
 隨機值在本機產生一條貼一條：
 
@@ -160,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+> 未設定 `SECRETS_MASTER_KEY` 時，後台「信箱設定」儲存**含密碼**的 SMTP 帳號會回報「未設定 SECRETS_MASTER_KEY，無法儲存密碼」。此值一旦加密過密碼就**不要再更換**：舊密文將無法解密（已存密碼全部失效、寄信回 535），必須重新填寫所有密碼。
 
 ### 方法 2：本機開發
 
@@ -172,7 +176,7 @@ pnpm --filter @freeidx/api dev
 ```
 
 - 本機跑 miniflare，不需要真實資源 ID
-- 金鑰放 `apps/api/.dev.vars`
+- 金鑰放 `apps/api/.dev.vars`（`JWT_SECRET`、`SECRETS_MASTER_KEY` 等）——`wrangler dev` 只在啟動時讀一次，改完必須重啟
 - 資料庫：`pnpm db:apply` 套用遷移，`pnpm db:seed` 灌入初始資料
 
 ## 方法 3：Cloudflare 後台視覺化建置

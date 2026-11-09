@@ -127,6 +127,8 @@ Haz un fork del proyecto en tu propio repositorio. En tu repositorio de GitHub:
 | `CLOUDFLARE_API_TOKEN` | Token de API de Cloudflare | El Token creado en el Paso 1                            | Sí          |
 | `CLOUDFLARE_ACCOUNT_ID`| Tu Account ID de Cloudflare| Barra lateral derecha de la página de inicio de la cuenta | Sí        |
 
+> Esta tabla es solo para el token de API de Cloudflare / el Account ID. Los secretos de ejecución como `JWT_SECRET` y `SECRETS_MASTER_KEY` **no se configuran aquí** — el pipeline de despliegue no los transmite al Worker. Añádelos en el Worker en el Paso 4.
+
 **Variables:**
 
 | Nombre de la variable | Valor                         | Descripción                                                                                                                                                                                                            | Obligatorio |
@@ -150,7 +152,7 @@ Una vez que el primer despliegue termine en verde, `freeidx-api` aparecerá en l
 | -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
 | `JWT_SECRET`         | Firma de tokens de inicio de sesión / CSRF                                 | Sí                                                |
 | `TURNSTILE_SECRET`   | Verificación CAPTCHA del lado del servidor (debe ir emparejado con `TURNSTILE_SITEKEY`) | No                                   |
-| `SECRETS_MASTER_KEY` | Clave maestra AES-GCM para los secrets de pago de los plugins              | No                                                |
+| `SECRETS_MASTER_KEY` | Clave maestra AES-GCM para los secretos de pago de plugins y las contraseñas SMTP | No (sin ella no se pueden guardar las contraseñas SMTP) |
 
 Genera un valor aleatorio localmente y pega uno cada vez:
 
@@ -160,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+> Sin `SECRETS_MASTER_KEY`, guardar una cuenta SMTP **con contraseña** en la página de administración «Ajustes de correo» falla con «SECRETS_MASTER_KEY no configurado; no se pueden guardar contraseñas». Una vez que ha cifrado contraseñas, **no la cambies**: el cifrado antiguo deja de descifrarse (todas las contraseñas guardadas quedan inutilizables, el envío devuelve 535) y hay que volver a introducirlas.
 
 ### Método 2: Desarrollo local
 
@@ -172,7 +176,7 @@ pnpm --filter @freeidx/api dev
 ```
 
 - Ejecuta miniflare en local; no se necesitan IDs de recursos reales
-- Guarda los secrets en `apps/api/.dev.vars`
+- Guarda los secrets en `apps/api/.dev.vars` (`JWT_SECRET`, `SECRETS_MASTER_KEY`…); `wrangler dev` solo lo lee al arrancar, reinicia tras editarlo
 - Base de datos: `pnpm db:apply` para aplicar las migraciones, `pnpm db:seed` para cargar los datos iniciales
 
 ## Método 3: Creación visual desde el Cloudflare Dashboard

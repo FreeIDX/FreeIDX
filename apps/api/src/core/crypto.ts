@@ -22,6 +22,20 @@ function fromB64(b64: string): Uint8Array {
   return u;
 }
 
+/**
+ * 主密钥形态校验：base64 必须解码出正好 32 字节。
+ * 后台保存私密项前应先调这里转成可读的 400 —— 否则 encryptSecret 抛的是裸 Error，
+ * 会被 envelope 归类成 500「服务器错误」，管理员无从知道是密钥格式（hex/短串/带引号）错了。
+ */
+export function isMasterKeyValid(masterB64?: string): boolean {
+  if (!masterB64) return false;
+  try {
+    return fromB64(masterB64).length === 32;
+  } catch {
+    return false;
+  }
+}
+
 async function aesKey(masterB64: string): Promise<CryptoKey> {
   const raw = fromB64(masterB64);
   if (raw.length !== 32) throw new Error(t0('sec.masterKeyInvalid'));
