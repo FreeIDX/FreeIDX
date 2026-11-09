@@ -503,8 +503,29 @@ export interface SmtpAccountInput {
   pass?: string;
 }
 
+/** 单账号一次投递尝试（stage 为失败阶段：config/connect/greeting/ehlo/starttls/auth/mailfrom/rcpt/data/body） */
+export interface MailAttempt {
+  account: string;
+  ok: boolean;
+  stage?: string;
+  error?: string;
+}
+
+/** 一次发信报告：POST /api/admin/email-setting/test 回包，以及 GET 的 last（最近一次发信，含正式发码） */
+export interface MailReport {
+  ok: boolean;
+  to: string;
+  /** 发起时间（秒） */
+  at: number;
+  /** true = 后台手动测试 */
+  test: boolean;
+  attempts: MailAttempt[];
+}
+
 export interface EmailSettingView {
   pool: SmtpAccountView[];
+  /** 最近一次发信结果（无记录为 null） */
+  last: MailReport | null;
 }
 
 /** GET /api/admin/points/logs 行（username 经 LEFT JOIN，理论上不空，仍按可空处理） */

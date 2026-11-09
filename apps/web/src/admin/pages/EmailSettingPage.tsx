@@ -6,11 +6,17 @@
  *  - 发信 round-robin 轮询选账号（单账号免费额度 → N 倍），失败自动顺延下一账号（failover）；
  *  - 密码 AES-GCM 加密落 ext:email:secret、永不回显（只回 hasPass，提交留空即保持原值）。
  * 池为空时自动降级：注册邮箱验证 / 找回密码邮件不发送（基本设置里的开关保留），流程完整可用。
+ *
+ * 「测试发信」区块：正式发信走 waitUntil，失败只落服务端日志、前台永远提示已发送，
+ * 现场排查「注册收不到验证码」只能靠猜。这里按已保存的池同步实发一封，
+ * 把每个账号的失败阶段（auth/rcpt/data…）与 SMTP 原文直接显示出来；
+ * 同时回显服务端记录的「最近一次发信」（含前台注册发码的真实结果）。
  */
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getEmailSetting, putEmailSetting } from '../api';
-import type { EmailSettingView, SmtpAccountInput } from '../types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getEmailSetting, putEmailSetting, testEmailSetting } from '../api';
+import type { EmailSettingView, MailReport, SmtpAccountInput } from '../types';
+import { apiErrorMessage } from '../../lib/errors';
 import { useAdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { SETTING_TABS } from '../tabs';
@@ -43,6 +49,37 @@ const rowsOf = (v: EmailSettingView): PoolRow[] =>
     : [emptyRow()];
 
 const th = 'px-2 py-2 text-left font-medium text-muted';
+
+/**
+ * 一份发信报告：收件人 + 结果 + 逐账号尝试明细（失败时带阶段与 SMTP 原文）。
+ * 「注册收不到验证码」靠这块定位：535 是授权码/密码错，550 是发件人被拒，
+ * 连接超时是网络/端口问题，而「全部成功但没收到」则是反垃圾/垃圾邮件箱问题。
+ */
+function ReportView({ report }: { report: MailReport }) {
+  return (
+    <div className="mt-2 rounded-[6px] border border-line px-3 py-2 text-sm">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className={report.ok ? 'font-medium text-success' : 'font-medium text-destructive'}>
+          {report.ok ? '✓' : '✗'}
+        </span>
+        <span className="break-all font-mono text-xs text-ink-soft">{report.to}</span>
+        <span className="text-xs text-muted-2">{new Date(report.at * 1000).toLocaleString()}</span>
+      </div>
+      {report.attempts.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {report.attempts.map((a, i) => (
+            <li key={`${a.account}-${i}`} className="flex flex-wrap items-baseline gap-2 text-xs">
+              <span className={a.ok ? 'text-success' : 'text-destructive'}>{a.ok ? '✓' : '✗'}</span>
+              <span className="font-mono text-ink-soft">{a.account}</span>
+              {a.stage && <span className="rounded bg-line-soft px-1 text-[11px] text-muted">{a.stage}</span>}
+              {a.error && <span className="break-all text-destructive">{a.error}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function EmailSettingPage() {
   const t = useAdminT();
@@ -84,6 +121,35 @@ export function EmailSettingPage() {
     },
   );
 
+  /**
+   * 测试发信：按**已保存**的配置实发一封（后端逐账号尝试并回每个账号的失败阶段 + SMTP 原文）。
+   * 与「保存」分开：测试不应改动任何配置，也不能因为表单里有未保存的改动就测出与实际运行不一致的结果。
+   */
+  const [testTo, setTestTo] = useState('');
+  const [testReport, setTestReport] = useState<MailReport | null>(null);
+  const [testNotice, setTestNotice] = useState('');
+  const [testErr, setTestErr] = useState('');
+  const qc = useQueryClient();
+  const test = useMutation<MailReport, unknown, void>({
+    mutationFn: () => testEmailSetting(testTo.trim() || undefined),
+    onSuccess: (d) => {
+      setTestErr('');
+      setTestReport(d);
+      setTestNotice(
+        d.ok ? t('admin_email_test_ok', '测试邮件已发出，请到 {to} 查收（也请检查垃圾邮件箱）', { to: d.to }) : t('admin_email_test_fail', '测试发信失败，失败原因见下方每个账号'),
+      );
+      // 后端同时把这一封记为「最近一次发信」，重取一次让回显卡片与报告一致
+      void qc.invalidateQueries({ queryKey: ['admin', 'email-setting'] });
+    },
+    onError: (e) => {
+      setTestReport(null);
+      setTestNotice('');
+      setTestErr(apiErrorMessage(e));
+    },
+  });
+  /** 报告展示优先级：本次测试结果 > 服务端记录的最近一次发信（含前台注册发码的真实结果） */
+  const shownReport = testReport ?? loaded?.last ?? null;
+
   if (q.isError) return <ErrorState error={q.error} />;
 
   const patch = (i: number, p: Partial<PoolRow>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...p } : r)));
@@ -93,6 +159,45 @@ export function EmailSettingPage() {
       <PageTitle>{t('admin_site_setting', '站点设置')}</PageTitle>
       <TabBar active="email" items={SETTING_TABS.map((x) => ({ k: x.k, to: x.to, text: t(x.textKey, x.fallback) }))} />
       {save.flash && <Alert tone={save.flash.tone}>{save.flash.text}</Alert>}
+
+      {/* 测试邮箱：注册验证码收不到时，先在这里确认「服务商到底回了什么」 */}
+      <Card title={t('admin_email_test_send', '发送测试邮件')} bodyClass="space-y-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[16rem] flex-1">
+            <label className="mb-1 block text-sm text-muted" htmlFor="email-test-to">
+              {t('admin_email_test_to', '测试收件邮箱')}
+            </label>
+            <Input
+              id="email-test-to"
+              type="email"
+              value={testTo}
+              placeholder="you@example.com"
+              autoComplete="off"
+              onChange={(e) => setTestTo(e.target.value)}
+            />
+          </div>
+          <Button variant="default" loading={test.isPending} onClick={() => test.mutate()}>
+            {t('admin_email_test_send', '发送测试邮件')}
+          </Button>
+        </div>
+        <p className="text-xs leading-relaxed text-muted-2">
+          {t(
+            'admin_email_test_hint',
+            '测试按「已保存」的配置逐账号实发（最多 3 个），失败会显示 SMTP 服务商返回的原文；修改后请先点下方「确定」保存。',
+          )}
+        </p>
+        {testErr && <Alert tone="warn">{testErr}</Alert>}
+        {testNotice && <Alert tone={testReport?.ok ? 'ok' : 'warn'}>{testNotice}</Alert>}
+        <p className="pt-1 text-sm text-muted">{t('admin_email_last_result', '最近一次发信')}</p>
+        {shownReport ? (
+          <ReportView report={shownReport} />
+        ) : (
+          <p className="text-xs text-muted-2">
+            {t('admin_email_last_none', '暂无发信记录（保存配置后可点「发送测试邮件」验证）')}
+          </p>
+        )}
+      </Card>
+
       <Card>
         <div className="mb-[1rem] rounded-[6px] bg-brand/5 px-3 py-2 text-sm leading-relaxed text-ink-soft">
           {t('admin_email_help', '配置多个 SMTP 账号（推荐 465 隐式 TLS 或 587 STARTTLS 端口；25 端口在 Cloudflare Workers 上被封禁）。发送时在多账号间轮询分摊额度，单个账号失败自动切换下一个；每个账号可设每日发送上限（0 为不限），当天达到上限后自动跳过该账号改用其他账号，次日自动恢复。全部账号留空则注册邮箱验证与找回密码邮件不发送（其余功能不受影响）。')}

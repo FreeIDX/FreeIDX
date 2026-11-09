@@ -3,8 +3,9 @@
  * 整池提交落 kv：
  *   - `ext:email:config{pool:[{from,host,port,user,dailyLimit}]}`（明文，走三层缓存）
  *   - `ext:email:secret{passes:[]}`（AES-GCM 按池下标对应，永不回显）
- *   GET /api/admin/email-setting   池回显（hasPass 标记，密码不出库）
- *   PUT /api/admin/email-setting   整池提交
+ *   GET  /api/admin/email-setting        池回显（hasPass 标记，密码不出库）+ 最近一次发信结果
+ *   PUT  /api/admin/email-setting        整池提交
+ *   POST /api/admin/email-setting/test   实发一封测试邮件（同步返回逐账号失败原因）
  * 挂载于 adminGuard 之后（app.use('/api/admin/*') 已先注册）。
  *
  * 密码「留空保持」按账号身份（host+user）而不是下标匹配：后台删掉中间一行或调整顺序后，
@@ -14,8 +15,9 @@ import { Hono, type Context } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { hasSecretsKey, loadExtConfig, loadExtSecret, saveExtConfig, saveExtConfigAndSecret } from '../../core/ext-store';
-import { getEmailSettingState } from '../../core/email';
+import { getEmailSettingState, sendTestMail } from '../../core/email';
 import { isEmail } from '../../core/auth/validate';
+import { loadSetting } from '../../core/loaders';
 import type { ApiT } from '../../core/i18n';
 import { core, readJsonObject, type ReadEnv } from '../shared';
 
@@ -115,6 +117,38 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
     await cache.del('email:on');
 
     return ok(c, t('admin.emailSaved'), { data: await getEmailSettingState(c.env, db, cache) });
+  });
+
+  /**
+   * 测试发信：给「注册收不到验证码」提供一条可自证的链路。
+   *
+   * 为什么必须同步：正式发信走 waitUntil + failover，失败只落 console.error，
+   * 前台永远回「已发送」，管理员无法区分「服务商拒收 535」「端口被封」「邮件进垃圾箱」。
+   * 这里按已保存的池逐账号实发（≤3 个），把阶段与 SMTP 原文直接回给管理员。
+   *
+   * 收件人留空 → 发给池中第一个**合法**发件地址（自己发自己，最少输入）。
+   * 失败不抛错误码：报告本身是数据（前端按行展示每个账号的原因），
+   * 抛错会让附带的 attempts 只能塞进 error extra，前端反而拿不到。
+   */
+  app.post('/api/admin/email-setting/test', async (c: Ctx) => {
+    const { db, cache } = core(c);
+    const t = c.get('t');
+    const body = await readJsonObject(c);
+    const [state, setting] = await Promise.all([getEmailSettingState(c.env, db, cache), loadSetting(cache, db)]);
+    if (!state.pool.length) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailPoolEmpty'));
+    // 默认收件人取池中第一个合法 from（坏行不参与，否则一按测试就报「邮箱格式不对」而不是真正的发信问题）
+    const dflt = state.pool.map((p) => p.from).find((f) => f !== '' && isEmail(f, t) === null) ?? '';
+    const to = String(body.to ?? '').trim().toLowerCase() || dflt;
+    if (!to) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailPoolEmpty'));
+    const ferr = isEmail(to, t);
+    if (ferr) throw new AppError(Code.FORM_INVALID_EMAIL, ferr);
+
+    const report = await sendTestMail(c.env, db, cache, to, { site: setting.sitename });
+    const first = report.attempts.find((a) => !a.ok);
+    const message = report.ok
+      ? t('admin.emailTestOk', { to })
+      : t('admin.emailTestFail', { err: first?.error ?? '' });
+    return ok(c, message, { data: report });
   });
 
   return app;

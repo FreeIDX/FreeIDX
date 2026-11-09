@@ -33,6 +33,7 @@ import type {
   McpTokenInput,
   McpTokenRow,
   EmailSettingView,
+  MailReport,
   SmtpAccountInput,
   ForumInput,
   GroupFullRow,
@@ -72,6 +73,12 @@ export const deleteSiteFavicon = () => apiSend('DELETE', '/api/admin/setting/fav
 /** 邮箱设置（§11.3 SMTP 账号池）：密码永不回显，PUT 整池提交、密码留空即保持原值 */
 export const getEmailSetting = () => apiGet<EmailSettingView>('/api/admin/email-setting');
 export const putEmailSetting = (pool: SmtpAccountInput[]) => apiSend<EmailSettingView>('PUT', '/api/admin/email-setting', { pool });
+/**
+ * 测试发信（同步实发，按已保存的池逐账号尝试，最多 3 个）。
+ * to 留空 ⇒ 发给池中第一个发件地址（自己发自己）；回包是逐账号的诊断报告，失败不抛错。
+ */
+export const testEmailSetting = (to?: string) =>
+  apiSend<MailReport>('POST', '/api/admin/email-setting/test', to ? { to } : {});
 
 /** 版块 + 用户组一并返回（编辑页要拿 grouplist 渲染权限矩阵的行） */
 export const getForums = () =>

@@ -12,6 +12,9 @@
  *    （AES-GCM 按下标对应，永不回显）；后台「邮箱设置」整池提交（池与密码单事务），零部署生效。
  *  - 发送由 auth 路由经 waitUntil 旁路调用（绝不请求内阻塞发信，§D.6）；降级：池为空返回 null，
  *    等价 user_create_email_on=0（bootstrap 以 `setting.mailOn` 把该降级同步给前端）。
+ *  - 可观测性：正式发信（验证码/找回密码）与后台测试信都把「逐账号尝试结果」写 kv `ext:email:last`，
+ *    后台「邮箱设置」页回显最近一次结果；POST /api/admin/email-setting/test 同步实发一封并回 SMTP 原文。
+ *    旁路发信失败对用户不可见（前端一律「已发送」），没有这条链路就无从判断是凭证、端口还是反垃圾。
  */
 import type { Env } from '../types/env';
 import type { Cache } from './cache';
@@ -48,7 +51,64 @@ interface SmtpAccount extends SmtpAccountView {
   pass: string;
 }
 
+/**
+ * 单账号一次投递尝试的诊断结果。
+ * 「用户点了发送验证码却一直收不到」这类问题在旧实现里完全不可见：发信走 waitUntil 旁路，
+ * 失败只落 console.error（普通管理员看不到），前台一律回「已发送」。故把每次尝试的原因留下来。
+ */
+export interface MailAttempt {
+  /** 账号标识 user@host:port（不含密码） */
+  account: string;
+  ok: boolean;
+  /** 失败阶段：config / connect / greeting / ehlo / starttls / auth / mailfrom / rcpt / data / body */
+  stage?: string;
+  /** 失败原因（含 SMTP 服务商返回的原文行，如 535 Login fail） */
+  error?: string;
+}
+
+/** 一次发信报告（成功即止；全部失败则列出每个账号的原因） */
+export interface MailReport {
+  ok: boolean;
+  to: string;
+  /** 发起时间（秒） */
+  at: number;
+  /** true = 后台「测试邮箱」手动触发 */
+  test: boolean;
+  attempts: MailAttempt[];
+}
+
+/** 最近一次发信报告落 bbs_kv（单行覆盖，无历史累积） */
+const LAST_KEY = 'ext:email:last';
+
 const str = (v: unknown): string => String(v ?? '').trim();
+
+/** 账号标签：user@host:port（诊断展示用，不含密码） */
+const labelOf = (a: { user: string; host: string; port: number }): string => `${a.user}@${a.host}:${a.port}`;
+
+/** 记录最近一次发信结果（best-effort：诊断信息绝不能把发信本身搞失败） */
+async function recordMailReport(db: D1b, report: MailReport): Promise<void> {
+  try {
+    await db
+      .prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)')
+      .bind(LAST_KEY, JSON.stringify(report))
+      .run();
+  } catch (e) {
+    console.warn(`[email] record report failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** 读最近一次发信报告（无记录/解析失败返回 null，后台按「暂无记录」展示） */
+async function readMailReport(db: D1b): Promise<MailReport | null> {
+  try {
+    const row = await db.prepare<{ v: string }>('SELECT v FROM bbs_kv WHERE k = ?').bind(LAST_KEY).first<{ v: string }>();
+    if (!row?.v) return null;
+    const o = JSON.parse(row.v) as MailReport;
+    if (!o || typeof o !== 'object' || !Array.isArray(o.attempts)) return null;
+    return o;
+  } catch {
+    return null;
+  }
+}
 
 /** 读取并规范化池：坏行静默剔除（缺 host/port/user/pass/from 任一项即不可用） */
 async function readPool(env: Env, db: D1b, cache: Cache): Promise<SmtpAccount[]> {
@@ -76,7 +136,11 @@ async function readPool(env: Env, db: D1b, cache: Cache): Promise<SmtpAccount[]>
  * 的行必须照常回显并标记 hasPass=false，否则后台看到的是空池，顺手一保存就把这些账号整行删掉；
  * 而 readPool 是发信路径，缺密码的行确实不可用（会被静默跳过）。
  */
-export async function getEmailSettingState(env: Env, db: D1b, cache: Cache): Promise<{ pool: SmtpAccountView[] }> {
+export async function getEmailSettingState(
+  env: Env,
+  db: D1b,
+  cache: Cache,
+): Promise<{ pool: SmtpAccountView[]; last: MailReport | null }> {
   const [cfg, sec] = await Promise.all([
     loadExtConfig(cache, db, EMAIL_EXT_ID),
     loadExtSecret(db, EMAIL_EXT_ID, env),
@@ -91,7 +155,9 @@ export async function getEmailSettingState(env: Env, db: D1b, cache: Cache): Pro
     dailyLimit: Math.max(0, Math.floor(Number(r?.dailyLimit ?? 0)) || 0),
     hasPass: str(passes[i]) !== '',
   }));
-  return { pool };
+  // 最近一次发信结果一并回显：注册验证码走 waitUntil 旁路，失败不会反馈给用户，
+  // 后台若不展示这一行，管理员只能靠「用户说没收到」猜。
+  return { pool, last: await readMailReport(db) };
 }
 
 /** 池为空 → null（调用方按 §11.3 降级，而非报错） */
@@ -202,6 +268,7 @@ class SmtpPoolProvider implements EmailProvider {
       return 0;
     });
     const used = await readDailyCounts(this.db, this.accounts);
+    const attempts: MailAttempt[] = [];
     let overLimit = 0;
     for (let i = 0; i < n; i++) {
       const acct = this.accounts[(start + i) % n]!;
@@ -209,6 +276,7 @@ class SmtpPoolProvider implements EmailProvider {
       // 先按批量读数粗筛（省掉明显发不出去的一次建连），真正的闸门是下面的原子预约
       if (limited && (used.get(cntKey(acct.host, acct.user)) ?? 0) >= acct.dailyLimit) {
         overLimit++;
+        attempts.push({ account: labelOf(acct), ok: false, stage: 'quota', error: t0('email.acctOverLimit', { limit: acct.dailyLimit }) });
         continue;
       }
       if (limited) {
@@ -221,14 +289,18 @@ class SmtpPoolProvider implements EmailProvider {
         }
         if (!reserved) {
           overLimit++;
+          attempts.push({ account: labelOf(acct), ok: false, stage: 'quota', error: t0('email.acctOverLimit', { limit: acct.dailyLimit }) });
           continue;
         }
       }
+      const trace: { stage: string } = { stage: 'connect' };
       try {
-        await smtpSendOne(acct, to, subject, text);
+        await smtpSendOne(acct, to, subject, text, { trace });
       } catch (e) {
         // 账号级失败顺延下一个；失败原因落日志（否则 waitUntil 静默无从排查）
-        console.error(`[email] ${t0('email.acctSendFailed', { account: `${acct.user}@${acct.host}:${acct.port}`, err: e instanceof Error ? e.message : String(e) })}`);
+        const err = e instanceof Error ? e.message : String(e);
+        attempts.push({ account: labelOf(acct), ok: false, stage: trace.stage, error: err });
+        console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(acct), err })}`);
         if (limited) {
           // 没发出去就归还名额（服务商拒绝不算消耗额度）
           try {
@@ -241,9 +313,12 @@ class SmtpPoolProvider implements EmailProvider {
       }
       // DATA 后的 250 已确认投递：名额保留，且此后任何失败都不得顺延下一个账号，
       // 否则同一封信会被第二台重发一次（对方收到两封）。
+      attempts.push({ account: labelOf(acct), ok: true });
+      await recordMailReport(this.db, { ok: true, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
       return true;
     }
     if (overLimit === n) console.error(`[email] ${t0('email.allOverLimit', { n })}`);
+    await recordMailReport(this.db, { ok: false, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
     return false;
   }
 }
@@ -353,24 +428,38 @@ function buildMessage(from: string, to: string, subject: string, text: string): 
  * 关键：`DATA` 已被服务端以 250 收下 => 投递完成。此后的 QUIT 只是礼貌收尾，
  * 服务端可能直接断链或干脆不回 221；把它当成失败会触发 failover，导致**同一封信被第二个账号重发**。
  */
-async function smtpSendOne(acct: SmtpAccount, to: string, subject: string, text: string): Promise<void> {
+async function smtpSendOne(
+  acct: SmtpAccount,
+  to: string,
+  subject: string,
+  text: string,
+  opts: { trace?: { stage: string }; sessionTimeout?: number } = {},
+): Promise<void> {
   const mode = tlsMode(acct.port);
-  const deadline = Date.now() + SMTP_SESSION_TIMEOUT;
+  const deadline = Date.now() + (opts.sessionTimeout ?? SMTP_SESSION_TIMEOUT);
+  /** 记录失败发生在哪一步（trace 由调用方持有，抛错后仍可读；诊断「收不到验证码」必需） */
+  const at = (stage: string): void => {
+    if (opts.trace) opts.trace.stage = stage;
+  };
   let socket = connect({ hostname: acct.host, port: acct.port }, { secureTransport: mode });
   let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   try {
+    at('connect');
     writer = socket.writable.getWriter();
     reader = socket.readable.getReader();
 
+    at('greeting');
     await expectReply(reader, '220', { deadline }); // 问候
 
+    at('ehlo');
     const ehlo = `EHLO ${acct.from.split('@')[1] ?? 'localhost'}`;
     await writeLine(writer, ehlo);
     let caps = await expectReply(reader, '250', { deadline });
     if (mode === 'starttls') {
       // RFC 3207：必须先显式发送 STARTTLS 并等待 220，才能做 TLS 握手。
       // 直接调用 startTls() 会让服务端在等待明文命令时收到 ClientHello，587 端口全部发信失败。
+      at('starttls');
       await writeLine(writer, 'STARTTLS');
       await expectReply(reader, '220', { deadline });
       // startTls 要求释放流锁后调用；升级后流重新获取
@@ -385,6 +474,7 @@ async function smtpSendOne(acct: SmtpAccount, to: string, subject: string, text:
 
     // 认证机制按 EHLO 能力选：只支持 AUTH PLAIN 的服务商（Exchange/部分自建）不认 AUTH LOGIN，
     // 此前一律 LOGIN 会导致这类账号 504 全败。未通告 AUTH（部分服务商在 TLS 前隐藏）时按 LOGIN 试。
+    at('auth');
     if (authMechanisms(caps).includes('PLAIN') && !authMechanisms(caps).includes('LOGIN')) {
       await writeLine(writer, `AUTH PLAIN ${b64(`\0${acct.user}\0${acct.pass}`)}`);
       await expectReply(reader, '235', { deadline });
@@ -397,15 +487,20 @@ async function smtpSendOne(acct: SmtpAccount, to: string, subject: string, text:
       await expectReply(reader, '235', { deadline });
     }
 
+    at('mailfrom');
     await writeLine(writer, `MAIL FROM:<${acct.from}>`);
     await expectReply(reader, '250', { deadline });
+    at('rcpt');
     await writeLine(writer, `RCPT TO:<${to}>`);
     await expectReply(reader, '250', { alt: '251', deadline }); // 251 = 非本地用户将转发（合法收件）
+    at('data');
     await writeLine(writer, 'DATA');
     await expectReply(reader, '354', { deadline });
+    at('body');
     await writer.write(buildMessage(acct.from, to, subject, text));
     await writeLine(writer, '.');
     await expectReply(reader, '250', { deadline }); // 到这里已确认投递成功
+    at('ok');
 
     // 收尾尽力而为：不参与成败判定
     try {
@@ -432,4 +527,80 @@ async function smtpSendOne(acct: SmtpAccount, to: string, subject: string, text:
       // 已关闭则忽略
     }
   }
+}
+
+/**
+ * 后台「测试邮箱」：按**已保存**的池逐个账号实发一封测试信，同步返回每个账号的失败阶段与 SMTP 原文。
+ *
+ * 与正式发信（SmtpPoolProvider.send）的差异只有三点，都是为了诊断：
+ *  - 同步执行（不用 waitUntil），错误能直接回给管理员，而不是只落日志；
+ *  - 不走每日限额（额度闸门会掩盖凭证问题），也不消耗计数；
+ *  - 单账号会话超时压到 20s，多账号时管理员不必等满 60s×N。
+ * 顺序固定为池顺序（非轮询），同一个池反复测试的结果可比对。
+ */
+export async function sendTestMail(
+  env: Env,
+  db: D1b,
+  cache: Cache,
+  to: string,
+  opts: { site?: string; maxAccounts?: number } = {},
+): Promise<MailReport> {
+  const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
+  const rawPool = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
+  const passes = Array.isArray(sec.passes) ? sec.passes : [];
+  const site = str(opts.site) || 'SMTP';
+  const maxAccounts = Math.max(1, Math.floor(opts.maxAccounts ?? 3));
+  const attempts: MailAttempt[] = [];
+
+  for (const [i, r] of rawPool.entries()) {
+    if (attempts.length >= maxAccounts) break;
+    const acct: SmtpAccount = {
+      from: str(r?.from),
+      host: str(r?.host),
+      port: Math.floor(Number(r?.port ?? 0)),
+      user: str(r?.user),
+      pass: str(passes[i]),
+      dailyLimit: Math.max(0, Math.floor(Number(r?.dailyLimit ?? 0)) || 0),
+      hasPass: str(passes[i]) !== '',
+    };
+    // 缺字段的行在正式发信里会被 readPool 静默剔除（表现为「服务商一个都没连，信凭空消失」），
+    // 测试时必须显式报出来，否则管理员只会看到「测试不通过」而不知哪一行坏了。
+    const missing = [!acct.from && 'from', !acct.host && 'host', !(acct.port > 0) && 'port', !acct.user && 'user', !acct.pass && 'pass']
+      .filter(Boolean)
+      .join('/');
+    if (missing) {
+      attempts.push({
+        account: labelOf(acct),
+        ok: false,
+        stage: 'config',
+        error: t0('email.acctIncomplete', { fields: missing }),
+      });
+      continue;
+    }
+    const trace: { stage: string } = { stage: 'connect' };
+    try {
+      await smtpSendOne(
+        acct,
+        to,
+        t0('email.testSubject', { site }),
+        t0('email.testBody', { account: labelOf(acct), host: acct.host, port: acct.port }),
+        { trace, sessionTimeout: 20_000 },
+      );
+      attempts.push({ account: labelOf(acct), ok: true });
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(acct), err })}`);
+      attempts.push({ account: labelOf(acct), ok: false, stage: trace.stage, error: err });
+    }
+  }
+
+  const report: MailReport = {
+    ok: attempts.some((a) => a.ok),
+    to,
+    at: Math.floor(Date.now() / 1000),
+    test: true,
+    attempts,
+  };
+  await recordMailReport(db, report);
+  return report;
 }
