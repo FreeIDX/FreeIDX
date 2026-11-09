@@ -157,7 +157,10 @@ After the first deployment runs green, `freeidx-api` will appear in the Workers 
 Generate a random value locally and paste one at a time:
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 #### Step 5: Stay Up to Date

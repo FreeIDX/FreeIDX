@@ -22,22 +22,39 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 请求超时：与「服务端返回错误」分开建类型，避免两者共用「系统繁忙」而无法区分原因
+ * （超时是链路/延迟问题，服务端错误是业务/数据问题，排查方向完全不同）。
+ * code 仍沿用 SYSTEM_ERROR：既有按 code 分支的 UI 行为不变。
+ */
+export class ApiTimeoutError extends ApiError {
+  constructor() {
+    super(Code.SYSTEM_ERROR, uiT('err_request_timeout'));
+    this.name = 'ApiTimeoutError';
+  }
+}
+
 /* ---------------- 请求超时（稳定性项 D2） ----------------
  * 浏览器 fetch 默认没有超时：边缘节点抖动或 D1 慢查询时请求会一直挂着，
  * 表现为「转圈不止」，且 React Query 的 retry 永远等不到一次失败。
- * 15s 覆盖冷启动 + 慢查询的尾部；上传给更宽的窗口（大文件传一半被误杀比失败更糟）。 */
-const API_TIMEOUT_MS = 15_000;
+ * 20s 覆盖冷启动 + 慢查询的尾部（首屏 bootstrap 是整站壳的硬依赖，15s 在弱网/冷启动下偏紧）；
+ * 上传给更宽的窗口（大文件传一半被误杀比失败更糟）。 */
+const API_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 60_000;
 const DOWNLOAD_TIMEOUT_MS = 60_000;
 
 async function request(url: string, init?: RequestInit, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  // 只用「是否由本超时定时器中止」判定超时：页面卸载等原因的 abort 不该被误报成超时
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctl.abort();
+  }, timeoutMs);
   try {
     return await fetch(url, { ...init, signal: ctl.signal });
   } catch (e) {
-    // 超时归一成信封错误：上层（apiErrorMessage / React Query 的 error 态）按 ApiError 处理即可
-    if (ctl.signal.aborted) throw new ApiError(Code.SYSTEM_ERROR, uiT('err_system_busy'));
+    if (timedOut) throw new ApiTimeoutError();
     throw e;
   } finally {
     clearTimeout(timer);

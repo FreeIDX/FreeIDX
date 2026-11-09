@@ -155,7 +155,10 @@ GitHub 저장소의 **Actions** 페이지에서:
 로컬에서 무작위 값을 생성해 하나씩 붙여넣습니다:
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 ### 방법 2: 로컬 개발

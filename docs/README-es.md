@@ -155,7 +155,10 @@ Una vez que el primer despliegue termine en verde, `freeidx-api` aparecerá en l
 Genera un valor aleatorio localmente y pega uno cada vez:
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 ### Método 2: Desarrollo local

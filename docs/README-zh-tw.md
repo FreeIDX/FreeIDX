@@ -155,7 +155,10 @@
 隨機值在本機產生一條貼一條：
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 ### 方法 2：本機開發

@@ -86,6 +86,9 @@ export const useAuth = create<AuthState>((set, get) => ({
         const d = await bootstrap();
         set({ loaded: true, setting: d.setting, forumlist: d.forumlist, grouplist: d.grouplist, me: d.me, runtime: d.runtime, ext: d.ext, error: null });
       } catch (e) {
+        // 原始错误只在这里能看到：超时（ApiTimeoutError）、断网（TypeError）与服务端 5xx
+        // 都可能是同一条「系统繁忙」之外的现场信息，控制台留痕便于用户/站长自查
+        console.error('[auth] bootstrap failed:', e);
         set({ error: e instanceof Error ? e.message : String(e) });
       } finally {
         inflight = null;

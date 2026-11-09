@@ -26,7 +26,7 @@ import {
 import { Avatar } from '../../components/Avatar';
 import { Icon, type IconName } from '../../components/icons';
 import { InsertCode, useInsertCodes } from '../../components/InsertCode';
-import { cx } from '../../components/ui';
+import { Button, cx } from '../../components/ui';
 import { useApplyTheme, useLight, useThemeMode } from '../../store/theme';
 import { ThemeSlot } from '../../lib/theme/slots';
 
@@ -392,11 +392,46 @@ export function Layout({ children }: { children?: ReactNode }) {
   useApplyTheme(light);
   const [drawer, setDrawer] = useState(false);
   const [kw, setKw] = useState('');
+  /** bootstrap 失败后的自动重试计数与手动重试的进行中标记（见下方 effect / retryBootstrap） */
+  const [autoTries, setAutoTries] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const openAuth = useAuthModal((s) => s.openAuth);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * 首屏 bootstrap 失败自愈：3s / 8s 各自动重试一次。
+   * 冷启动、边缘抖动、弱网是「首屏拉不到配置」的常见瞬时原因，此时让用户干等毫无意义；
+   * 两次仍失败就停手（免费层请求额度有限，无限重试比报错更糟），改由用户点「重试」。
+   * error 归 null（成功）时计数清零，后续再失败仍能获得两次自动机会。
+   */
+  useEffect(() => {
+    if (!error) {
+      setAutoTries(0);
+      return;
+    }
+    if (autoTries >= 2) return;
+    const timer = setTimeout(
+      () => {
+        setAutoTries((n) => n + 1);
+        void load(true);
+      },
+      autoTries === 0 ? 3000 : 8000,
+    );
+    return () => clearTimeout(timer);
+  }, [error, autoTries, load]);
+
+  /** 手动重试：用户显式操作，不计入自动重试次数上限 */
+  const retryBootstrap = async () => {
+    setRetrying(true);
+    try {
+      await load(true);
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   useEffect(() => {
     setDrawer(false);
@@ -795,9 +830,21 @@ export function Layout({ children }: { children?: ReactNode }) {
         </>
       </ThemeSlot>
 
+      {/* bootstrap 失败横幅：附「重试」入口——提示语让用户稍后再试，就必须给得出这个动作 */}
       {error && (
-        <div className="mx-auto w-full max-w-[1280px] px-4 pt-[100px] text-sm text-destructive lg:pt-[83px]">
-          {error}
+        <div className="mx-auto w-full max-w-[1280px] px-4 pt-[100px] lg:pt-[83px]">
+          <div className="flex flex-wrap items-center gap-3 rounded-[4px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <span className="min-w-0 flex-1">{error}</span>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={retrying}
+              loadingText={t('loading')}
+              onClick={() => void retryBootstrap()}
+            >
+              {t('retry_btn')}
+            </Button>
+          </div>
         </div>
       )}
 

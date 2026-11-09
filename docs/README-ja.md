@@ -155,7 +155,10 @@ GitHub リポジトリの **Actions** ページで以下を行います：
 ローカルでランダムな値を生成し、1 つずつ貼り付けてください：
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 ### 方法 2: ローカル開発

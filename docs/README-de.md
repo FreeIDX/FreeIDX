@@ -155,7 +155,10 @@ Nachdem das erste Deployment grün durchgelaufen ist, erscheint `freeidx-api` in
 Lokal einen Zufallswert generieren und jeweils einen einfügen:
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 ### Methode 2: Lokale Entwicklung

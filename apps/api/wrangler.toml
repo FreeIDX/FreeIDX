@@ -48,7 +48,9 @@ SITE_URL = ""
 #   （邮件无仓库密钥：发信走 cloudflare:sockets 直连 SMTP 账号池，账号在后台「邮件设置」配置，
 #     落 ext:email:config / ext:email:secret；README 旧文档中的 EMAIL_API_KEY 已废弃）
 #   wrangler secret put TURNSTILE_SECRET
-#   wrangler secret put SECRETS_MASTER_KEY  # 插件密钥 AES-GCM master key（§15.5）
+#   wrangler secret put SECRETS_MASTER_KEY  # 邮箱/插件私密字段 AES-GCM master key（§15.5）
+#   该值必须是 base64 编码的 32 字节（node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"），
+#   填 hex 会在保存密码时报「SECRETS_MASTER_KEY 需为 base64 编码的 32 字节密钥」。
 
 [observability]
 enabled = true

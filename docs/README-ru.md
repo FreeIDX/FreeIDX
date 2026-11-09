@@ -155,7 +155,10 @@ User visits: forum.example.com
 Сгенерируйте случайное значение локально и вставляйте по одному:
 
 ```bash
+# JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# SECRETS_MASTER_KEY: MUST be base64 of exactly 32 bytes (hex is rejected)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 ### Способ 2: локальная разработка
