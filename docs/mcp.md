@@ -111,8 +111,8 @@ Authorization: Bearer fi_mcp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 | 工具 | 用途 |
 |---|---|
-| `forum_get` | 读取版块简介、公告、SEO 标题、SEO 关键词及其多语言映射 |
-| `forum_update` | 修改上述字段（merge 语义：只写显式传入的键；空串/空对象 = 清空，展示回退主字段） |
+| `forum_get` | 读取版块名称、简介、公告、SEO 标题、SEO 关键词及其多语言映射 |
+| `forum_update` | 修改上述字段（merge 语义：只写显式传入的键；空串/空对象 = 清空译文，主名称不允许清空） |
 
 - 需同时满足：站点开关 `forumWriteOn=1` + `enabledScopes` 含 `admin` + 令牌含 `admin` + 持有者 `gid=1`。
 - 多语言键只接受站点支持的语言（`AVAILABLE_LOCALES`），非法语言静默丢弃；文本归一化与后台表单同一实现（`normNameI18n` / `stringifyNameI18n`）。

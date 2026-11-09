@@ -1,0 +1,370 @@
+{
+  "_note": "版块 10 语种文案载荷（来源：docs/forum-sections.md + docs/forum-sections-i18n.md）。name/brief/seoTitle 主字段为英文；*I18n 只含非英文语种（en-us 由主字段承担，未命中自动回退）。seoKeywords 取自文档「收录范围」列，文档未单独定义关键词表。",
+  "_apply": "通过 MCP forum_update 逐条写入；matchName 仅用于把线上版块与本文档对齐（线上主名称以英文为准时可直接匹配）。",
+  "forums": [
+    {
+      "slug": "free-ai-tools",
+      "matchName": "Free AI Tools",
+      "name": "Free AI Tools",
+      "nameI18n": {
+        "zh-cn": "智能工具",
+        "zh-tw": "智能工具",
+        "ru-ru": "ИИ-инструменты",
+        "th-th": "เครื่องมือ AI",
+        "de-de": "KI-Tools",
+        "ja-jp": "AI ツール",
+        "ko-kr": "AI 도구",
+        "es-es": "Herramientas IA",
+        "fr-fr": "Outils IA"
+      },
+      "brief": "Discover free AI tools, models, and API credits. Share usage limits, access requirements, and hands-on experiences.",
+      "briefI18n": {
+        "zh-cn": "发现免费 AI 工具、模型及 API 额度；分享使用限制、领取条件和亲测体验。",
+        "zh-tw": "發掘免費 AI 工具、模型與 API 額度；分享使用限制、領取條件與實測心得。",
+        "ru-ru": "Находите бесплатные ИИ-инструменты, модели и кредиты API; делитесь лимитами, условиями доступа и личным опытом.",
+        "th-th": "รวมเครื่องมือ AI โมเดล และเครดิต API ฟรี พร้อมแชร์ขีดจำกัด เงื่อนไขการใช้งาน และรีวิวจากผู้ใช้จริง",
+        "de-de": "Entdecke kostenlose KI-Tools, Modelle und API-Guthaben. Teile Nutzungslimits, Zugangsvoraussetzungen und eigene Erfahrungen.",
+        "ja-jp": "無料で使える AI ツール・モデル・API クレジットを探し、利用制限や登録条件、実際に使った感想を共有しましょう。",
+        "ko-kr": "무료 AI 도구·모델·API 크레딧을 찾아보고 사용 제한, 가입 조건, 실제 사용 후기를 공유하세요.",
+        "es-es": "Descubre herramientas de IA, modelos y créditos de API gratuitos. Comparte límites de uso, requisitos de acceso y experiencias reales.",
+        "fr-fr": "Découvrez des outils d'IA, des modèles et des crédits d'API gratuits. Partagez les limites d'usage, les conditions d'accès et vos retours d'expérience."
+      },
+      "seoTitle": "Free AI Tools",
+      "seoTitleI18n": {
+        "zh-cn": "智能工具",
+        "zh-tw": "智能工具",
+        "ru-ru": "Бесплатные ИИ-инструменты",
+        "th-th": "เครื่องมือ AI ฟรี",
+        "de-de": "Kostenlose KI-Tools",
+        "ja-jp": "無料 AI ツール",
+        "ko-kr": "무료 AI 도구",
+        "es-es": "Herramientas de IA gratuitas",
+        "fr-fr": "Outils d'IA gratuits"
+      },
+      "seoKeywords": "AI websites & apps, model services, AI APIs, free credits",
+      "seoKeywordsI18n": {
+        "zh-cn": "AI 网站与应用、模型服务、AI API、免费额度",
+        "zh-tw": "AI 網站與 App、模型服務、AI API、免費額度",
+        "ru-ru": "ИИ-сайты и приложения, модели, ИИ-API, бесплатные лимиты",
+        "th-th": "เว็บและแอป AI, บริการโมเดล, AI API, เครดิตฟรี",
+        "de-de": "KI-Websites & Apps, Modell-Anbieter, KI-APIs, Gratis-Kontingente",
+        "ja-jp": "AI サイト・アプリ、モデル提供サービス、AI API、無料枠",
+        "ko-kr": "AI 사이트·앱, 모델 서비스, AI API, 무료 크레딧",
+        "es-es": "Webs y apps de IA, servicios de modelos, API de IA, créditos gratis",
+        "fr-fr": "Sites et applis d'IA, services de modèles, API d'IA, crédits gratuits"
+      }
+    },
+    {
+      "slug": "developer-free-tiers",
+      "matchName": "Developer Free Tiers",
+      "name": "Developer Free Tiers",
+      "nameI18n": {
+        "zh-cn": "开发套餐",
+        "zh-tw": "開發套餐",
+        "ru-ru": "Бесплатные тарифы",
+        "th-th": "แพ็กเกจฟรี",
+        "de-de": "Gratis-Tarife",
+        "ja-jp": "無料枠",
+        "ko-kr": "무료 요금제",
+        "es-es": "Planes gratis",
+        "fr-fr": "Offres gratuites"
+      },
+      "brief": "Find free tiers for APIs, hosting, servers, databases, domains, and developer services. Compare limits and billing conditions before you sign up.",
+      "briefI18n": {
+        "zh-cn": "查找 API、托管、服务器、数据库、域名及开发者服务的免费额度；注册前对比限制与计费条件。",
+        "zh-tw": "比較 API、託管、伺服器、資料庫、網域與開發者服務的免費方案；註冊前先看清額度與計費條件。",
+        "ru-ru": "Подборка бесплатных тарифов API, хостинга, серверов, баз данных, доменов и сервисов для разработчиков. Сравнивайте лимиты и условия тарификации до регистрации.",
+        "th-th": "รวมแพ็กเกจฟรีของ API, โฮสติ้ง, เซิร์ฟเวอร์, ฐานข้อมูล, โดเมน และบริการสำหรับนักพัฒนา พร้อมเปรียบเทียบโควต้าและเงื่อนไขการคิดเงินก่อนสมัคร",
+        "de-de": "Kostenlose Tarife für APIs, Hosting, Server, Datenbanken, Domains und Entwicklerdienste im Vergleich: Limits und Abrechnungsbedingungen vor der Anmeldung prüfen.",
+        "ja-jp": "API・ホスティング・サーバー・データベース・ドメインなどの無料枠を比較。登録前に上限と課金条件を確認できます。",
+        "ko-kr": "API·호스팅·서버·데이터베이스·도메인 등 개발자 서비스의 무료 요금제를 비교하고 가입 전 제한과 과금 조건을 확인하세요.",
+        "es-es": "Compara planes gratuitos de API, alojamiento, servidores, bases de datos, dominios y servicios para desarrolladores; revisa límites y condiciones de facturación antes de registrarte.",
+        "fr-fr": "Comparez les offres gratuites d'API, d'hébergement, de serveurs, de bases de données, de domaines et de services pour développeurs ; vérifiez les limites et la facturation avant de vous inscrire."
+      },
+      "seoTitle": "Developer Free Tiers",
+      "seoTitleI18n": {
+        "zh-cn": "开发套餐",
+        "zh-tw": "開發套餐",
+        "ru-ru": "Бесплатные тарифы для разработчиков",
+        "th-th": "แพ็กเกจฟรีสำหรับนักพัฒนา",
+        "de-de": "Kostenlose Entwickler-Tarife",
+        "ja-jp": "開発者向け無料枠",
+        "ko-kr": "개발자 무료 요금제",
+        "es-es": "Planes gratuitos para desarrolladores",
+        "fr-fr": "Offres gratuites pour développeurs"
+      },
+      "seoKeywords": "Cloud services, servers, deployment platforms, databases, APIs, free domains, SSL, dev tools",
+      "seoKeywordsI18n": {
+        "zh-cn": "云服务、服务器、部署平台、数据库、API、免费域名、SSL、开发工具",
+        "zh-tw": "雲端服務、伺服器、部署平台、資料庫、API、免費網域、SSL、開發工具",
+        "ru-ru": "Облачные сервисы, серверы, платформы деплоя, базы данных, API, бесплатные домены, SSL, инструменты разработчика",
+        "th-th": "บริการคลาวด์, เซิร์ฟเวอร์, แพลตฟอร์ม Deploy, ฐานข้อมูล, API, โดเมนฟรี, SSL, เครื่องมือพัฒนา",
+        "de-de": "Cloud-Dienste, Server, Deployment-Plattformen, Datenbanken, APIs, Gratis-Domains, SSL, Entwickler-Tools",
+        "ja-jp": "クラウドサービス、サーバー、デプロイ基盤、データベース、API、無料ドメイン、SSL、開発ツール",
+        "ko-kr": "클라우드 서비스, 서버, 배포 플랫폼, 데이터베이스, API, 무료 도메인, SSL, 개발 도구",
+        "es-es": "Servicios cloud, servidores, plataformas de despliegue, bases de datos, API, dominios gratis, SSL, herramientas de desarrollo",
+        "fr-fr": "Services cloud, serveurs, plateformes de déploiement, bases de données, API, domaines gratuits, SSL, outils de développement"
+      }
+    },
+    {
+      "slug": "open-source-alternatives",
+      "matchName": "Open Source Alternatives",
+      "name": "Open Source Alternatives",
+      "nameI18n": {
+        "zh-cn": "开源替代",
+        "zh-tw": "開源替代",
+        "ru-ru": "OSS-альтернативы",
+        "th-th": "ทางเลือก OSS",
+        "de-de": "OSS-Alternativen",
+        "ja-jp": "OSS 代替",
+        "ko-kr": "오픈소스 대안",
+        "es-es": "Alternativas OSS",
+        "fr-fr": "Alternatives OSS"
+      },
+      "brief": "Explore open-source alternatives to paid software. Discuss features, licenses, setup, and self-hosting.",
+      "briefI18n": {
+        "zh-cn": "寻找付费软件的开源替代品；讨论功能、许可证、安装与自托管。",
+        "zh-tw": "尋找付費軟體的開源替代方案，討論功能、授權、安裝與自架設。",
+        "ru-ru": "Альтернативы платному ПО с открытым кодом: обсуждаем функции, лицензии, установку и развёртывание на своём сервере.",
+        "th-th": "รวมซอฟต์แวร์โอเพนซอร์สทดแทนของเสียเงิน พร้อมพูดคุยเรื่องฟีเจอร์ ไลเซนส์ การติดตั้ง และการโฮสต์เอง",
+        "de-de": "Open-Source-Alternativen zu kostenpflichtiger Software: Funktionen, Lizenzen, Installation und Self-Hosting im Vergleich.",
+        "ja-jp": "有料ソフトの代わりになる OSS を探し、機能・ライセンス・導入手順・セルフホスティングを議論します。",
+        "ko-kr": "유료 소프트웨어를 대체할 오픈소스를 찾고 기능, 라이선스, 설치, 셀프 호스팅을 논의하세요.",
+        "es-es": "Explora alternativas de código abierto al software de pago: funciones, licencias, instalación y autoalojamiento.",
+        "fr-fr": "Explorez les alternatives open source aux logiciels payants : fonctionnalités, licences, installation et auto-hébergement."
+      },
+      "seoTitle": "Open Source Alternatives",
+      "seoTitleI18n": {
+        "zh-cn": "开源替代",
+        "zh-tw": "開源替代",
+        "ru-ru": "Альтернативы с открытым кодом",
+        "th-th": "ทางเลือกโอเพนซอร์ส",
+        "de-de": "Open-Source-Alternativen",
+        "ja-jp": "オープンソース代替",
+        "ko-kr": "오픈소스 대안",
+        "es-es": "Alternativas de código abierto",
+        "fr-fr": "Alternatives open source"
+      },
+      "seoKeywords": "Open-source software, paid-product alternatives, self-hosting",
+      "seoKeywordsI18n": {
+        "zh-cn": "开源软件、付费产品替代、自托管方案",
+        "zh-tw": "開源軟體、付費產品替代、自架設方案",
+        "ru-ru": "ПО с открытым кодом, замена платным продуктам, собственный хостинг",
+        "th-th": "ซอฟต์แวร์โอเพนซอร์ส, ทางเลือกแทนผลิตภัณฑ์เสียเงิน, การโฮสต์เอง",
+        "de-de": "Open-Source-Software, Alternativen zu Kaufprodukten, Self-Hosting",
+        "ja-jp": "OSS、有料ソフトの代替、セルフホスティング",
+        "ko-kr": "오픈소스 소프트웨어, 유료 제품 대안, 셀프 호스팅",
+        "es-es": "Software de código abierto, alternativas a productos de pago, autoalojamiento",
+        "fr-fr": "Logiciels open source, alternatives aux produits payants, auto-hébergement"
+      }
+    },
+    {
+      "slug": "free-games-software",
+      "matchName": "Free Games & Software",
+      "name": "Free Games & Software",
+      "nameI18n": {
+        "zh-cn": "游戏软件",
+        "zh-tw": "遊戲軟體",
+        "ru-ru": "Игры и ПО",
+        "th-th": "เกม·ซอฟต์แวร์",
+        "de-de": "Spiele & Software",
+        "ja-jp": "ゲーム・ソフト",
+        "ko-kr": "게임·소프트",
+        "es-es": "Juegos y software",
+        "fr-fr": "Jeux & logiciels"
+      },
+      "brief": "Share legitimate free games, software giveaways, and limited-time offers. Include claim deadlines and regional restrictions.",
+      "briefI18n": {
+        "zh-cn": "分享正版免费游戏、软件赠送及限时活动；注明领取截止时间和地区限制。",
+        "zh-tw": "分享正版免費遊戲、軟體贈送與限時優惠，並註明領取期限與地區限制。",
+        "ru-ru": "Легальные бесплатные игры, раздачи ПО и временные акции. Обязательно указывайте срок получения и региональные ограничения.",
+        "th-th": "แชร์เกมฟรีถูกกฎหมาย ซอฟต์แวร์แจกฟรี และโปรโมชันจำกัดเวลา พร้อมระบุวันหมดเขตและข้อจำกัดภูมิภาค",
+        "de-de": "Legale Gratis-Spiele, Software-Giveaways und zeitlich begrenzte Aktionen – immer mit Ablaufdatum und regionalen Einschränkungen.",
+        "ja-jp": "正規の無料ゲーム、ソフト配布、期間限定セールを共有。受取期限と地域制限も明記してください。",
+        "ko-kr": "정식 무료 게임, 소프트웨어 배포, 기간 한정 혜택을 공유하고 수령 기한과 지역 제한을 꼭 적어주세요.",
+        "es-es": "Comparte juegos legales gratuitos, regalos de software y ofertas por tiempo limitado, indicando fecha límite y restricciones por país.",
+        "fr-fr": "Partagez des jeux gratuits légitimes, des logiciels offerts et des offres limitées, en précisant la date limite et les restrictions régionales."
+      },
+      "seoTitle": "Free Games & Software",
+      "seoTitleI18n": {
+        "zh-cn": "游戏软件",
+        "zh-tw": "遊戲軟體",
+        "ru-ru": "Бесплатные игры и ПО",
+        "th-th": "เกมและซอฟต์แวร์ฟรี",
+        "de-de": "Kostenlose Spiele & Software",
+        "ja-jp": "無料ゲーム・ソフトウェア",
+        "ko-kr": "무료 게임·소프트웨어",
+        "es-es": "Juegos y software gratuitos",
+        "fr-fr": "Jeux et logiciels gratuits"
+      },
+      "seoKeywords": "Always-free games, game giveaways, software giveaways",
+      "seoKeywordsI18n": {
+        "zh-cn": "长期免费游戏、游戏限免、软件赠送",
+        "zh-tw": "永久免費遊戲、遊戲限免、軟體贈送",
+        "ru-ru": "Игры бесплатные навсегда, временные раздачи игр, раздачи ПО",
+        "th-th": "เกมฟรีถาวร, เกมแจกฟรี, ซอฟต์แวร์แจกฟรี",
+        "de-de": "Dauerhaft kostenlose Spiele, Gratis-Aktionen, Software-Giveaways",
+        "ja-jp": "永続無料ゲーム、期間限定配布、ソフトウェア配布",
+        "ko-kr": "상시 무료 게임, 게임 무료 배포, 소프트웨어 무료 배포",
+        "es-es": "Juegos gratuitos permanentes, regalos de juegos, regalos de software",
+        "fr-fr": "Jeux gratuits permanents, jeux offerts, logiciels offerts"
+      }
+    },
+    {
+      "slug": "free-courses-resources",
+      "matchName": "Free Courses & Resources",
+      "name": "Free Courses & Resources",
+      "nameI18n": {
+        "zh-cn": "课程资源",
+        "zh-tw": "課程資源",
+        "ru-ru": "Курсы и материалы",
+        "th-th": "คอร์ส·สื่อเรียน",
+        "de-de": "Kurse & Material",
+        "ja-jp": "講座・教材",
+        "ko-kr": "강의·자료",
+        "es-es": "Cursos y recursos",
+        "fr-fr": "Cours & ressources"
+      },
+      "brief": "Find free courses, ebooks, fonts, templates, and learning materials. Check eligibility and usage rights before using them.",
+      "briefI18n": {
+        "zh-cn": "发现免费课程、电子书、字体、模板及学习资料；使用前确认领取资格和授权。",
+        "zh-tw": "發掘免費課程、電子書、字型、範本與學習教材；使用前先確認資格與授權範圍。",
+        "ru-ru": "Бесплатные курсы, электронные книги, шрифты, шаблоны и учебные материалы. Проверяйте право доступа и лицензию перед использованием.",
+        "th-th": "รวมคอร์สฟรี หนังสืออิเล็กทรอนิกส์ ฟอนต์ เทมเพลต และสื่อการเรียน พร้อมตรวจสอบสิทธิ์และเงื่อนไขการใช้งานก่อนนำไปใช้",
+        "de-de": "Kostenlose Online-Kurse, E-Books, Schriften, Vorlagen und Lernmaterialien – vor der Nutzung Zugangsberechtigung und Lizenz prüfen.",
+        "ja-jp": "無料講座、電子書籍、フォント、テンプレート、教材を探せます。利用前に受講条件とライセンスを確認してください。",
+        "ko-kr": "무료 강의, 전자책, 폰트, 템플릿, 학습 자료를 찾아보고 사용 전 수강 자격과 저작권을 확인하세요.",
+        "es-es": "Encuentra cursos, libros electrónicos, tipografías, plantillas y materiales de estudio gratuitos; revisa los requisitos y la licencia antes de usarlos.",
+        "fr-fr": "Trouvez des cours, e-books, polices, modèles et supports pédagogiques gratuits ; vérifiez l'éligibilité et les droits d'usage avant de les utiliser."
+      },
+      "seoTitle": "Free Courses & Resources",
+      "seoTitleI18n": {
+        "zh-cn": "课程资源",
+        "zh-tw": "課程資源",
+        "ru-ru": "Бесплатные курсы и материалы",
+        "th-th": "คอร์สและสื่อการเรียนรู้ฟรี",
+        "de-de": "Kostenlose Kurse & Lernmaterialien",
+        "ja-jp": "無料講座・学習教材",
+        "ko-kr": "무료 강의·학습 자료",
+        "es-es": "Cursos y recursos gratuitos",
+        "fr-fr": "Cours et ressources gratuits"
+      },
+      "seoKeywords": "Courses, ebooks, learning materials, fonts & templates",
+      "seoKeywordsI18n": {
+        "zh-cn": "课程、电子书、学习资料、字体与模板",
+        "zh-tw": "課程、電子書、學習教材、字型與範本",
+        "ru-ru": "Курсы, электронные книги, учебные материалы, шрифты и шаблоны",
+        "th-th": "คอร์สเรียน, e-book, สื่อการเรียน, ฟอนต์และเทมเพลต",
+        "de-de": "Kurse, E-Books, Lernmaterialien, Schriften & Vorlagen",
+        "ja-jp": "講座、電子書籍、学習教材、フォント・テンプレート",
+        "ko-kr": "강의, 전자책, 학습 자료, 폰트·템플릿",
+        "es-es": "Cursos, ebooks, materiales de estudio, tipografías y plantillas",
+        "fr-fr": "Cours, e-books, supports pédagogiques, polices et modèles"
+      }
+    },
+    {
+      "slug": "cloud-storage-shares",
+      "matchName": "Cloud Storage & Shares",
+      "name": "Cloud Storage & Shares",
+      "nameI18n": {
+        "zh-cn": "网盘资源",
+        "zh-tw": "雲端硬碟",
+        "ru-ru": "Облако и ссылки",
+        "th-th": "คลาวด์·แชร์",
+        "de-de": "Cloud-Speicher",
+        "ja-jp": "クラウド共有",
+        "ko-kr": "클라우드 공유",
+        "es-es": "Nube y enlaces",
+        "fr-fr": "Cloud & partages"
+      },
+      "brief": "Find free cloud storage plans and legitimate public shares. Include capacity limits, access codes, expiry dates, and usage rights.",
+      "briefI18n": {
+        "zh-cn": "发现免费网盘空间与合法公开分享资源；注明容量限制、提取码、有效期及使用授权。",
+        "zh-tw": "發掘免費雲端硬碟空間與合法公開分享資源，註明容量上限、提取碼、有效期限與授權。",
+        "ru-ru": "Бесплатные облачные хранилища и легальные публичные ссылки: указывайте объём, код доступа, срок действия и лицензию.",
+        "th-th": "รวมพื้นที่คลาวด์ฟรีและลิงก์แชร์สาธารณะที่ถูกกฎหมาย พร้อมระบุความจุ รหัสเข้าถึง วันหมดอายุ และสิทธิ์การใช้งาน",
+        "de-de": "Kostenlose Cloud-Speicher und legale öffentliche Freigaben – mit Speicherlimit, Zugangscode, Ablaufdatum und Nutzungsrechten.",
+        "ja-jp": "無料のクラウドストレージと適法な公開共有リンクを紹介。容量、パスコード、有効期限、利用権を明記してください。",
+        "ko-kr": "무료 클라우드 저장소와 적법한 공개 공유 링크를 찾고 용량, 접근 코드, 만료일, 이용 권한을 적어주세요.",
+        "es-es": "Encuentra planes de almacenamiento en la nube gratuitos y enlaces públicos legítimos; indica capacidad, código de acceso, caducidad y licencia.",
+        "fr-fr": "Trouvez des offres de stockage cloud gratuites et des partages publics légitimes ; précisez la capacité, le code d'accès, la date d'expiration et les droits d'usage."
+      },
+      "seoTitle": "Cloud Storage & Shares",
+      "seoTitleI18n": {
+        "zh-cn": "网盘资源",
+        "zh-tw": "雲端硬碟",
+        "ru-ru": "Бесплатное облако и публичные ссылки",
+        "th-th": "พื้นที่คลาวด์และลิงก์แชร์ฟรี",
+        "de-de": "Gratis Cloud-Speicher & Freigaben",
+        "ja-jp": "無料クラウドストレージ・共有リンク",
+        "ko-kr": "무료 클라우드 저장소·공유 링크",
+        "es-es": "Almacenamiento en la nube y enlaces gratuitos",
+        "fr-fr": "Stockage cloud et partages gratuits"
+      },
+      "seoKeywords": "Free cloud drives, storage quotas, public shares, resource collections, access codes & expiry dates",
+      "seoKeywordsI18n": {
+        "zh-cn": "免费网盘、云存储额度、公开分享、资源合集、提取码与有效期",
+        "zh-tw": "免費雲端硬碟、儲存額度、公開分享、資源合集、提取碼與期限",
+        "ru-ru": "Бесплатное облако, квоты хранилища, публичные ссылки, подборки, коды доступа и сроки",
+        "th-th": "พื้นที่คลาวด์ฟรี, โควต้าเก็บข้อมูล, ลิงก์แชร์, ชุดรวมทรัพยากร, รหัสและวันหมดอายุ",
+        "de-de": "Gratis-Cloud-Speicher, Speicherkontingente, öffentliche Freigaben, Sammlungen, Codes & Fristen",
+        "ja-jp": "無料クラウドストレージ、容量枠、公開共有、リソース集、パスコードと有効期限",
+        "ko-kr": "무료 클라우드, 저장 용량, 공개 공유, 자료 모음, 접근 코드·만료일",
+        "es-es": "Nube gratuita, cuotas de almacenamiento, enlaces públicos, colecciones, códigos y fechas de caducidad",
+        "fr-fr": "Cloud gratuit, quotas de stockage, partages publics, collections, codes et dates d'expiration"
+      }
+    },
+    {
+      "slug": "ask-the-community",
+      "matchName": "Ask the Community",
+      "name": "Ask the Community",
+      "nameI18n": {
+        "zh-cn": "社区问答",
+        "zh-tw": "社群問答",
+        "ru-ru": "Вопросы и ответы",
+        "th-th": "ถาม–ตอบ",
+        "de-de": "Community-Q&A",
+        "ja-jp": "質問・相談",
+        "ko-kr": "질문·답변",
+        "es-es": "Q&A comunidad",
+        "fr-fr": "Q&A communauté"
+      },
+      "brief": "Ask for free alternatives, share what worked, and report resources that have changed or expired.",
+      "briefI18n": {
+        "zh-cn": "寻找免费替代品、分享成功使用经验，并报告已变化或失效的资源。",
+        "zh-tw": "徵求免費替代方案、分享實測有效的做法，並回報已異動或失效的資源。",
+        "ru-ru": "Ищете бесплатную альтернативу, делитесь рабочими решениями и сообщайте об изменившихся или неработающих ссылках.",
+        "th-th": "ขอคำแนะนำทางเลือกฟรี แชร์วิธีที่ใช้ได้จริง และแจ้งทรัพยากรที่เปลี่ยนแปลงหรือหมดอายุ",
+        "de-de": "Frag nach kostenlosen Alternativen, teile funktionierende Lösungen und melde geänderte oder abgelaufene Ressourcen.",
+        "ja-jp": "無料の代替案を尋ね、うまくいった方法を共有し、変更・期限切れになった情報を報告しましょう。",
+        "ko-kr": "무료 대안을 묻고, 효과 있었던 방법을 공유하며, 변경되거나 만료된 자료를 제보해 주세요.",
+        "es-es": "Pide alternativas gratuitas, comparte lo que te funcionó y avisa de recursos que han cambiado o caducado.",
+        "fr-fr": "Demandez des alternatives gratuites, partagez ce qui a marché et signalez les ressources modifiées ou expirées."
+      },
+      "seoTitle": "Ask the Community",
+      "seoTitleI18n": {
+        "zh-cn": "社区问答",
+        "zh-tw": "社群問答",
+        "ru-ru": "Вопросы сообществу",
+        "th-th": "ถาม–ตอบในชุมชน",
+        "de-de": "Fragen an die Community",
+        "ja-jp": "コミュニティに質問",
+        "ko-kr": "커뮤니티 질문",
+        "es-es": "Pregunta a la comunidad",
+        "fr-fr": "Questions à la communauté"
+      },
+      "seoKeywords": "Resource requests, usage questions, first-hand feedback, corrections",
+      "seoKeywordsI18n": {
+        "zh-cn": "求资源、使用问题、亲测反馈、纠错",
+        "zh-tw": "求資源、使用問題、實測回饋、勘誤",
+        "ru-ru": "Поиск ресурсов, вопросы по использованию, личный опыт, исправления",
+        "th-th": "ขอหาทรัพยากร, ปัญหาการใช้งาน, รีวิวจากผู้ใช้, แจ้งแก้ไข",
+        "de-de": "Ressourcen gesucht, Nutzungsfragen, Erfahrungsberichte, Korrekturen",
+        "ja-jp": "情報求む、使い方の質問、実体験の共有、訂正報告",
+        "ko-kr": "자료 요청, 사용 문의, 실사용 후기, 정보 수정",
+        "es-es": "Peticiones de recursos, dudas de uso, experiencias reales, correcciones",
+        "fr-fr": "Demandes de ressources, questions d'usage, retours d'expérience, corrections"
+      }
+    }
+  ]
+}
