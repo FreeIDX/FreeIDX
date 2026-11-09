@@ -585,6 +585,7 @@
   "admin_d1_queries": "Consultas D1",
   "admin_default_icon": "Icono por defecto",
   "admin_delete_after_submit": "Los borrados surten efecto al enviar",
+  "admin_email_connect_hint": "Fallo en la fase de conexión: el runtime de Cloudflare rechazó la conexión TCP a este destino (habitualmente por «TCP Loop»: el tráfico saliente vuelve hacia sí mismo o hacia la red de Cloudflare). No está relacionado con la contraseña ni el código. Prueba el puerto 587 u otro proveedor SMTP.",
   "admin_email_daily_limit": "Límite diario",
   "admin_email_from": "Dirección de origen",
   "admin_email_help": "Configure múltiples cuentas SMTP (recomendado 465 TLS implícito o 587 STARTTLS; puerto 25 bloqueado en Cloudflare Workers). El envío rota entre cuentas para distribuir la cuota; si una cuenta falla, pasa automáticamente a la siguiente. Cada cuenta puede tener un límite diario de envío (0 = ilimitado); al alcanzarlo, se omite esa cuenta por el día y se reanuda al siguiente. Si todas las cuentas están vacías, no se envían correos de verificación de registro ni de restablecimiento de contraseña (las demás funciones no se ven afectadas).",

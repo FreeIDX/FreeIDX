@@ -585,6 +585,7 @@
   "admin_d1_queries": "Requêtes D1",
   "admin_default_icon": "Icône par défaut",
   "admin_delete_after_submit": "Les suppressions prennent effet après envoi",
+  "admin_email_connect_hint": "Échec à l’étape de connexion : le runtime Cloudflare a refusé la connexion TCP vers cette cible (souvent un verdict « TCP Loop » — le trafic sortant revient vers lui-même ou vers le réseau Cloudflare). Ce n’est pas lié au mot de passe ni au code. Essayez le port 587 ou un autre fournisseur SMTP.",
   "admin_email_daily_limit": "Limite quotidienne",
   "admin_email_from": "Adresse expéditeur",
   "admin_email_help": "Configurez plusieurs comptes SMTP (recommandé 465 TLS implicite ou 587 STARTTLS ; port 25 bloqué sur Cloudflare Workers). L'envoi tourne entre les comptes pour répartir le quota ; en cas d'échec d'un compte, bascule automatiquement au suivant. Chaque compte peut avoir une limite d'envoi quotidienne (0 = illimitée) ; une fois atteinte, le compte est ignoré pour la journée et reprend le lendemain. Si tous les comptes sont vides, les e-mails de vérification d'inscription et de réinitialisation de mot de passe ne sont pas envoyés (les autres fonctionnalités ne sont pas affectées).",

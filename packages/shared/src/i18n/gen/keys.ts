@@ -683,6 +683,7 @@ export type AdminKey =
   | 'admin_default_icon'
   | 'admin_delete_after_submit'
   | 'admin_delete_success'
+  | 'admin_email_connect_hint'
   | 'admin_email_daily_limit'
   | 'admin_email_from'
   | 'admin_email_help'

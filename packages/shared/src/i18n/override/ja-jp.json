@@ -586,6 +586,7 @@
   "admin_d1_queries": "D1 クエリ数",
   "admin_default_icon": "デフォルトアイコン",
   "admin_delete_after_submit": "削除は送信後に反映されます",
+  "admin_email_connect_hint": "接続段階で失敗：Cloudflare ランタイムがこの接続先への TCP 接続を拒否しました（多くは「TCP Loop」判定＝外向き通信が自分自身または Cloudflare 網へ戻される）。パスワードや認証コードの問題ではありません。587 番ポートか別の SMTP サービスでお試しください。",
   "admin_email_daily_limit": "日次上限",
   "admin_email_from": "送信元アドレス",
   "admin_email_help": "複数のSMTPアカウントを設定（465暗黙TLSまたは587 STARTTLS推奨、ポート25はCloudflare Workersでブロック）。送信時はアカウント間でローテーションし割り当てを分散、単一アカウント失敗時は次に自動切替。各アカウントに日次送信上限を設定可能（0=無制限）、上限に達すると当日はそのアカウントをスキップし翌日自動回復。全アカウント空の場合、登録確認・パスワードリセットメールは送信されません（他機能は影響なし）。",

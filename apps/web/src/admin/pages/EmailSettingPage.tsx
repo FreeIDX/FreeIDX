@@ -53,9 +53,13 @@ const th = 'px-2 py-2 text-left font-medium text-muted';
 /**
  * 一份发信报告：收件人 + 结果 + 逐账号尝试明细（失败时带阶段与 SMTP 原文）。
  * 「注册收不到验证码」靠这块定位：535 是授权码/密码错，550 是发件人被拒，
- * 连接超时是网络/端口问题，而「全部成功但没收到」则是反垃圾/垃圾邮件箱问题。
+ * connect 阶段失败是 Cloudflare 运行时拒绝建连（与密码无关，见下方定向提示），
+ * 而「全部成功但没收到」则是反垃圾/垃圾邮件箱问题。
  */
 function ReportView({ report }: { report: MailReport }) {
+  const t = useAdminT();
+  /** 连接阶段失败（TCP Loop / 目标被拦截）与凭证无关，给出定向提示，避免管理员反复改密码 */
+  const connectFailed = report.attempts.some((a) => !a.ok && a.stage === 'connect');
   return (
     <div className="mt-2 rounded-[6px] border border-line px-3 py-2 text-sm">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -76,6 +80,14 @@ function ReportView({ report }: { report: MailReport }) {
             </li>
           ))}
         </ul>
+      )}
+      {connectFailed && (
+        <p className="mt-2 rounded-[4px] bg-brand/5 px-2 py-1.5 text-xs leading-relaxed text-ink-soft">
+          {t(
+            'admin_email_connect_hint',
+            '连接阶段失败：Cloudflare 运行时拒绝了到该目标的 TCP 连接（多为「TCP Loop」判定——出站被打回自身或 Cloudflare 网络），与授权码/密码无关。可先改用 587 端口，或换其他 SMTP 服务商验证。',
+          )}
+        </p>
       )}
     </div>
   );
