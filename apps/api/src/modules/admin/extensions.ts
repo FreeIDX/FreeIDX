@@ -11,7 +11,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import { ADMIN_CATALOG, extSchemaOf } from '../../core/extensions';
 import { loadExtensionsState } from '../../core/extensions/registry';
 import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtSecret, extSecretKey } from '../../core/ext-store';
-import { normalizeMasterKey } from '../../core/crypto';
+import { masterKeyShape, normalizeMasterKey } from '../../core/crypto';
 import type { ApiT } from '../../core/i18n';
 import { core, readJsonObject, type ReadEnv } from '../shared';
 
@@ -162,7 +162,11 @@ export function adminExtensionsRoutes(): Hono<ReadEnv> {
       const raw = c.env.SECRETS_MASTER_KEY;
       if (!raw) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissing'));
       const key = normalizeMasterKey(raw);
-      if (!key) throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
+      if (!key) {
+        const shape = masterKeyShape(raw);
+        console.warn(`[secrets] SECRETS_MASTER_KEY 形态非法（${shape}），保存插件私钥被拒`);
+        throw new AppError(Code.VALIDATION_ERROR, `${t('sec.masterKeyInvalid')}（${shape}）`);
+      }
       return key;
     };
 

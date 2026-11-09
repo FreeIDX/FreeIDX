@@ -57,6 +57,25 @@ export function normalizeMasterKey(value?: string): string | null {
   return isMasterKeyValid(v) ? v : null;
 }
 
+/**
+ * 值的形态摘要（**不含任何密钥内容**）：长度 / base64 解码字节数 / 是否含非 ASCII。
+ * 形参非法时把它附在 400 文案后，管理员一眼能分辨：
+ *   len=71 → 把命令原文贴进去了；len=64 但未通过 → 含非 hex 字符；
+ *   len=44,bytes=33 → 多了个字符；len=45,nonAscii=1 → 混进了全角/零宽字符。
+ */
+export function masterKeyShape(value?: string): string {
+  const v = (value ?? '').trim();
+  if (!v) return 'len=0';
+  let bytes = -1;
+  try {
+    bytes = fromB64(v).length;
+  } catch {
+    bytes = -1;
+  }
+  const nonAscii = /[^\x20-\x7E]/.test(v) ? 1 : 0;
+  return `len=${v.length},base64Bytes=${bytes},nonAscii=${nonAscii}`;
+}
+
 async function aesKey(masterB64: string): Promise<CryptoKey> {
   const raw = fromB64(masterB64);
   if (raw.length !== 32) throw new Error(t0('sec.masterKeyInvalid'));

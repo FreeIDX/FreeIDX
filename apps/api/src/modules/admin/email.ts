@@ -14,7 +14,7 @@ import { Hono, type Context } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtConfigAndSecret } from '../../core/ext-store';
-import { normalizeMasterKey } from '../../core/crypto';
+import { masterKeyShape, normalizeMasterKey } from '../../core/crypto';
 import { getEmailSettingState } from '../../core/email';
 import { isEmail } from '../../core/auth/validate';
 import type { ApiT } from '../../core/i18n';
@@ -71,9 +71,13 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
     // 归一化后再用：44 字符 base64 与 64 位 hex（README 里 JWT_SECRET 那条命令的产物）都算合法，
     // 它们代表同一把 32 字节密钥；其余形态（命令原文/带引号/短串）在非空池保存时给可操作的 400，
     // 而不是让加密阶段抛裸 Error 变成 500「服务器错误」。空池=关闭发信，不需要加解密，不受限制。
-    const master = normalizeMasterKey(c.env.SECRETS_MASTER_KEY);
-    if (c.env.SECRETS_MASTER_KEY && !master && rawPool.length > 0) {
-      throw new AppError(Code.VALIDATION_ERROR, t('sec.masterKeyInvalid'));
+    const rawMaster = c.env.SECRETS_MASTER_KEY;
+    const master = normalizeMasterKey(rawMaster);
+    if (rawMaster && !master && rawPool.length > 0) {
+      // 附上形态摘要（长度/解码字节数/是否含非 ASCII，不含内容），管理员据此就能判断是贴错还是粘脏了
+      const shape = masterKeyShape(rawMaster);
+      console.warn(`[secrets] SECRETS_MASTER_KEY 形态非法（${shape}），保存邮箱密码被拒`);
+      throw new AppError(Code.VALIDATION_ERROR, `${t('sec.masterKeyInvalid')}（${shape}）`);
     }
     const [oldCfg, oldSec] = await Promise.all([
       loadExtConfig(cache, db, 'email'),
