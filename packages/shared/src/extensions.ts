@@ -133,8 +133,18 @@ export function extText(v: LocText | undefined, lang: string): string {
   return v[lang] ?? v['zh-cn'] ?? Object.values(v)[0] ?? '';
 }
 
-/** 后台结构化配置表单的输入控件形态（type 只决定控件，不决定存储桶） */
-type ExtFieldType = 'text' | 'textarea' | 'password' | 'switch' | 'kv';
+/**
+ * 后台结构化配置表单的输入控件形态（type 只决定控件，不决定存储桶）。
+ * 枚举类取值优先用 select/checks：管理员不用记格式（逗号、大小写、拼写），
+ * 减少「填错就静默失效」的排查成本；存储仍是 config 里的原始标量（checks 为分隔字符串）。
+ */
+type ExtFieldType = 'text' | 'textarea' | 'password' | 'switch' | 'kv' | 'select' | 'checks';
+
+/** select / checks 的候选项：value 落库（字符串或数字），label 展示（可多语言） */
+export interface ExtFieldOption {
+  value: string | number;
+  label: LocText;
+}
 
 /** 插件自声明的单个配置字段：与服务端 kv 键 ext:{id}:config / ext:{id}:secret 一一对应（勿改名） */
 export interface ExtField {
@@ -163,6 +173,15 @@ export interface ExtField {
   onValue?: unknown;
   offValue?: unknown;
   defaultOn?: boolean;
+  /** select（单选）/ checks（多选）的候选值；库里已有的额外值会作为临时选项一并展示，不丢数据 */
+  options?: ExtFieldOption[];
+  /** checks 落库分隔符，缺省 ','（与服务端 parseConfig 的拆分口径一致） */
+  separator?: string;
+  /**
+   * 键不存在时的**展示值**（不预写库）：单选/多选在空配置下若留空，
+   * 会显示成「未选择」而让管理员误判当前生效值，用它与服务端 default 对齐。
+   */
+  initialValue?: unknown;
   /** kv 键名白名单（verifyFiles 防路径穿越，与服务端白名单一致） */
   keyPattern?: string;
   keyLabel?: LocText;

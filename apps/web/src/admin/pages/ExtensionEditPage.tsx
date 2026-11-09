@@ -29,7 +29,7 @@ import { AdSlotGrid } from './AdSlotGrid';
 import { McpTokenGrid } from './McpTokenGrid';
 import { extText, type ExtField } from '@freeidx/shared';
 import { PLUGIN_TABS } from '../tabs';
-import { Alert, Button, Card, ErrorState, LinkButton, TabBar, cx, inputCls } from '../ui';
+import { Alert, Button, Card, Checkbox, ErrorState, LinkButton, Select, TabBar, cx, inputCls } from '../ui';
 
 /** 文本域必须是 JSON 对象；空串视为空对象（提交 `{}` 即清空该项）——高级模式专用 */
 function parseJsonObject(text: string, label: string, t: AdminT): Record<string, unknown> {
@@ -398,6 +398,78 @@ export function ExtensionEditPage() {
                         </div>
                       );
                     }
+                    // 枚举类取值：单选用原生下拉、多选用复选框组——省掉「管理员记格式/拼写」这一层出错源
+                    if (f.type === 'select') {
+                      const raw = getPath(draft ?? {}, f.path ?? [f.key]);
+                      const cur = String(raw === undefined || raw === null ? f.initialValue ?? '' : raw);
+                      const opts = f.options ?? [];
+                      return (
+                        <div key={f.key} className="mb-[1rem]">
+                          <FieldLabel field={f} configured={configured} />
+                          {/* Select 自带 w-full，定宽要靠包裹层 */}
+                          <div className="max-w-[16rem]">
+                            <Select
+                              value={cur}
+                              onChange={(e) => {
+                                const hit = opts.find((o) => String(o.value) === e.target.value);
+                                // 命中候选按候选原值落库（数字型如限流阈值仍是 number），否则保留自由值
+                                setIn(f.path ?? [f.key], hit ? hit.value : e.target.value);
+                              }}
+                            >
+                              {/* 库里的值不在候选中（历史配置）时补一个选项，避免下拉把它显示成别的值 */}
+                              {!opts.some((o) => String(o.value) === cur) && (
+                                <option value={cur}>{cur || extText(f.placeholder, lang) || '—'}</option>
+                              )}
+                              {opts.map((o) => (
+                                <option key={String(o.value)} value={String(o.value)}>
+                                  {extText(o.label, lang) || String(o.value)}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          {f.help && <FieldHelp text={extText(f.help, lang)} />}
+                        </div>
+                      );
+                    }
+                    if (f.type === 'checks') {
+                      const raw = getPath(draft ?? {}, f.path ?? [f.key]);
+                      const sep = f.separator ?? ',';
+                      const val = raw === undefined || raw === null ? f.initialValue ?? '' : raw;
+                      const picked = (Array.isArray(val) ? val.map(String) : String(val).split(sep))
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      const opts = f.options ?? [];
+                      // 不在候选里的值（手工写过的、其他插件贡献的）也渲染成勾选项：可见即可取消，不静默丢配置
+                      const extra = picked.filter((v) => !opts.some((o) => String(o.value) === v));
+                      const toggle = (v: string, on: boolean): void => {
+                        const next = [...new Set(on ? [...picked, v] : picked.filter((x) => x !== v))];
+                        const ordered = [
+                          ...opts.map((o) => String(o.value)).filter((x) => next.includes(x)),
+                          ...next.filter((x) => !opts.some((o) => String(o.value) === x)),
+                        ];
+                        setIn(f.path ?? [f.key], ordered.join(sep));
+                      };
+                      return (
+                        <div key={f.key} className="mb-[1rem]">
+                          <FieldLabel field={f} configured={configured} />
+                          <div className="flex flex-wrap items-center gap-x-[1.25rem] gap-y-[.5rem] pt-1">
+                            {[
+                              ...opts.map((o) => ({ value: String(o.value), text: extText(o.label, lang) || String(o.value) })),
+                              ...extra.map((v) => ({ value: v, text: v })),
+                            ].map((o) => (
+                              <Checkbox
+                                key={o.value}
+                                checked={picked.includes(o.value)}
+                                onChange={(on) => toggle(o.value, on)}
+                                label={<span className="text-sm">{o.text}</span>}
+                              />
+                            ))}
+                          </div>
+                          {f.help && <FieldHelp text={extText(f.help, lang)} />}
+                        </div>
+                      );
+                    }
+
                     // text / textarea（target=secret 的文本类密钥同样走 secretDraft：不回显、留空保持原值）
                     const secretText = f.target === 'secret';
                     const rawVal = secretText ? secretDraft[f.key] ?? '' : getPath(draft ?? {}, f.path ?? [f.key]);

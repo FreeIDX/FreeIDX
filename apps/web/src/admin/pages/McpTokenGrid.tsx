@@ -14,10 +14,13 @@ import { createMcpToken, getMcpTokens, revokeMcpToken } from '../api';
 import type { McpTokenCreated } from '../types';
 import { useAdminT } from '../t';
 import { useAdminAction, useBatchAction } from '../use-action';
-import { Alert, Button, Card, Checkbox, ErrorState, Table, cx, inputCls } from '../ui';
+import { Alert, Button, Card, Checkbox, ErrorState, Select, Table, cx, inputCls } from '../ui';
 import { Icon } from '../../components/icons';
 
 const fmtDate = (sec: number): string => (sec > 0 ? new Date(sec * 1000).toLocaleString() : '—');
+
+/** 有效期预设：0 = 永不过期，其余为常用天数（后端允许 0–3650） */
+const EXPIRE_PRESETS = [0, 7, 30, 90, 180, 365];
 
 /** 复制到剪贴板：失败时静默（管理员可手动选中） */
 function copyText(text: string): void {
@@ -123,14 +126,15 @@ export function McpTokenGrid() {
           </div>
           <label className="block w-[9rem]">
             <span className="mb-[.4rem] block text-sm font-medium">{t('mcp_expire_days', '有效天数')}</span>
-            <input
-              type="number"
-              min={0}
-              max={3650}
-              className={cx(inputCls, 'w-full')}
-              value={expireDays}
-              onChange={(e) => setExpireDays(Math.max(0, Number(e.target.value || 0)))}
-            />
+            {/* 常用天数走下拉：手填数字容易误输（如 300 想成 30），有效期又是个改了很难发现的隐性错误 */}
+            <Select value={expireDays} onChange={(e) => setExpireDays(Number(e.target.value))}>
+              {EXPIRE_PRESETS.map((d) => (
+                <option key={d} value={d}>
+                  {/* 单位由字段名「有效天数」承担，选项只给数字：避免再引一条 i18n 词条 */}
+                  {d === 0 ? t('mcp_never', '永不过期') : d}
+                </option>
+              ))}
+            </Select>
           </label>
         </div>
 

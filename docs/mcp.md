@@ -154,9 +154,9 @@ Authorization: Bearer fi_mcp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `enabledScopes` | 文本（逗号分隔） | `read` | `read`=只读、`write`=含写入、`admin`=含版务 |
-| `toolDenylist` | 文本（逗号分隔） | 空 | 命中即不向客户端展示的工具名（如 `search`） |
-| `rateLimitPerMin` | 文本 | `60` | 每令牌每分钟调用数，0=不限 |
+| `enabledScopes` | 后台多选（存逗号分隔文本） | `read` | `read`=只读、`write`=含写入、`admin`=含版务 |
+| `toolDenylist` | 后台多选（存逗号分隔文本） | 空 | 勾选即不向客户端展示的工具名；候选为本插件自带工具，配置里的额外名字也会显示为勾选项 |
+| `rateLimitPerMin` | 后台下拉（0/30/60/120/300/600） | `60` | 每令牌每分钟调用数，0=不限 |
 | `exposeResources` | 开关 | 开 | 是否允许客户端以 `freeidx://` 挂载内容 |
 | `forumWriteOn` | 开关 | 关 | 是否暴露 `forum_get` / `forum_update`（版块文案配置）；打开后仍需 `admin` 档位与管理员持有者 |
 

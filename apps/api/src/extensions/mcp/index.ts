@@ -15,7 +15,7 @@
  * 免费层不产生任何长连接时长与额外计费资源。
  */
 import { L } from '../../core/i18n';
-import type { ExtSchema } from '@freeidx/shared';
+import { MCP_SCOPES, type ExtSchema } from '@freeidx/shared';
 import { getExtensions } from '../../core/extensions';
 import type { ExtensionApi, ExtensionModule } from '../../core/extensions/registry';
 import type { Cache } from '../../core/cache';
@@ -45,6 +45,16 @@ import type { ApiT } from '../../core/i18n';
 /** 请求体上限：MCP 参数都是短文本，256KB 足够且能挡住内存放大攻击 */
 const MAX_BODY = 256 * 1024;
 
+/**
+ * 后台「工具黑名单」的候选值：本插件自带工具全集（核心只读 + 写 + 版块配置）。
+ * 其他插件贡献的工具名不在这里，但后台会把配置里已有的额外值一并渲染成勾选项，
+ * 因此手工写入的名字不会被吞掉。
+ */
+const TOOL_DENYLIST_OPTIONS = [...CORE_MCP_TOOLS, ...MCP_WRITE_TOOLS, ...MCP_FORUM_TOOLS].map((tool) => ({
+  value: tool.name,
+  label: tool.name,
+}));
+
 const MCP_SCHEMA: ExtSchema = {
   brief: L(
     '把论坛内容以 MCP 协议提供给 AI 客户端（Claude Desktop / Cursor 等），工具能力受令牌与权限引擎双重约束。',
@@ -73,22 +83,24 @@ const MCP_SCHEMA: ExtSchema = {
   fields: [
     {
       key: 'enabledScopes',
-      type: 'text',
+      type: 'checks',
+      initialValue: 'read',
       label: L(
         '开放档位', '開放檔位', 'Enabled scopes', 'Разрешённые уровни', 'ระดับที่เปิด', 'Freigegebene Stufen', '公開レベル', '허용 범위', 'Niveles habilitados', 'Niveaux autorisés',
       ),
-      placeholder: L('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read'),
+      // 取值只有 read/write/admin 三个协议术语，做成勾选：不用记格式、也不会拼错静默失效
+      options: MCP_SCOPES.map((s) => ({ value: s, label: s })),
       help: L(
-        '逗号分隔：read=只读，write=含写入，admin=含版务。写类工具需同时满足令牌档位，默认只开 read。',
-        '逗號分隔：read=唯讀，write=含寫入，admin=含版務。寫入類工具需同時滿足權杖檔位，預設只開 read。',
-        'Comma separated: read = read-only, write = allow writes, admin = allow moderation. Write tools also require the token scope; read only by default.',
-        'Через запятую: read — только чтение, write — запись, admin — модерация. Инструменты записи дополнительно требуют уровень токена; по умолчанию только read.',
-        'คั่นด้วยจุลภาค: read=อ่านอย่างเดียว, write=อนุญาตเขียน, admin=อนุญาตจัดการ เครื่องมือเขียนต้องมีระดับของโทเคนด้วย ค่าเริ่มต้นเปิดเฉพาะ read',
-        'Kommagetrennt: read = nur lesen, write = Schreiben erlauben, admin = Moderation erlauben. Schreibwerkzeuge brauchen zusätzlich die Token-Stufe; standardmäßig nur read.',
-        'カンマ区切り: read=読み取りのみ、write=書き込み可、admin=モデレーション可。書き込み系はトークンのレベルも必要です。既定は read のみ。',
-        '쉼표 구분: read=읽기 전용, write=쓰기 허용, admin=관리 허용. 쓰기 도구는 토큰 범위도 충족해야 하며 기본값은 read만.',
-        'Separado por comas: read = solo lectura, write = permitir escritura, admin = permitir moderación. Las herramientas de escritura también requieren el token; por defecto solo read.',
-        'Séparés par des virgules : read = lecture seule, write = écriture autorisée, admin = modération autorisée. Les outils d’écriture exigent aussi le niveau du jeton ; read seul par défaut.',
+        '可多选（勾上即生效）：read=只读，write=含写入，admin=含版务。写类工具需同时满足令牌档位，默认只开 read。',
+        '可多選（勾上即生效）：read=唯讀，write=含寫入，admin=含版務。寫入類工具需同時滿足權杖檔位，預設只開 read。',
+        'Multi-select: read = read-only, write = allow writes, admin = allow moderation. Write tools also require the token scope; read only by default.',
+        'Можно выбрать несколько: read — только чтение, write — запись, admin — модерация. Инструменты записи дополнительно требуют уровень токена; по умолчанию только read.',
+        'เลือกได้หลายค่า: read=อ่านอย่างเดียว, write=อนุญาตเขียน, admin=อนุญาตจัดการ เครื่องมือเขียนต้องมีระดับของโทเคนด้วย ค่าเริ่มต้นเปิดเฉพาะ read',
+        'Mehrfachauswahl: read = nur lesen, write = Schreiben erlauben, admin = Moderation erlauben. Schreibwerkzeuge brauchen zusätzlich die Token-Stufe; standardmäßig nur read.',
+        '複数選択可: read=読み取りのみ、write=書き込み可、admin=モデレーション可。書き込み系はトークンのレベルも必要です。既定は read のみ。',
+        '복수 선택: read=읽기 전용, write=쓰기 허용, admin=관리 허용. 쓰기 도구는 토큰 범위도 충족해야 하며 기본값은 read만.',
+        'Selección múltiple: read = solo lectura, write = permitir escritura, admin = permitir moderación. Las herramientas de escritura también requieren el token; por defecto solo read.',
+        'Sélection multiple : read = lecture seule, write = écriture autorisée, admin = modération autorisée. Les outils d’écriture exigent aussi le niveau du jeton ; read seul par défaut.',
       ),
     },
     {
@@ -124,30 +136,34 @@ const MCP_SCHEMA: ExtSchema = {
     },
     {
       key: 'toolDenylist',
-      type: 'text',
+      type: 'checks',
       label: L(
         '工具黑名单', '工具黑名單', 'Tool denylist', 'Чёрный список инструментов', 'เครื่องมือที่ห้าม', 'Werkzeug-Sperrliste', 'ツール拒否リスト', '도구 차단 목록', 'Lista de bloqueo', 'Liste de refus',
       ),
+      // 候选即工具清单：勾选比手敲名字可靠（敲错一个字就是「配了但没生效」）
+      options: TOOL_DENYLIST_OPTIONS,
       help: L(
-        '逗号分隔的工具名，命中即不向客户端展示（如 search）。',
-        '逗號分隔的工具名，命中即不向用戶端展示（如 search）。',
-        'Comma-separated tool names hidden from clients (e.g. search).',
-        'Имена инструментов через запятую, скрываемые от клиентов (например, search).',
-        'ชื่อเครื่องมือคั่นด้วยจุลภาคที่จะไม่แสดงต่อไคลเอนต์ (เช่น search)',
-        'Kommagetrennte Werkzeugnamen, die Clients nicht sehen (z. B. search).',
-        'クライアントに表示しないツール名をカンマ区切りで指定（例: search）。',
-        '클라이언트에 표시하지 않을 도구 이름을 쉼표로 구분(예: search).',
-        'Nombres de herramientas separados por comas que no se muestran (p. ej. search).',
-        'Noms d’outils séparés par des virgules, masqués aux clients (ex. search).',
+        '勾选后不向任何客户端展示该工具（不影响令牌与站点档位）。',
+        '勾選後不向任何用戶端展示該工具（不影響權杖與站點檔位）。',
+        'Checked tools are hidden from every client (scopes are unaffected).',
+        'Отмеченные инструменты не показываются ни одному клиенту (на уровни не влияет).',
+        'เครื่องมือที่เลือกจะไม่แสดงต่อไคลเอนต์ใด ๆ (ไม่กระทบระดับสิทธิ์)',
+        'Angehakte Werkzeuge werden keinem Client angezeigt (Stufen bleiben unberührt).',
+        'チェックしたツールはどのクライアントにも表示されません（レベルには影響しません）。',
+        '체크한 도구는 어떤 클라이언트에도 표시되지 않습니다(범위에는 영향 없음).',
+        'Las herramientas marcadas no se muestran a ningún cliente (no afecta a los niveles).',
+        'Les outils cochés sont masqués à tous les clients (sans effet sur les niveaux).',
       ),
     },
     {
       key: 'rateLimitPerMin',
-      type: 'text',
+      type: 'select',
+      initialValue: 60,
       label: L(
         '每令牌每分钟上限', '每權杖每分鐘上限', 'Requests per minute', 'Запросов в минуту', 'คำขอต่อนาที', 'Anfragen pro Minute', '1分あたりの上限', '분당 요청 수', 'Peticiones por minuto', 'Requêtes par minute',
       ),
-      placeholder: L('60', '60', '60', '60', '60', '60', '60', '60', '60', '60'),
+      // 常用档位下拉：避免手填出 6o/6 千这类脏值；库里非候选值（如 45）仍会作为选项显示
+      options: [0, 30, 60, 120, 300, 600].map((n) => ({ value: n, label: String(n) })),
       help: L(
         '单个令牌每分钟可发起的调用数，0 = 不限。',
         '單一權杖每分鐘可發起的呼叫數，0 = 不限。',
