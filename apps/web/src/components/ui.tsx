@@ -350,8 +350,8 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
         <div className={cx('flex gap-1 px-2', collapsed ? 'flex-col items-center' : 'items-center')}>
           <ul className={cx('min-w-0', collapsed ? 'w-full' : 'flex-1')}>
             {items.map((it) => (
-              /* px-2 与下方版块项一致：图标左边缘对齐 */
-              <li key={it.k} className="px-2">
+              /* 外层 div 已有 px-2（等价下方版块项 li 的 px-2），此处不再加内边距，否则整行右移 8px */
+              <li key={it.k}>
                 <Link
                   to={it.to}
                   title={collapsed ? it.label : undefined}
