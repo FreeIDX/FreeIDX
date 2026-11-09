@@ -13,8 +13,7 @@
 import { Hono, type Context } from 'hono';
 import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
-import { loadExtConfig, loadExtSecret, saveExtConfig, saveExtConfigAndSecret } from '../../core/ext-store';
-import { masterKeyShape, normalizeMasterKey } from '../../core/crypto';
+import { hasSecretsKey, loadExtConfig, loadExtSecret, saveExtConfig, saveExtConfigAndSecret } from '../../core/ext-store';
 import { getEmailSettingState } from '../../core/email';
 import { isEmail } from '../../core/auth/validate';
 import type { ApiT } from '../../core/i18n';
@@ -68,20 +67,12 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
 
     // 既有密码按账号身份（host+user）对应：整池重写时行可删可增可重排，
     // 密码行「留空保持、填了覆盖」；身份变化（换了 SMTP 主机/登录名）必须重填。
-    // 归一化后再用：44 字符 base64 与 64 位 hex（README 里 JWT_SECRET 那条命令的产物）都算合法，
-    // 它们代表同一把 32 字节密钥；其余形态（命令原文/带引号/短串）在非空池保存时给可操作的 400，
-    // 而不是让加密阶段抛裸 Error 变成 500「服务器错误」。空池=关闭发信，不需要加解密，不受限制。
-    const rawMaster = c.env.SECRETS_MASTER_KEY;
-    const master = normalizeMasterKey(rawMaster);
-    if (rawMaster && !master && rawPool.length > 0) {
-      // 附上形态摘要（长度/解码字节数/是否含非 ASCII，不含内容），管理员据此就能判断是贴错还是粘脏了
-      const shape = masterKeyShape(rawMaster);
-      console.warn(`[secrets] SECRETS_MASTER_KEY malformed (${shape}); refusing to save mailbox passwords`);
-      throw new AppError(Code.VALIDATION_ERROR, `${t('sec.masterKeyInvalid')}（${shape}）`);
-    }
+    // 主密钥解析：显式 SECRETS_MASTER_KEY 优先，缺省/非法时由 JWT_SECRET 派生（见 core/ext-store.keyCandidates），
+    // 于是「只部署不配额外 Secret」也能保存密码，也不会再出现 500「服务器错误」。
+    const canEncrypt = await hasSecretsKey(c.env);
     const [oldCfg, oldSec] = await Promise.all([
       loadExtConfig(cache, db, 'email'),
-      master ? loadExtSecret(db, 'email', master) : Promise.resolve({} as Record<string, unknown>),
+      canEncrypt ? loadExtSecret(db, 'email', c.env) : Promise.resolve({} as Record<string, unknown>),
     ]);
     const oldPool = Array.isArray(oldCfg.pool) ? (oldCfg.pool as Record<string, unknown>[]) : [];
     const oldPasses = Array.isArray(oldSec.passes) ? oldSec.passes : [];
@@ -107,15 +98,15 @@ export function adminEmailRoutes(): Hono<ReadEnv> {
         }
       }
       if (!pass) throw new AppError(Code.VALIDATION_ERROR, t('admin.emailRowPass', { row: idx + 1 }));
-      if (row.pass && !master) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissingPw'));
+      if (row.pass && !canEncrypt) throw new AppError(Code.VALIDATION_ERROR, t('admin.masterKeyMissingPw'));
       rows.push({ from: row.from, host: row.host, port: row.port, user: row.user, dailyLimit: row.dailyLimit });
       passes.push(pass);
     });
 
     // 池与密码单事务提交（两者按下标对齐，分两次写中间失败会留下错配）；
-    // 密钥缺失/形态非法时只有空池能走到这里（上面已拦），此时不碰加密、只落明文配置
-    if (master) {
-      await saveExtConfigAndSecret(db, cache, 'email', { pool: rows }, { passes }, master);
+    // 连 JWT_SECRET 都没有（canEncrypt=false）时只有空池能走到这里，此时不碰加密、只落明文配置
+    if (canEncrypt) {
+      await saveExtConfigAndSecret(db, cache, 'email', { pool: rows }, { passes }, c.env);
     } else {
       await saveExtConfig(db, cache, 'email', { pool: rows });
     }

@@ -152,18 +152,18 @@ Une fois le premier déploiement au vert, `freeidx-api` apparaît dans la liste 
 | -------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------- |
 | `JWT_SECRET`         | Signature des tokens de connexion / CSRF                                             | Oui                                                     |
 | `TURNSTILE_SECRET`   | Vérification CAPTCHA côté serveur (à associer obligatoirement à `TURNSTILE_SITEKEY`) | Non                                                     |
-| `SECRETS_MASTER_KEY` | Clé maîtresse AES-GCM pour les secrets de paiement des plugins et les mots de passe SMTP | Non (indispensable pour enregistrer les mots de passe SMTP) |
+| `SECRETS_MASTER_KEY` | Clé maîtresse AES-GCM des mots de passe SMTP et des secrets de plugins | Non (dérivée de `JWT_SECRET` si absente) |
 
 Générez une valeur aléatoire en local et collez-en une à la fois :
 
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
+# SECRETS_MASTER_KEY (optional): base64 32 bytes (44 chars) or 64-char hex; omitted = derived from JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Sans `SECRETS_MASTER_KEY`, enregistrer un compte SMTP **avec mot de passe** dans la page d’administration « Paramètres e-mail » échoue avec « SECRETS_MASTER_KEY non configuré ; impossible d’enregistrer les mots de passe ». La valeur peut être du **base64 de 32 octets exactement (44 caractères) ou 64 caractères hex** ; toute autre forme (la commande elle-même, des guillemets, une chaîne courte) échoue avec « SECRETS_MASTER_KEY doit être une clé de 32 octets encodée en base64 ». Une fois qu’elle a chiffré des mots de passe, **ne la remplacez pas** : les anciens chiffrés deviennent indéchiffrables (tous les mots de passe enregistrés sont perdus, l’envoi renvoie 535) et il faut les ressaisir. Pas de Node ? Générez-la dans la console du navigateur (F12) : `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
+> `SECRETS_MASTER_KEY` est **facultative**. Si elle est absente (ou mal formée), l’application dérive une clé de 32 octets du `JWT_SECRET` obligatoire via SHA-256 : l’e-mail fonctionne sans configuration supplémentaire ; si elle est présente, elle est prioritaire (à utiliser pour isoler les identifiants mail de la clé de session). Formats acceptés : base64 de 32 octets exactement (44 caractères) ou 64 caractères hex ; toute autre valeur est ignorée au profit de la clé dérivée. **Attention** : avec la clé dérivée, changer `JWT_SECRET` rend les mots de passe SMTP enregistrés indéchiffrables (à ressaisir) ; une fois des mots de passe enregistrés, ne changez plus la clé. Pas de Node ? Générez-la dans la console du navigateur (F12) : `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 ### Méthode 2 : développement en local
 

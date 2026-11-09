@@ -7,7 +7,7 @@ import { RunLevel } from '@freeidx/shared';
 import type { ExtSchema } from '@freeidx/shared';
 import type { ExtensionApi, ExtensionModule } from '../core/extensions/registry';
 import { loadSetting } from '../core/loaders';
-import { loadExtConfig, loadExtSecret } from '../core/ext-store';
+import { loadExtConfig, loadExtSecret, type SecretsEnv } from '../core/ext-store';
 import type { D1b } from '../core/db';
 import type { Cache } from '../core/cache';
 import { L } from '../core/i18n';
@@ -163,9 +163,9 @@ function httpDate(v: number): string {
 
 /** ads.txt（契约③ registerRoute）：发布商 ID 存 ext:ads:secret；未配置则 404（不输出空文件干扰收录） */
 async function adsTxt(c: unknown): Promise<Response> {
-  const ctx = c as { get: (k: string) => unknown; env: { SECRETS_MASTER_KEY?: string } };
+  const ctx = c as { get: (k: string) => unknown; env: SecretsEnv };
   const db = ctx.get('db') as D1b;
-  const secret = await loadExtSecret(db, 'ads', ctx.env.SECRETS_MASTER_KEY);
+  const secret = await loadExtSecret(db, 'ads', ctx.env);
   const publisher = typeof secret.publisherId === 'string' ? secret.publisherId.trim() : '';
   if (!publisher) return new Response(null, { status: 404 });
   const line = `google.com, ${publisher}, DIRECT, f08c47fec0942fa0`;
@@ -196,13 +196,13 @@ export const adsPlugin: ExtensionModule = {
     api.contributeBootstrap(async (ext) => {
       const ctx = api.ctx;
       if (!ctx) return;
-      const { db, cache, env } = ctx as { db: D1b; cache: Cache; env?: { SECRETS_MASTER_KEY?: string } };
+      const { db, cache, env } = ctx as { db: D1b; cache: Cache; env?: SecretsEnv };
       // runlevel 关站短路，广告自动停投（§17.4）
       const setting = await loadSetting(cache, db);
       if (setting.runlevel <= RunLevel.CLOSED_SITE) return;
       const [config, secret] = await Promise.all([
         loadExtConfig(cache, db, 'ads'),
-        loadExtSecret(db, 'ads', env?.SECRETS_MASTER_KEY),
+        loadExtSecret(db, 'ads', env),
       ]);
       const client = typeof secret.client === 'string' ? secret.client.trim() : '';
       const slots = await queryActiveSlots(db, client !== '');

@@ -65,7 +65,7 @@ interface ResolvedConfig extends PaymentConfig {
 export async function resolveProviderConfig(cache: Cache, db: D1b, env: Env | undefined, id: string): Promise<ResolvedConfig> {
   const [config, secret, setting] = await Promise.all([
     loadExtConfig(cache, db, id),
-    loadExtSecret(db, id, env?.SECRETS_MASTER_KEY),
+    loadExtSecret(db, id, env),
     loadSetting(cache, db),
   ]);
   const cfg = { ...config, ...secret } as ResolvedConfig;

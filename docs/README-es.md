@@ -152,18 +152,18 @@ Una vez que el primer despliegue termine en verde, `freeidx-api` aparecerá en l
 | -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
 | `JWT_SECRET`         | Firma de tokens de inicio de sesión / CSRF                                 | Sí                                                |
 | `TURNSTILE_SECRET`   | Verificación CAPTCHA del lado del servidor (debe ir emparejado con `TURNSTILE_SITEKEY`) | No                                   |
-| `SECRETS_MASTER_KEY` | Clave maestra AES-GCM para los secretos de pago de plugins y las contraseñas SMTP | No (sin ella no se pueden guardar las contraseñas SMTP) |
+| `SECRETS_MASTER_KEY` | Clave maestra AES-GCM de contraseñas SMTP y secretos de plugins | No (si falta, se deriva de `JWT_SECRET`) |
 
 Genera un valor aleatorio localmente y pega uno cada vez:
 
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
+# SECRETS_MASTER_KEY (optional): base64 32 bytes (44 chars) or 64-char hex; omitted = derived from JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Sin `SECRETS_MASTER_KEY`, guardar una cuenta SMTP **con contraseña** en la página de administración «Ajustes de correo» falla con «SECRETS_MASTER_KEY no configurado; no se pueden guardar contraseñas». El valor puede ser **base64 de exactamente 32 bytes (44 caracteres) o 64 caracteres hex**; cualquier otra forma (la orden en sí, comillas, una cadena corta) falla con «SECRETS_MASTER_KEY debe ser una clave de 32 bytes codificada en base64». Una vez que ha cifrado contraseñas, **no la cambies**: el cifrado antiguo deja de descifrarse (todas las contraseñas guardadas quedan inutilizables, el envío devuelve 535) y hay que volver a introducirlas. ¿Sin Node? Genérala en la consola del navegador (F12): `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
+> `SECRETS_MASTER_KEY` es **opcional**. Si falta (o tiene un valor no válido), la aplicación deriva una clave de 32 bytes del obligatorio `JWT_SECRET` mediante SHA-256, así que el correo funciona sin configuración extra; si está presente, tiene prioridad (útil para separar las credenciales de correo de la clave de sesión). Se acepta base64 de exactamente 32 bytes (44 caracteres) o 64 caracteres hex; cualquier otra cosa se ignora y se usa la clave derivada. **Aviso**: con la clave derivada, rotar `JWT_SECRET` deja ilegibles las contraseñas SMTP guardadas (hay que reescribirlas); una vez guardadas, no cambies la clave. ¿Sin Node? Genérala en la consola del navegador (F12): `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 ### Método 2: Desarrollo local
 

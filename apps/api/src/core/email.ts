@@ -52,7 +52,7 @@ const str = (v: unknown): string => String(v ?? '').trim();
 
 /** 读取并规范化池：坏行静默剔除（缺 host/port/user/pass/from 任一项即不可用） */
 async function readPool(env: Env, db: D1b, cache: Cache): Promise<SmtpAccount[]> {
-  const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env.SECRETS_MASTER_KEY)]);
+  const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
   const rawPool = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
   const passes = Array.isArray(sec.passes) ? sec.passes : [];
   const pool: SmtpAccount[] = [];
@@ -79,7 +79,7 @@ async function readPool(env: Env, db: D1b, cache: Cache): Promise<SmtpAccount[]>
 export async function getEmailSettingState(env: Env, db: D1b, cache: Cache): Promise<{ pool: SmtpAccountView[] }> {
   const [cfg, sec] = await Promise.all([
     loadExtConfig(cache, db, EMAIL_EXT_ID),
-    loadExtSecret(db, EMAIL_EXT_ID, env.SECRETS_MASTER_KEY),
+    loadExtSecret(db, EMAIL_EXT_ID, env),
   ]);
   const rawPool = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
   const passes = Array.isArray(sec.passes) ? sec.passes : [];

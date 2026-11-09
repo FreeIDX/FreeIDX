@@ -152,18 +152,18 @@
 | -------------------- | -------------------------------------- | ------------ |
 | `JWT_SECRET`         | 登录令牌 / CSRF 签名                         | 必需           |
 | `TURNSTILE_SECRET`   | 人机验证服务端校验（需与 `TURNSTILE_SITEKEY` 成对配置） | 非必需          |
-| `SECRETS_MASTER_KEY` | 插件支付密钥 / 邮箱 SMTP 密码的 AES-GCM 主密钥 | 非必需（不配则无法保存邮箱密码） |
+| `SECRETS_MASTER_KEY` | 邮箱 SMTP 密码 / 插件私钥的 AES-GCM 主密钥 | 非必需（缺省由 `JWT_SECRET` 派生） |
 
 随机值本地生成一条粘一条：
 
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
+# SECRETS_MASTER_KEY (optional): base64 32 bytes (44 chars) or 64-char hex; omitted = derived from JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> 未配置 `SECRETS_MASTER_KEY` 时，后台「邮箱设置」保存**带密码**的 SMTP 账号会报「未配置 SECRETS_MASTER_KEY，无法保存密码」。值填 **base64 的 32 字节（44 字符）或 64 位 hex** 均可，其他形态（命令原文、带引号、短串）会报「SECRETS_MASTER_KEY 需为 base64 编码的 32 字节密钥」。该值一旦加密过密码就**不要再更换**：旧密文将无法解密（已存密码全部失效、发信 535），必须把所有密码重新填一遍。本机没有 Node 时可在浏览器 F12 → Console 生成：`btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`。
+> `SECRETS_MASTER_KEY` **可不配**：缺省（或填了非法值）时，系统用必填项 `JWT_SECRET` 经 SHA-256 派生 32 字节密钥来加密 SMTP 密码，邮箱功能开箱即用；配了则优先使用（想与登录密钥隔离时配置）。值支持 base64 的 32 字节（44 字符）或 64 位 hex，其他形态会被忽略并回退派生密钥。**注意**：走派生密钥时，轮换 `JWT_SECRET` 会让已存的邮箱密码解不开（需重填）；成功保存过密码后就不要再更换密钥。没有 Node 时可在浏览器 F12 → Console 生成：`btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`。
 
 ### 方法 2：本地开发
 

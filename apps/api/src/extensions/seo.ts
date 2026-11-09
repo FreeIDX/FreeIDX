@@ -579,7 +579,7 @@ function makePushCron(
       const since = cron.now - Math.max(1, cron.sinceLastSec);
       const urls = await recentThreadUrls(db, cache, base, since);
       if (!urls.length) return;
-      const secret = await loadExtSecret(db, 'seo', env?.SECRETS_MASTER_KEY);
+      const secret = await loadExtSecret(db, 'seo', env);
       // IndexNow（key 公开可见，存 ext:seo:config；缺失时自动生成并持久化——管理员零配置）。
       // 一份 key 覆盖 Bing/Yandex/Seznam/Naver 等所有 IndexNow 成员引擎；secret 里的存量旧 key 自动迁移到 config。
       const cfg = config;

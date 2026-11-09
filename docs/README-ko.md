@@ -152,18 +152,18 @@ GitHub 저장소의 **Actions** 페이지에서:
 | -------------------- | -------------------------------------------- | ------------------ |
 | `JWT_SECRET`         | 로그인 토큰 / CSRF 서명                             | 예                  |
 | `TURNSTILE_SECRET`   | 서버 측 캡차 검증 (`TURNSTILE_SITEKEY`와 반드시 짝으로 설정) | 아니요                |
-| `SECRETS_MASTER_KEY` | 플러그인 결제 시크릿 / 메일 SMTP 비밀번호용 AES-GCM 마스터 키 | 아니요(설정하지 않으면 메일 비밀번호를 저장할 수 없음) |
+| `SECRETS_MASTER_KEY` | 메일 SMTP 비밀번호 / 플러그인 개인 키용 AES-GCM 마스터 키 | 아니요(미설정 시 `JWT_SECRET`에서 파생) |
 
 로컬에서 무작위 값을 생성해 하나씩 붙여넣습니다:
 
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
+# SECRETS_MASTER_KEY (optional): base64 32 bytes (44 chars) or 64-char hex; omitted = derived from JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> `SECRETS_MASTER_KEY`가 없으면 관리자 **메일 설정**에서 **비밀번호가 있는** SMTP 계정을 저장할 때 「SECRETS_MASTER_KEY가 설정되지 않아 비밀번호를 저장할 수 없습니다」 오류가 납니다. 값은 **base64 32바이트(44자) 또는 64자리 hex** 모두 허용되며, 그 외 형태(명령 문자열, 따옴표 포함, 짧은 문자열)는 「SECRETS_MASTER_KEY는 base64로 인코딩된 32바이트 키여야 합니다」 오류가 납니다. 한 번 비밀번호를 암호화한 값은 **교체하지 마세요**: 기존 암호문을 복호화할 수 없어(저장된 비밀번호 전부 무효, 발송 535) 모든 비밀번호를 다시 입력해야 합니다. Node가 없다면 브라우저 F12 → Console에서 생성하세요: `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
+> `SECRETS_MASTER_KEY`는 **선택**입니다. 없거나 값이 잘못되면 필수 항목인 `JWT_SECRET`에서 SHA-256으로 32바이트 키를 파생해 SMTP 비밀번호를 암호화하므로 메일 기능이 바로 동작합니다. 설정하면 그 값이 우선합니다(로그인 키와 분리하고 싶을 때 설정). 값은 base64 32바이트(44자) 또는 64자리 hex를 지원하며, 그 외 형태는 무시하고 파생 키를 사용합니다. **주의**: 파생 키를 쓰는 경우 `JWT_SECRET`을 교체하면 저장된 SMTP 비밀번호를 복호화할 수 없습니다(재입력 필요). 한 번 비밀번호를 저장한 뒤에는 키를 바꾸지 마세요. Node가 없다면 브라우저 F12 → Console에서 생성하세요: `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 ### 방법 2: 로컬 개발
 

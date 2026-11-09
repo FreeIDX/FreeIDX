@@ -154,18 +154,18 @@ After the first deployment runs green, `freeidx-api` will appear in the Workers 
 | -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
 | `JWT_SECRET`         | Login token / CSRF signing                                                 | Yes                                               |
 | `TURNSTILE_SECRET`   | Server-side CAPTCHA verification (must be paired with `TURNSTILE_SITEKEY`) | No                                                |
-| `SECRETS_MASTER_KEY` | AES-GCM master key for plugin payment secrets and SMTP mailbox passwords | No (required to save SMTP passwords) |
+| `SECRETS_MASTER_KEY` | AES-GCM master key for SMTP mailbox passwords and plugin secrets | No (omitted ⇒ derived from `JWT_SECRET`) |
 
 Generate a random value locally and paste one at a time:
 
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
+# SECRETS_MASTER_KEY (optional): base64 32 bytes (44 chars) or 64-char hex; omitted = derived from JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> Without `SECRETS_MASTER_KEY`, saving an SMTP account **with a password** on the admin **Email settings** page fails with `SECRETS_MASTER_KEY not configured; cannot save passwords`. The value may be **base64 of exactly 32 bytes (44 chars) or 64-char hex**; anything else (the command itself, quotes, a short string) fails with `SECRETS_MASTER_KEY must be a base64-encoded 32-byte key`. Once it has encrypted passwords, **do not replace it**: the old ciphertext can no longer be decrypted (every saved password breaks, sending returns 535) and all passwords must be re-entered. No Node.js on the machine? Generate it in the browser console (F12): `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
+> `SECRETS_MASTER_KEY` is **optional**. When it is absent (or malformed) the app derives a 32-byte key from the required `JWT_SECRET` via SHA-256, so email works out of the box; when present it takes priority (use it to keep mailbox credentials separated from the login key). Accepted formats: base64 of exactly 32 bytes (44 chars) or 64-char hex; anything else is ignored and the derived key is used. **Note**: with the derived key, rotating `JWT_SECRET` makes stored SMTP passwords undecryptable (re-enter them), and once passwords are saved do not change the key. No Node.js? Generate one in the browser console (F12): `btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`.
 
 #### Step 5: Stay Up to Date
 

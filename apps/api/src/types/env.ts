@@ -13,6 +13,9 @@ export interface Env {
   /** 后台轨独立签名密钥（T3-3）；缺省回退 JWT_SECRET */
   ADMIN_JWT_SECRET?: string;
   TURNSTILE_SECRET?: string;
-  /** 扩展/邮箱私密字段 AES-GCM 主密钥（ext:email:secret 等；缺省时私密项不可写） */
+  /**
+   * 扩展/邮箱私密字段 AES-GCM 主密钥（ext:email:secret 等；base64 的 32 字节或 64 位 hex）。
+   * 可选：缺省或值非法时由 JWT_SECRET 派生（SHA-256），保证「只配必填项」也能保存 SMTP 密码。
+   */
   SECRETS_MASTER_KEY?: string;
 }

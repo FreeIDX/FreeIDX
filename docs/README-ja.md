@@ -152,18 +152,18 @@ GitHub リポジトリの **Actions** ページで以下を行います：
 | -------------------- | --------------------------------------------------------- | ---------------------- |
 | `JWT_SECRET`         | ログイントークン / CSRF の署名                                       | はい                     |
 | `TURNSTILE_SECRET`   | サーバーサイドでの CAPTCHA 検証（`TURNSTILE_SITEKEY` とペアで設定する必要があります） | いいえ                    |
-| `SECRETS_MASTER_KEY` | プラグイン決済シークレット / メール SMTP パスワードの AES-GCM マスターキー | いいえ（未設定だとメールパスワードを保存できません） |
+| `SECRETS_MASTER_KEY` | メール SMTP パスワード / プラグイン秘密鍵の AES-GCM マスターキー | いいえ（未設定なら `JWT_SECRET` から派生） |
 
 ローカルでランダムな値を生成し、1 つずつ貼り付けてください：
 
 ```bash
 # JWT_SECRET: any strong random string
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# SECRETS_MASTER_KEY: base64 of exactly 32 bytes (44 chars) or 64-char hex
+# SECRETS_MASTER_KEY (optional): base64 32 bytes (44 chars) or 64-char hex; omitted = derived from JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-> `SECRETS_MASTER_KEY` が未設定の場合、管理画面の「メール設定」で**パスワード付き**の SMTP アカウントを保存すると「SECRETS_MASTER_KEY未設定のためパスワードを保存できません」で失敗します。値は **base64 の 32 バイト（44 文字）または 64 桁の hex** のいずれでも構いませんが、それ以外（コマンド文字列・引用符付き・短い文字列）は「SECRETS_MASTER_KEY は base64 エンコードされた 32 バイトの鍵である必要があります」で失敗します。一度パスワードの暗号化に使った値は**変更しないでください**：既存の暗号文は復号できなくなり（保存済みパスワードが無効化され、送信は 535）、すべてのパスワードを再入力する必要があります。Node がない環境ではブラウザの F12 → Console で生成できます：`btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`。
+> `SECRETS_MASTER_KEY` は**任意**です。未設定（または不正な値）の場合、必須の `JWT_SECRET` から SHA-256 で 32 バイトの鍵を派生して SMTP パスワードを暗号化するため、メール機能は追加設定なしで使えます。設定した場合はそちらが優先されます（ログイン鍵と分離したい場合に設定）。値は base64 の 32 バイト（44 文字）または 64 桁 hex に対応し、それ以外は無視して派生鍵にフォールバックします。**注意**：派生鍵を使う場合、`JWT_SECRET` をローテーションすると保存済みの SMTP パスワードが復号できなくなります（再入力が必要）。一度パスワードを保存したら鍵は変更しないでください。Node がない場合はブラウザの F12 → Console で生成できます：`btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))`。
 
 ### 方法 2: ローカル開発
 

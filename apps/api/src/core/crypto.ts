@@ -76,6 +76,16 @@ export function masterKeyShape(value?: string): string {
   return `len=${v.length},base64Bytes=${bytes},nonAscii=${nonAscii}`;
 }
 
+/**
+ * 由 `JWT_SECRET` 派生主密钥（SHA-256 → 32 字节 → base64）。
+ * 零配置兜底：JWT_SECRET 是每个部署的必填项，于是「只填必填项」也能保存 SMTP 密码。
+ * 代价是轮换 JWT_SECRET 会让已存密文解不开（需重填密码）——文档已注明；
+ * 希望隔离的部署仍显式配置 SECRETS_MASTER_KEY（优先级更高）。
+ */
+export async function deriveMasterKey(seed: string): Promise<string> {
+  return toB64(await crypto.subtle.digest('SHA-256', te.encode(seed)));
+}
+
 async function aesKey(masterB64: string): Promise<CryptoKey> {
   const raw = fromB64(masterB64);
   if (raw.length !== 32) throw new Error(t0('sec.masterKeyInvalid'));

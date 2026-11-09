@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { app } from '../src/index';
 import { Code, type LocText } from '@freeidx/shared';
 import { extSchemaOf } from '../src/core/extensions';
+import { hasSecretsKey } from '../src/core/ext-store';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
 import { l0Clear } from '../src/core/cache';
 import { issueAdminToken } from '../src/core/auth/admin';
@@ -96,11 +97,22 @@ describe('扩展启停/配置（T3-9）', () => {
     expect(String(kvWrite!.params[1])).not.toContain('pub-123');
   });
 
-  it('PUT secret 缺 SECRETS_MASTER_KEY → 校验失败（安全：不落明文）', async () => {
+  it('PUT secret 缺 SECRETS_MASTER_KEY → 回退 JWT_SECRET 派生，仍加密落库（不乱存明文）', async () => {
+    // 默认部署只配 JWT_SECRET 也能保存插件私钥；密文同样以 v1. 开头、不含明文
     const { env, calls } = makeEnv(baseRules(), false);
     const res = await app.request('/api/admin/extensions/ads', { method: 'PUT', headers: await writeHeaders(), body: JSON.stringify({ secret: { publisherId: 'pub-1' } }) }, env);
-    expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
-    expect(calls.some((c) => /REPLACE INTO bbs_kv/.test(c.sql) && c.params[0] === 'ext:ads:secret')).toBe(false);
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const kvWrite = calls.find((c) => /REPLACE INTO bbs_kv/.test(c.sql) && c.params[0] === 'ext:ads:secret');
+    expect(String(kvWrite!.params[1]).startsWith('v1.')).toBe(true);
+    expect(String(kvWrite!.params[1])).not.toContain('pub-1');
+  });
+
+  it('密钥可用性判定：显式 master 或 JWT_SECRET 任一存在即可写私密项', async () => {
+    // 实际部署里 JWT_SECRET 是必填项，故「两者皆无」只作为守卫分支存在（后台也就登不进来了）
+    expect(await hasSecretsKey({})).toBe(false);
+    expect(await hasSecretsKey({ JWT_SECRET: SECRET })).toBe(true);
+    expect(await hasSecretsKey({ SECRETS_MASTER_KEY: MASTER })).toBe(true);
+    expect(await hasSecretsKey({ SECRETS_MASTER_KEY: 'bad-value', JWT_SECRET: SECRET })).toBe(true);
   });
 
   it('GET 详情：config 回显、hasSecret 布尔（私钥值永不返回）', async () => {
