@@ -104,13 +104,35 @@ async function recordMailReport(db: D1b, report: MailReport): Promise<void> {
   }
 }
 
-/** 读最近一次发信报告（无记录/解析失败返回 null，后台按「暂无记录」展示） */
+/**
+ * 是否为当前通道写下的报告：账号标签必须是 `http:{provider}:{from}`。
+ * 旧 SMTP 版写入的记录（`user@host:port` + connect/TCP Loop）在新面板上没有意义，
+ * 且会让「最近一次发信」长期挂着一批与现状无关的失败行，读到即丢弃。
+ */
+function isCurrentReport(o: MailReport): boolean {
+  return o.attempts.every((a) => typeof a?.account === 'string' && a.account.startsWith('http:'));
+}
+
+/** 清掉过期的发信报告（旧 SMTP 记录；best-effort） */
+async function clearMailReport(db: D1b): Promise<void> {
+  try {
+    await db.prepare('DELETE FROM bbs_kv WHERE k = ?').bind(LAST_KEY).run();
+  } catch (e) {
+    console.warn(`[email] clear report failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** 读最近一次发信报告（无记录/解析失败/旧 SMTP 记录返回 null，后台按「暂无记录」展示） */
 async function readMailReport(db: D1b): Promise<MailReport | null> {
   try {
     const row = await db.prepare<{ v: string }>('SELECT v FROM bbs_kv WHERE k = ?').bind(LAST_KEY).first<{ v: string }>();
     if (!row?.v) return null;
     const o = JSON.parse(row.v) as MailReport;
     if (!o || typeof o !== 'object' || !Array.isArray(o.attempts)) return null;
+    if (!isCurrentReport(o)) {
+      await clearMailReport(db);
+      return null;
+    }
     return o;
   } catch {
     return null;
