@@ -25,7 +25,7 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
       loadGrouplist(cache, db),
       loadViewer(cache, db, c),
       loadSetting(cache, db),
-      // 邮件通道实际可用性：后台「注册邮箱验证」只是开关，能否发信取决于 SMTP 池是否存在（§11.3 无池即降级）。
+      // 邮件通道实际可用性：后台「注册邮箱验证」只是开关，能否发信取决于邮件账号池是否存在（§11.3 无池即降级）。
       // 前台必须按「实际生效」口径渲染验证码框，否则会给出必填验证码、发码却永远失败的死路。
       // 60s 读穿缓存：本接口是热点，不能每次 bootstrap 都去解密一次 secret。
       remember(cache, 'email:on', async () => (await getEmailProvider(c.env, db, cache)) !== null),

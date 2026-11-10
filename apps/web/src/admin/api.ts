@@ -33,9 +33,8 @@ import type {
   McpTokenInput,
   McpTokenRow,
   EmailSettingView,
-  HttpMailInput,
+  MailAccountInput,
   MailReport,
-  SmtpAccountInput,
   ForumInput,
   GroupFullRow,
   GroupUpsertItem,
@@ -71,10 +70,10 @@ export const deleteSiteLogo = () => apiSend('DELETE', '/api/admin/setting/logo')
 export const uploadSiteFavicon = (data: string) => apiSend<{ favicon_url: string }>('PUT', '/api/admin/setting/favicon', { data });
 export const deleteSiteFavicon = () => apiSend('DELETE', '/api/admin/setting/favicon');
 
-/** 邮箱设置（§11.3）：SMTP 池 + HTTP 邮件 API 通道；密码/Key 永不回显，留空即保持原值 */
+/** 邮箱设置（§11.3）：HTTP 邮件 API 账号池；Key 永不回显，留空即按账号身份保持原值 */
 export const getEmailSetting = () => apiGet<EmailSettingView>('/api/admin/email-setting');
-export const putEmailSetting = (pool: SmtpAccountInput[], http: HttpMailInput) =>
-  apiSend<EmailSettingView>('PUT', '/api/admin/email-setting', { pool, http });
+export const putEmailSetting = (pool: MailAccountInput[]) =>
+  apiSend<EmailSettingView>('PUT', '/api/admin/email-setting', { pool });
 /**
  * 测试发信（同步实发，按已保存的池逐账号尝试，最多 3 个）。
  * to 留空 ⇒ 发给池中第一个发件地址（自己发自己）；回包是逐账号的诊断报告，失败不抛错。

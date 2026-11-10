@@ -35,7 +35,7 @@ const SEND_MIN_INTERVAL = 60;
 const SEND_DAILY_CAP = 10;
 /**
  * IP 维度发信预算：每小时每 IP 每场景 10 次。
- * 邮箱维度挡不住「换邮箱轰炸」—— 攻击者可用任意多个地址逐个触发发信，把 SMTP 池的日额度
+ * 邮箱维度挡不住「换邮箱轰炸」—— 攻击者可用任意多个地址逐个触发发信，把邮件账号池的日额度
  * 与发信信誉打光（退信/投诉反噬域名），受害者全是无关的真实收件人。
  */
 const IP_SEND_CAP = 10;
@@ -235,7 +235,7 @@ export function authRoutes(): Hono<ReadEnv> {
       .bind(email, code, scene, ts, ts + EMAIL_CODE_TTL)
       .run();
     const subject = t('auth.codeMailSubject', { site: setting.sitename });
-    // 发信不阻塞请求（§D.6 Workers 映射「同步 SMTP→Email Provider + waitUntil，绝不请求内阻塞发信」）：
+    // 发信不阻塞请求（§D.6 Workers 映射「同步发信→Email Provider + waitUntil，绝不请求内阻塞发信」）：
     // 验证码行已入库、有效性不依赖投递结果；不加队列重试——码 TTL 300s 短于 cron 5min 批处理周期，重试无意义（§11.2 通道仍预留）。
     const work = provider!.send(email, subject, t('auth.codeMailBody', { site: setting.sitename, code })).catch((e) => {
       console.error(`[email] ${t0('email.deliverError', { err: e instanceof Error ? `${e.name}: ${e.message}` : String(e) })}`);

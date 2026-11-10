@@ -483,38 +483,35 @@ export interface AdminSettingInput {
   nav?: string;
 }
 
-/** GET/PUT /api/admin/email-setting（§11.3 SMTP 账号池；密码永不回显，只回 hasPass，提交留空即保持） */
-interface SmtpAccountView {
+/** HTTP 邮件 API 服务商（与后端 HTTP_PROVIDERS 对齐） */
+export type HttpMailProvider = 'resend' | 'sendgrid' | 'brevo' | 'custom';
+
+/** GET/PUT /api/admin/email-setting（§11.3 HTTP 邮件 API 账号池；Key 永不回显，只回 hasKey，提交留空即保持） */
+export interface MailAccountView {
+  /** 坏行（历史数据/被改坏）provider 为空，需在后台修正 */
+  provider: HttpMailProvider | '';
   from: string;
-  host: string;
-  port: number;
-  user: string;
+  /** provider=custom 时的接口地址 */
+  url: string;
   /** 每日发送上限（0 = 不限） */
   dailyLimit: number;
-  hasPass: boolean;
+  hasKey: boolean;
 }
 
-export interface SmtpAccountInput {
+/** PUT 提交：key 留空即按账号身份（provider+from）保持原值 */
+export interface MailAccountInput {
+  provider: HttpMailProvider;
   from: string;
-  host: string;
-  port: number;
-  user: string;
+  url: string;
   dailyLimit: number;
-  pass?: string;
+  key?: string;
 }
 
-/** 单账号一次投递尝试（stage 为失败阶段：config/connect/greeting/ehlo/starttls/auth/mailfrom/rcpt/data/body） */
+/** 单账号一次投递尝试（stage 为失败阶段：config/http/rate-limit/timeout/network/quota） */
 export interface MailAttempt {
   account: string;
   ok: boolean;
   stage?: string;
-  error?: string;
-}
-
-/** 运行时 DNS 解析结果（DoH 探测，仅测试发信时返回；用于区分「DNS 被改写」与「环境禁止出站」） */
-export interface DnsProbe {
-  host: string;
-  ips: string[];
   error?: string;
 }
 
@@ -527,34 +524,10 @@ export interface MailReport {
   /** true = 后台手动测试 */
   test: boolean;
   attempts: MailAttempt[];
-  /** 仅测试发信时带：目标主机的运行时解析结果 */
-  dns?: DnsProbe;
-}
-
-/** HTTP 邮件 API 服务商（与后端 HTTP_PROVIDERS 对齐；'' = 未启用） */
-export type HttpMailProvider = '' | 'resend' | 'sendgrid' | 'brevo' | 'custom';
-
-/** GET 回显：Key 永不回显，只回 hasKey */
-export interface HttpMailSetting {
-  provider: HttpMailProvider;
-  from: string;
-  /** provider=custom 时的接口地址 */
-  url: string;
-  hasKey: boolean;
-}
-
-/** PUT 提交：key 留空即保持原值 */
-export interface HttpMailInput {
-  provider: HttpMailProvider;
-  from: string;
-  url: string;
-  key?: string;
 }
 
 export interface EmailSettingView {
-  pool: SmtpAccountView[];
-  /** HTTP 邮件 API 通道（SMTP 出站被环境拦截时的兜底） */
-  http: HttpMailSetting;
+  pool: MailAccountView[];
   /** 最近一次发信结果（无记录为 null） */
   last: MailReport | null;
 }

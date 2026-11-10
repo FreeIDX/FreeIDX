@@ -1,7 +1,7 @@
 /**
  * T4-1 找回密码两步（email_code 表存一次性 token，非 session）+ §11.3 未配置 provider 降级。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../src/index';
 import { Code } from '@freeidx/shared';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
@@ -11,10 +11,10 @@ import { encryptSecret } from '../src/core/crypto';
 const PW = 'deadbeefdeadbeefdeadbeefdeadbeef'; // 前端预哈希 32hex
 const SETTING = { runlevel: 5, user_resetpw_on: 1, sitename: 'S', lang: 'zh-cn' };
 
-/** SMTP 池测试配置（ext:email:config/secret，口径同 §11.3/§17.1） */
+/** 邮件账号池测试配置（ext:email:config/secret，口径同 §11.3/§17.1） */
 const EMAIL_MASTER = btoa(String.fromCharCode(7).repeat(32));
-const EMAIL_POOL = { pool: [{ from: 'noreply@test.local', host: 'smtp.test.local', port: 465, user: 'smtp@test.local', dailyLimit: 0 }] };
-const EMAIL_SECRET_TOKEN = await encryptSecret(JSON.stringify({ passes: ['smtp-pass'] }), EMAIL_MASTER);
+const EMAIL_POOL = { pool: [{ provider: 'resend', from: 'noreply@test.local', url: '', dailyLimit: 0 }] };
+const EMAIL_SECRET_TOKEN = await encryptSecret(JSON.stringify({ keys: ['test-key'] }), EMAIL_MASTER);
 
 function rules(overrides: SqlRule[] = []): SqlRule[] {
   return [
@@ -66,7 +66,10 @@ async function jsonOf(res: Response) {
 
 beforeEach(() => {
   l0Clear();
+  // 发信走 fetch（waitUntil 旁路）：桩一个 2xx，避免测试真的打到服务商
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{"ok":true}', { status: 200 })));
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe('POST /api/auth/password-reset/request', () => {
   it('未配置 provider → 降级 NOT_LOGIN（§11.3）', async () => {
@@ -75,7 +78,7 @@ describe('POST /api/auth/password-reset/request', () => {
     expect((await jsonOf(res)).code).toBe(Code.NOT_LOGIN);
   });
 
-  it('已注册邮箱：发放一次性 token 落 email_code（单活作废旧 token；发信走 SMTP 池旁路）', async () => {
+  it('已注册邮箱：发放一次性 token 落 email_code（单活作废旧 token；发信走账号池旁路）', async () => {
     const { env, calls } = makeEnv();
     const res = await app.request('/api/auth/password-reset/request', post('/x', { email: 'a@b.c' }), env);
     expect((await jsonOf(res)).code).toBe(Code.OK);

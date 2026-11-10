@@ -1,97 +1,71 @@
 /**
- * SMTP 账号池 EmailProvider（§11.3，§19 决策 4 拍板）。
- * Workers 直连 SMTP 实现：
- *  - `cloudflare:sockets` 出站 TCP：25 端口被封，465（隐式 TLS）/587（STARTTLS）可用；非 465/587 按明文（仅限本地假 SMTP 联调）。
- *  - 内置最小 SMTP 客户端：EHLO → STARTTLS? → AUTH（LOGIN / PLAIN，按 EHLO 通告能力选）→ MAIL FROM → RCPT TO → DATA → QUIT。
- *  - 多账号 **round-robin 轮询**（单账号免费额度 → N 倍，数量突破）；当前账号失败自动顺延下一账号（failover）。
- *  - **端口互备**：同一账号在 465（隐式 TLS）与 587（STARTTLS）之间，仅在**连接阶段**失败时互试一次
- *    （认证/投递类失败换端口无意义）；某些企业网/运营商只放行其中一条。
- *    轮询指针存 D1 kv 行 `ext:email:rr`（单语句自增 RETURNING；竞态下偶发重复选号无害，仅轮转偏移）。
+ * HTTP 邮件 API 账号池 EmailProvider（§11.3）。
+ *
+ * 为什么只有 HTTP 通道：Workers 直连 SMTP 依赖 `cloudflare:sockets` 的出站 TCP，部分出站环境会把
+ * 到邮件服务器的连接判为「TCP Loop」直接拒绝（DNS 正常、465/587 都失败，与授权码无关），
+ * 只有 443 的 `fetch` 稳定可用。因此发信统一走服务商 REST API，SMTP 客户端与端口/凭证池已整体移除。
+ *
+ *  - 多账号 **round-robin 轮询**：N 个账号/服务商把每日额度叠加，单账号失败自动顺延下一个。
+ *    轮询指针存 D1 kv `ext:email:rr`（单语句自增 RETURNING；竞态下偶发重复选号无害，仅轮转偏移）。
  *  - **每账号每日发送上限**（dailyLimit，0 不限）：达到上限的账号当天轮询自动跳过（顺延下一账号），
- *    当日计数存 D1 kv `ext:email:cnt:{ymd}:{host}:{user}`（UTC 日切；**发前预约、失败归还**，
+ *    当日计数存 D1 kv `ext:email:cnt:{ymd}:{provider}:{from}`（UTC 日切；**发前预约、失败归还**，
  *    条件自增保证并发不超发）；读计数时顺带清理历史日期行。
- *  - 池配置：kv `ext:email:config{pool:[{from,host,port,user,dailyLimit}]}`（明文，三层缓存）+ `ext:email:secret{passes:[]}`
- *    （AES-GCM 按下标对应，永不回显）；后台「邮箱设置」整池提交（池与密码单事务），零部署生效。
+ *  - **失败语义**：服务商回 4xx/5xx 说明没有受理 → 顺延下一账号；超时/网络中断属「结果未知」→
+ *    判失败且**不再换号**，否则同一封信会被第二个账号重发（收件人收到两封）。
+ *  - 池配置：kv `ext:email:config{pool:[{provider,from,url,dailyLimit}]}`（明文，三层缓存）
+ *    + `ext:email:secret{keys:[]}`（AES-GCM 按下标对应，永不回显）；后台「邮箱设置」整池提交（池与
+ *    Key 单事务），零部署生效。历史单通道配置（`http{...}` + `httpKey`）读时自动迁移成单元素池。
  *  - 发送由 auth 路由经 waitUntil 旁路调用（绝不请求内阻塞发信，§D.6）；降级：池为空返回 null，
  *    等价 user_create_email_on=0（bootstrap 以 `setting.mailOn` 把该降级同步给前端）。
- *  - **HTTP 邮件 API 兜底**：若 Worker 出站环境把到 SMTP 的 TCP 判为「TCP Loop」（DNS 正常、
- *    465/587 均在 connect 阶段被拒），配置 HTTP 通道（resend/sendgrid/brevo/custom）即可改走 443 HTTPS，
- *    见 core/email-http.ts；配置了 HTTP 通道时优先级高于 SMTP 池。
  *  - 可观测性：正式发信（验证码/找回密码）与后台测试信都把「逐账号尝试结果」写 kv `ext:email:last`，
- *    后台「邮箱设置」页回显最近一次结果；POST /api/admin/email-setting/test 同步实发一封并回 SMTP 原文。
- *    旁路发信失败对用户不可见（前端一律「已发送」），没有这条链路就无从判断是凭证、端口还是反垃圾。
+ *    后台「邮箱设置」页回显最近一次结果；POST /api/admin/email-setting/test 同步实发一封并回服务商原文。
+ *    旁路发信失败对用户不可见（前端一律「已发送」），没有这条链路就无从判断是 Key、发件域名还是限流。
  */
 import type { Env } from '../types/env';
 import type { Cache } from './cache';
 import type { D1b } from './db';
 import { loadExtConfig, loadExtSecret } from './ext-store';
-import { HTTP_PROVIDERS, sendViaHttp, type HttpMailConfig, type HttpProvider } from './email-http';
+import { HTTP_PROVIDERS, HttpSendError, sendViaHttp, type HttpMailConfig, type HttpProvider } from './email-http';
 import { t0 } from './i18n';
-import { connect } from 'cloudflare:sockets';
 
 const EMAIL_EXT_ID = 'email';
 /** 轮询指针 kv 行 key（bbs_kv，k 为主键） */
 const RR_KEY = 'ext:email:rr';
-/** 单步应答超时（每个阶段各自计 15s） */
-const SMTP_TIMEOUT = 15_000;
-/** 单次 SMTP 会话总超时（连接+握手+STARTTLS+认证+投递全程；单步超时不得超过剩余总时长） */
-const SMTP_SESSION_TIMEOUT = 60_000;
 
 interface EmailProvider {
   readonly name: string;
   send(to: string, subject: string, text: string): Promise<boolean>;
 }
 
-/** 后台「邮箱设置」回显行（密码永不回显，只回 hasPass） */
-interface SmtpAccountView {
-  from: string;
-  host: string;
-  port: number;
-  user: string;
-  /** 每日发送上限（0 = 不限）；达到上限的账号当天轮询自动跳过 */
-  dailyLimit: number;
-  hasPass: boolean;
-}
-
-interface SmtpAccount extends SmtpAccountView {
-  pass: string;
-}
-
-/** 后台「HTTP 邮件 API」回显行（Key 永不回显，只回 hasKey） */
-export interface HttpMailView {
-  /** '' = 未启用（仅走 SMTP 池） */
+/** 后台「邮箱设置」回显行（Key 永不回显，只回 hasKey；坏行 provider 为 ''，便于管理员看见并修正） */
+export interface MailAccountView {
   provider: HttpProvider | '';
+  /** 发件地址（需在服务商侧已验证） */
   from: string;
   /** provider=custom 时的接口地址 */
   url: string;
+  /** 每日发送上限（0 = 不限）；达到上限的账号当天轮询自动跳过 */
+  dailyLimit: number;
   hasKey: boolean;
 }
 
-
-/**
- * 单账号一次投递尝试的诊断结果。
- * 「用户点了发送验证码却一直收不到」这类问题在旧实现里完全不可见：发信走 waitUntil 旁路，
- * 失败只落 console.error（普通管理员看不到），前台一律回「已发送」。故把每次尝试的原因留下来。
- */
-export interface MailAttempt {
-  /** 账号标识 user@host:port（不含密码） */
-  account: string;
-  ok: boolean;
-  /** 失败阶段：config / connect / greeting / ehlo / starttls / auth / mailfrom / rcpt / data / body */
-  stage?: string;
-  /** 失败原因（含 SMTP 服务商返回的原文行，如 535 Login fail） */
-  error?: string;
+interface MailAccount extends MailAccountView {
+  provider: HttpProvider;
+  key: string;
 }
 
 /**
- * 运行时 DNS 解析结果（DoH 探测，走 HTTPS 不依赖出站 TCP）。
- * 用途：区分「域名被解析改写到 Cloudflare 网段」与「域名正常但 socket 被策略拒绝」——
- * 前者是账户侧的 DNS/网关策略，后者是平台出站限制，处置方式完全不同。
+ * 单账号一次投递尝试的诊断结果。
+ * 「用户点了发送验证码却一直收不到」这类问题在旁路发信下完全不可见：发信走 waitUntil，
+ * 失败只落 console.error（普通管理员看不到），前台一律回「已发送」。故把每次尝试的原因留下来。
  */
-export interface DnsProbe {
-  host: string;
-  ips: string[];
-  /** 探测失败原因（不阻断发信，仅作参考） */
+export interface MailAttempt {
+  /** 账号标识 http:{provider}:{from}（不含 Key） */
+  account: string;
+  ok: boolean;
+  /** 失败阶段：config / http / rate-limit / timeout / network */
+  stage?: string;
+  /** 失败原因（含服务商返回的原文行，如 HTTP 403: domain is not verified） */
   error?: string;
 }
 
@@ -104,8 +78,6 @@ export interface MailReport {
   /** true = 后台「测试邮箱」手动触发 */
   test: boolean;
   attempts: MailAttempt[];
-  /** 仅在后台测试发信时附带：目标主机的运行时解析结果 */
-  dns?: DnsProbe;
 }
 
 /** 最近一次发信报告落 bbs_kv（单行覆盖，无历史累积） */
@@ -113,8 +85,12 @@ const LAST_KEY = 'ext:email:last';
 
 const str = (v: unknown): string => String(v ?? '').trim();
 
-/** 账号标签：user@host:port（诊断展示用，不含密码） */
-const labelOf = (a: { user: string; host: string; port: number }): string => `${a.user}@${a.host}:${a.port}`;
+const isProvider = (v: string): v is HttpProvider => (HTTP_PROVIDERS as readonly string[]).includes(v);
+
+/** 账号标签：http:provider:from（诊断展示用，不含 Key） */
+const labelOf = (a: { provider: string; from: string }): string => `http:${a.provider}:${a.from}`;
+
+const cfgOf = (a: MailAccount): HttpMailConfig => ({ provider: a.provider, from: a.from, url: a.url });
 
 /** 记录最近一次发信结果（best-effort：诊断信息绝不能把发信本身搞失败） */
 async function recordMailReport(db: D1b, report: MailReport): Promise<void> {
@@ -141,116 +117,85 @@ async function readMailReport(db: D1b): Promise<MailReport | null> {
   }
 }
 
-/** 读取并规范化池：坏行静默剔除（缺 host/port/user/pass/from 任一项即不可用） */
-async function readPool(env: Env, db: D1b, cache: Cache): Promise<SmtpAccount[]> {
+const limitOf = (v: unknown): number => Math.max(0, Math.floor(Number(v ?? 0)) || 0);
+
+/**
+ * 池的原始数据：config.pool 与 secret.keys **按下标对齐**。
+ * 历史版本存的是单通道（config.http + secret.httpKey），读时映射成单元素池，升级不丢已保存的 Key；
+ * 更早的 SMTP 行（没有 provider 字段）在这里自然被忽略。
+ */
+function poolSource(cfg: Record<string, unknown>, sec: Record<string, unknown>): {
+  rows: Record<string, unknown>[];
+  keys: unknown[];
+} {
+  const rows = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
+  const keys = Array.isArray(sec.keys) ? (sec.keys as unknown[]) : [];
+  if (rows.some((r) => isProvider(str(r?.provider).toLowerCase()))) return { rows, keys };
+  const legacy = (cfg.http ?? {}) as Record<string, unknown>;
+  if (isProvider(str(legacy.provider).toLowerCase())) return { rows: [legacy], keys: [sec.httpKey] };
+  return { rows: [], keys: [] };
+}
+
+/** 回显用：不按「有 Key 才可用」过滤，缺 Key 的行也要照常显示并标 hasKey=false（否则一保存就被整行删掉） */
+function toView(raw: Record<string, unknown>, key: unknown): MailAccountView {
+  const provider = str(raw?.provider).toLowerCase();
+  const url = str(raw?.url);
+  return {
+    provider: isProvider(provider) ? provider : '',
+    from: str(raw?.from),
+    url: provider === 'custom' ? url : '',
+    dailyLimit: limitOf(raw?.dailyLimit),
+    hasKey: str(key) !== '',
+  };
+}
+
+/** 发信路径：缺 provider/from/Key（或 custom 缺地址）的行不可用，静默剔除 */
+function toAccount(raw: Record<string, unknown>, key: unknown): MailAccount | null {
+  const provider = str(raw?.provider).toLowerCase();
+  const from = str(raw?.from);
+  const url = str(raw?.url);
+  const k = str(key);
+  if (!isProvider(provider) || !from || !k) return null;
+  if (provider === 'custom' && !url) return null;
+  return { provider, from, url: provider === 'custom' ? url : '', dailyLimit: limitOf(raw?.dailyLimit), hasKey: true, key: k };
+}
+
+/** 读取并规范化池：坏行静默剔除（缺 provider/from/Key 即不可用） */
+async function readPool(env: Env, db: D1b, cache: Cache): Promise<MailAccount[]> {
   const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
-  const rawPool = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
-  const passes = Array.isArray(sec.passes) ? sec.passes : [];
-  const pool: SmtpAccount[] = [];
-  rawPool.forEach((r, i) => {
-    const from = str(r?.from);
-    const host = str(r?.host);
-    const port = Math.floor(Number(r?.port ?? 0));
-    const user = str(r?.user);
-    const pass = str(passes[i]);
-    const dailyLimit = Math.max(0, Math.floor(Number(r?.dailyLimit ?? 0)) || 0);
-    if (from && host && port > 0 && user && pass)
-      pool.push({ from, host, port, user, pass, dailyLimit, hasPass: true });
-  });
-  return pool;
+  const { rows, keys } = poolSource(cfg, sec);
+  return rows.map((r, i) => toAccount(r, keys[i])).filter((a): a is MailAccount => a !== null);
 }
 
 /**
- * 后台「邮箱设置」页状态：池行回显（密码只回 hasPass）。
- *
- * 与 readPool 的区别：这里**不**按「有密码才可用」过滤——密码缺失（SECRETS_MASTER_KEY 轮换/密文损坏）
- * 的行必须照常回显并标记 hasPass=false，否则后台看到的是空池，顺手一保存就把这些账号整行删掉；
- * 而 readPool 是发信路径，缺密码的行确实不可用（会被静默跳过）。
+ * 后台保存时用：读当前池的原始行与按下标对应的 Key（含历史单通道配置的迁移）。
+ * 暴露原始数据是为了「留空保持」按账号身份（provider+from）匹配，而不是按下标 ——
+ * 后台删掉中间一行或调整顺序后，按下标会把 A 账号的 Key 写到 B 账号上（保存看似成功、发信全部 401）。
  */
+export async function loadPoolRaw(
+  env: Env,
+  db: D1b,
+  cache: Cache,
+): Promise<{ rows: Record<string, unknown>[]; keys: unknown[] }> {
+  const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
+  return poolSource(cfg, sec);
+}
+
+/** 后台「邮箱设置」页状态：池行回显（Key 只回 hasKey）+ 最近一次发信结果 */
 export async function getEmailSettingState(
   env: Env,
   db: D1b,
   cache: Cache,
-): Promise<{ pool: SmtpAccountView[]; http: HttpMailView; last: MailReport | null }> {
-  const [cfg, sec] = await Promise.all([
-    loadExtConfig(cache, db, EMAIL_EXT_ID),
-    loadExtSecret(db, EMAIL_EXT_ID, env),
-  ]);
-  const rawPool = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
-  const passes = Array.isArray(sec.passes) ? sec.passes : [];
-  const pool = rawPool.map((r, i) => ({
-    from: str(r?.from),
-    host: str(r?.host),
-    port: Math.floor(Number(r?.port ?? 0)),
-    user: str(r?.user),
-    dailyLimit: Math.max(0, Math.floor(Number(r?.dailyLimit ?? 0)) || 0),
-    hasPass: str(passes[i]) !== '',
-  }));
-  const raw = (cfg.http ?? {}) as Record<string, unknown>;
-  const provider = str(raw.provider);
-  const http: HttpMailView = {
-    provider: (HTTP_PROVIDERS as readonly string[]).includes(provider) ? (provider as HttpProvider) : '',
-    from: str(raw.from),
-    url: str(raw.url),
-    hasKey: str(sec.httpKey) !== '',
-  };
-  // 最近一次发信结果一并回显：注册验证码走 waitUntil 旁路，失败不会反馈给用户，
-  // 后台若不展示这一行，管理员只能靠「用户说没收到」猜。
-  return { pool, http, last: await readMailReport(db) };
-}
-
-/**
- * 读取 HTTP 邮件 API 配置（可用才返回；缺 Key/发件人/custom 缺地址即视为未启用）。
- * HTTP 通道优先于 SMTP 池：它是 SMTP 出站被环境拦截时的兜底，配置了就是明确要用。
- */
-async function readHttpMail(
-  env: Env,
-  db: D1b,
-  cache: Cache,
-): Promise<{ cfg: HttpMailConfig; key: string } | null> {
+): Promise<{ pool: MailAccountView[]; last: MailReport | null }> {
   const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
-  const raw = (cfg.http ?? {}) as Record<string, unknown>;
-  const provider = str(raw.provider);
-  const from = str(raw.from);
-  const url = str(raw.url);
-  const key = str(sec.httpKey);
-  if (!(HTTP_PROVIDERS as readonly string[]).includes(provider) || !from || !key) return null;
-  if (provider === 'custom' && !url) return null;
-  return { cfg: { provider: provider as HttpProvider, from, url }, key };
+  const { rows, keys } = poolSource(cfg, sec);
+  return { pool: rows.map((r, i) => toView(r, keys[i])), last: await readMailReport(db) };
 }
 
-/** HTTP 邮件 API 通道：一次 POST 即一封（无连接复用，无需轮询与额度计数） */
-class HttpMailProvider implements EmailProvider {
-  readonly name = 'http-api';
-
-  constructor(
-    private readonly db: D1b,
-    private readonly cfg: HttpMailConfig,
-    private readonly key: string,
-  ) {}
-
-  async send(to: string, subject: string, text: string): Promise<boolean> {
-    const account = `http:${this.cfg.provider}`;
-    const at = Math.floor(Date.now() / 1000);
-    try {
-      await sendViaHttp(this.cfg, this.key, to, subject, text);
-      await recordMailReport(this.db, { ok: true, to, at, test: false, attempts: [{ account, ok: true }] });
-      return true;
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      console.error(`[email] ${t0('email.acctSendFailed', { account, err })}`);
-      await recordMailReport(this.db, { ok: false, to, at, test: false, attempts: [{ account, ok: false, stage: 'http', error: err }] });
-      return false;
-    }
-  }
-}
-
-/** 无可用通道 → null（调用方按 §11.3 降级，而非报错）；HTTP 通道优先 */
+/** 无可用账号 → null（调用方按 §11.3 降级，而非报错） */
 export async function getEmailProvider(env: Env, db: D1b, cache: Cache): Promise<EmailProvider | null> {
-  const http = await readHttpMail(env, db, cache);
-  if (http) return new HttpMailProvider(db, http.cfg, http.key);
   const pool = await readPool(env, db, cache);
-  return pool.length ? new SmtpPoolProvider(db, pool) : null;
+  return pool.length ? new HttpPoolProvider(db, pool) : null;
 }
 
 /** 轮询指针自增（原子单语句；行不存在则初始化为 1），返回本次应使用的账号下标。
@@ -272,14 +217,13 @@ async function nextRoundRobin(db: D1b, n: number): Promise<number> {
 /** 当日计数行 key 前缀（bbs_kv） */
 const CNT_PREFIX = 'ext:email:cnt:';
 
-/** 当日计数 key：`ext:email:cnt:{ymd}:{host}:{user}`，UTC 日切（0 点整池计数清零）。
- *  账号唯一标识是 (host, user)：只按 user 计数会让「同一发信账号配置在两个中转主机」的两行共用额度桶，
- *  其中一个账号额度耗尽即被误跳过（或超额）。
- *  host/user 来自后台配置且仅用于代码内插字面量（见 D1 upsert bind 怪癖），净化为安全字符集防 SQL 注入。 */
-function cntKey(host: string, user: string): string {
+/** 当日计数 key：`ext:email:cnt:{ymd}:{provider}:{from}`，UTC 日切（0 点整池计数清零）。
+ *  provider+from 是账号身份：同一个发件地址配在两个服务商下是两个独立额度桶，互不影响。
+ *  两者来自后台配置且仅用于代码内插字面量（见 D1 upsert bind 怪癖），净化为安全字符集防 SQL 注入。 */
+function cntKey(provider: string, from: string): string {
   const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const safe = (v: string) => v.replace(/[^A-Za-z0-9@._+-]/g, '_').slice(0, 64);
-  return `${CNT_PREFIX}${ymd}:${safe(host)}:${safe(user)}`;
+  return `${CNT_PREFIX}${ymd}:${safe(provider)}:${safe(from)}`;
 }
 
 /**
@@ -289,15 +233,13 @@ function cntKey(host: string, user: string): string {
  * 计数只是额度保护（best-effort），D1 抖动不能让整封信发不出去：查询失败按空计数继续，
  * 最坏结果只是当天多消耗几个名额；若在这里抛出，`send()` 会整体失败 → 用户收不到任何邮件。
  */
-async function readDailyCounts(db: D1b, accounts: SmtpAccount[]): Promise<Map<string, number>> {
+async function readDailyCounts(db: D1b, accounts: MailAccount[]): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   if (!accounts.some((a) => a.dailyLimit > 0)) return map;
   const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   try {
     await db.prepare(`DELETE FROM bbs_kv WHERE k LIKE '${CNT_PREFIX}%' AND k < '${CNT_PREFIX}${ymd}'`).run();
-    const keys = accounts
-      .filter((a) => a.dailyLimit > 0)
-      .map((a) => `'${cntKey(a.host, a.user)}'`);
+    const keys = accounts.filter((a) => a.dailyLimit > 0).map((a) => `'${cntKey(a.provider, a.from)}'`);
     const r = await db.prepare<{ k: string; v: string }>(`SELECT k, v FROM bbs_kv WHERE k IN (${keys.join(',')})`).all();
     for (const row of r.results ?? []) map.set(row.k, Number(row.v) || 0);
   } catch (e) {
@@ -310,16 +252,16 @@ async function readDailyCounts(db: D1b, accounts: SmtpAccount[]): Promise<Map<st
 /**
  * 预约一个发送名额（race-safe 额度闸）：原子条件自增 `WHERE v < limit`，返回是否抢到。
  *
- * 语义从「发成功后 +1」改为「发前预约、失败归还」：旧实现「先查后加」在两个 isolate 同时取号时
- * 会各自认为还剩 1 个名额 → 双双发出，日上限被突破。预约失败 = 该账号额度已满，直接跳过换号。
- * 代价是极端情况下（isolate 在会话中途被回收）会漏归还 1 个名额，方向上只会少发、不会超发。
+ * 语义是「发前预约、失败归还」：旧实现「先查后加」在两个 isolate 同时取号时会各自认为
+ * 还剩 1 个名额 → 双双发出，日上限被突破。预约失败 = 该账号额度已满，直接跳过换号。
+ * 代价是极端情况下（isolate 在请求中途被回收）会漏归还 1 个名额，方向上只会少发、不会超发。
  * 未限额账号（limit=0）不计数。
  */
-async function tryReserveDailyCount(db: D1b, host: string, user: string, limit: number): Promise<boolean> {
+async function tryReserveDailyCount(db: D1b, provider: string, from: string, limit: number): Promise<boolean> {
   if (!(limit > 0)) return true;
   const r = await db
     .prepare(
-      `INSERT INTO bbs_kv (k, v) VALUES ('${cntKey(host, user)}', '1')
+      `INSERT INTO bbs_kv (k, v) VALUES ('${cntKey(provider, from)}', '1')
        ON CONFLICT(k) DO UPDATE SET v = CAST(CAST(v AS INTEGER) + 1 AS TEXT)
        WHERE CAST(v AS INTEGER) < ${Math.floor(limit)}`,
     )
@@ -328,25 +270,25 @@ async function tryReserveDailyCount(db: D1b, host: string, user: string, limit: 
 }
 
 /** 归还名额（发送失败/未发出时调用；余额不为负） */
-async function releaseDailyCount(db: D1b, host: string, user: string): Promise<void> {
+async function releaseDailyCount(db: D1b, provider: string, from: string): Promise<void> {
   await db
     .prepare(
       `UPDATE bbs_kv SET v = CAST(CAST(v AS INTEGER) - 1 AS TEXT)
-       WHERE k = '${cntKey(host, user)}' AND CAST(v AS INTEGER) > 0`,
+       WHERE k = '${cntKey(provider, from)}' AND CAST(v AS INTEGER) > 0`,
     )
     .run();
 }
 
-class SmtpPoolProvider implements EmailProvider {
-  readonly name = 'smtp-pool';
+class HttpPoolProvider implements EmailProvider {
+  readonly name = 'http-pool';
 
   constructor(
     private readonly db: D1b,
-    private readonly accounts: SmtpAccount[],
+    private readonly accounts: MailAccount[],
   ) {}
 
-  /** 从轮询位起依次尝试：超每日限额的账号直接跳过，账号级失败（连接/认证/拒收）顺延下一个；
-   *  全败或全部账号达限额返回 false（上层按投递失败静默，原因落日志） */
+  /** 从轮询位起依次尝试：超每日限额的账号直接跳过，确定性失败顺延下一个；
+   *  全败或全部账号达限额返回 false（上层按投递失败静默，原因落日志与 kv） */
   async send(to: string, subject: string, text: string): Promise<boolean> {
     const n = this.accounts.length;
     // 轮询指针只影响「从哪台开始试」，D1 抖动时退化为固定从 0 开始，不能因此不发信
@@ -356,12 +298,13 @@ class SmtpPoolProvider implements EmailProvider {
     });
     const used = await readDailyCounts(this.db, this.accounts);
     const attempts: MailAttempt[] = [];
+    const at = Math.floor(Date.now() / 1000);
     let overLimit = 0;
     for (let i = 0; i < n; i++) {
       const acct = this.accounts[(start + i) % n]!;
       const limited = acct.dailyLimit > 0;
-      // 先按批量读数粗筛（省掉明显发不出去的一次建连），真正的闸门是下面的原子预约
-      if (limited && (used.get(cntKey(acct.host, acct.user)) ?? 0) >= acct.dailyLimit) {
+      // 先按批量读数粗筛（省掉明显发不出去的一次 API 调用），真正的闸门是下面的原子预约
+      if (limited && (used.get(cntKey(acct.provider, acct.from)) ?? 0) >= acct.dailyLimit) {
         overLimit++;
         attempts.push({ account: labelOf(acct), ok: false, stage: 'quota', error: t0('email.acctOverLimit', { limit: acct.dailyLimit }) });
         continue;
@@ -369,7 +312,7 @@ class SmtpPoolProvider implements EmailProvider {
       if (limited) {
         let reserved = true;
         try {
-          reserved = await tryReserveDailyCount(this.db, acct.host, acct.user, acct.dailyLimit);
+          reserved = await tryReserveDailyCount(this.db, acct.provider, acct.from, acct.dailyLimit);
         } catch (e) {
           // 计数行读写异常不阻断发信（额度保护是 best-effort）
           console.warn(`[email] daily reserve failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -380,325 +323,47 @@ class SmtpPoolProvider implements EmailProvider {
           continue;
         }
       }
-      const tries = await attemptAccount(acct, to, subject, text);
-      attempts.push(...tries);
-      if (tries.some((t) => t.ok)) {
-        // DATA 后的 250 已确认投递：名额保留，且此后任何失败都不得顺延下一个账号，
-        // 否则同一封信会被第二台重发一次（对方收到两封）。
-        await recordMailReport(this.db, { ok: true, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
-        return true;
-      }
-      // 该账号（含端口互备）全部失败 → 顺延下一个账号；服务商拒绝不算消耗额度，归还名额
-      if (limited) {
-        try {
-          await releaseDailyCount(this.db, acct.host, acct.user);
-        } catch (e2) {
-          console.warn(`[email] daily release failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
+      try {
+        await sendViaHttp(cfgOf(acct), acct.key, to, subject, text);
+      } catch (e) {
+        const err =
+          e instanceof HttpSendError
+            ? e
+            : new HttpSendError(e instanceof Error ? e.message : String(e), 'http');
+        attempts.push({ account: labelOf(acct), ok: false, stage: err.stage, error: err.message });
+        console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(acct), err: err.message })}`);
+        // 服务商拒绝不算消耗额度，归还名额
+        if (limited) {
+          try {
+            await releaseDailyCount(this.db, acct.provider, acct.from);
+          } catch (e2) {
+            console.warn(`[email] daily release failed: ${e2 instanceof Error ? e2.message : String(e2)}`);
+          }
         }
+        // 结果未知（超时/网络中断）：请求可能已被受理，换号会把同一封信发第二遍 → 就此判失败
+        if (err.ambiguous) {
+          await recordMailReport(this.db, { ok: false, to, at, test: false, attempts });
+          return false;
+        }
+        continue;
       }
+      attempts.push({ account: labelOf(acct), ok: true });
+      await recordMailReport(this.db, { ok: true, to, at, test: false, attempts });
+      return true;
     }
     if (overLimit === n) console.error(`[email] ${t0('email.allOverLimit', { n })}`);
-    await recordMailReport(this.db, { ok: false, to, at: Math.floor(Date.now() / 1000), test: false, attempts });
+    await recordMailReport(this.db, { ok: false, to, at, test: false, attempts });
     return false;
   }
 }
 
-/** TLS 模式：465=隐式 TLS；587=STARTTLS；其余=明文（仅本地联调用假 SMTP） */
-function tlsMode(port: number): 'on' | 'starttls' | 'off' {
-  if (port === 465) return 'on';
-  if (port === 587) return 'starttls';
-  return 'off';
-}
-
 /**
- * 端口互备顺序：465（隐式 TLS）与 587（STARTTLS）是同一套凭证的两条通道，
- * 某些网络环境只放行其中一条（企业网关/运营商策略）。
- * 只在**连接阶段**失败时才换端口重试——认证/投递阶段的失败换端口没有意义，只会白跑一次。
- */
-function portsOf(port: number): number[] {
-  if (port === 465) return [465, 587];
-  if (port === 587) return [587, 465];
-  return [port];
-}
-
-/**
- * 单账号投递（含端口互备），返回该账号的逐次尝试明细；成功即停止。
- * 失败原因除返回给调用方外仍落日志（waitUntil 旁路场景没有别的地方能看到）。
- */
-async function attemptAccount(
-  acct: SmtpAccount,
-  to: string,
-  subject: string,
-  text: string,
-  opts: { sessionTimeout?: number } = {},
-): Promise<MailAttempt[]> {
-  const out: MailAttempt[] = [];
-  for (const port of portsOf(acct.port)) {
-    const target: SmtpAccount = { ...acct, port };
-    const trace: { stage: string } = { stage: 'connect' };
-    try {
-      await smtpSendOne(target, to, subject, text, { trace, sessionTimeout: opts.sessionTimeout });
-      out.push({ account: labelOf(target), ok: true });
-      return out;
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      out.push({ account: labelOf(target), ok: false, stage: trace.stage, error: err });
-      console.error(`[email] ${t0('email.acctSendFailed', { account: labelOf(target), err })}`);
-      // 非连接阶段失败（认证被拒/收件人被拒/超时）→ 换端口毫无意义
-      if (trace.stage !== 'connect') return out;
-    }
-  }
-  return out;
-}
-
-/** DoH 探测超时（单端点） */
-const DNS_PROBE_TIMEOUT = 4_000;
-
-/**
- * 用 DoH 查目标主机的 A 记录（`fetch` 走 443 HTTPS，不受出站 TCP socket 策略影响）。
+ * 后台「测试邮箱」：按**已保存**的池逐个账号实发一封测试信，同步返回每个账号的失败阶段与服务商原文。
  *
- * 为什么需要它：`TCP Loop detected` 的官方语义是「出站连接被打回 Cloudflare 自身网络」，
- * 而 Cloudflare 只可能在自己解析出的地址上做这个判定。于是「运行时到底把 smtp.qq.com
- * 解析成了什么」就是唯一能把责任分清的证据：
- *  - 解析结果是服务商的真实 IP → 域名没问题，是平台对该出站连接的策略判定；
- *  - 解析结果是 104.x / 172.6x / 162.158.x 等 Cloudflare 段 → 账户侧 DNS 被改写
- *    （Zero Trust Gateway / 家族防护 / 自定义解析规则），改这些策略才能真正修复。
- */
-async function probeDns(host: string): Promise<DnsProbe> {
-  const urls = [
-    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`,
-    `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`,
-  ];
-  let last = '';
-  for (const url of urls) {
-    try {
-      const r = await fetch(url, {
-        headers: { accept: 'application/dns-json' },
-        signal: AbortSignal.timeout(DNS_PROBE_TIMEOUT),
-      });
-      if (!r.ok) {
-        last = `HTTP ${r.status}`;
-        continue;
-      }
-      const j = (await r.json()) as { Answer?: { type: number; data: string }[] };
-      const ips = (j.Answer ?? [])
-        .filter((a) => a.type === 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(a.data))
-        .map((a) => a.data);
-      if (ips.length) return { host, ips };
-      last = 'no A record';
-    } catch (e) {
-      last = e instanceof Error ? e.message : String(e);
-    }
-  }
-  return { host, ips: [], error: last };
-}
-
-const utf8 = new TextEncoder();
-
-function b64(s: string): string {
-  return btoa(String.fromCharCode(...utf8.encode(s)));
-}
-
-/** base64 正文按 RFC 2045 每 76 字符折行 */
-function chunk76(s: string): string {
-  return (s.match(/.{1,76}/g) ?? []).join('\r\n');
-}
-
-async function writeLine(w: WritableStreamDefaultWriter<Uint8Array>, s: string): Promise<void> {
-  await w.write(utf8.encode(`${s}\r\n`));
-}
-
-/**
- * 读 SMTP 应答直到目标码的末行（"250 ok"；多行时中间行形如 "250-xxx"）。
- * 码不符的末行（如 535/530）抛错——failover 依据。
- * 超时：单步 SMTP_TIMEOUT，且不超过调用方传入的整段会话 deadline（`deadline`）。
- * `alt` 用于合法多码场景（RCPT TO 合法回 250/251/252）。
- * 返回本次应答的全部文本行（去掉 3 位状态码，供 EHLO 解析 AUTH 能力）。
- */
-async function expectReply(
-  r: ReadableStreamDefaultReader<Uint8Array>,
-  code: string,
-  opts: { alt?: string; deadline?: number } = {},
-): Promise<string[]> {
-  const limit = Math.min(Date.now() + SMTP_TIMEOUT, opts.deadline ?? Number.POSITIVE_INFINITY);
-  const dec = new TextDecoder();
-  const lines: string[] = [];
-  let buf = '';
-  for (;;) {
-    if (Date.now() > limit) throw new Error(t0('email.smtpTimeout'));
-    const idx = buf.indexOf('\r\n');
-    if (idx < 0) {
-      // 超时兜底：reader.read 挂起时 race 一个到时 reject（预接 catch 防 unhandled rejection）
-      // 定时器在 race 结束后必须清掉，否则发信结束后仍会挂着一个待定 timer。
-      let timerId: ReturnType<typeof setTimeout> | undefined;
-      const timer = new Promise<never>((_, rej) => {
-        timerId = setTimeout(() => rej(new Error(t0('email.smtpReadTimeout'))), Math.max(1, limit - Date.now()));
-      });
-      timer.catch(() => {});
-      let chunk: ReadableStreamReadResult<Uint8Array>;
-      try {
-        chunk = await Promise.race([r.read(), timer]);
-      } finally {
-        if (timerId !== undefined) clearTimeout(timerId);
-      }
-      if (chunk.done) throw new Error(t0('email.smtpClosedEarly'));
-      buf += dec.decode(chunk.value, { stream: true });
-      continue;
-    }
-    const line = buf.slice(0, idx);
-    buf = buf.slice(idx + 2);
-    if (line.length < 4) throw new Error(t0('email.smtpBadReply', { line }));
-    const lineCode = line.slice(0, 3);
-    lines.push(line.slice(4));
-    if (line[3] === '-') continue; // 多行中间行
-    if (lineCode !== code && lineCode !== opts.alt) {
-      throw new Error(t0('email.smtpUnexpectedReply', { got: lineCode, want: code, line }));
-    }
-    return lines;
-  }
-}
-
-/** 从 EHLO 应答行解析 AUTH 机制（`AUTH LOGIN PLAIN` / `AUTH=PLAIN`，大小写不敏感；未通告返回空） */
-function authMechanisms(caps: readonly string[]): string[] {
-  for (const line of caps) {
-    const m = /^AUTH[ =]\s*(.+)$/i.exec(line.trim());
-    if (m) return m[1]!.toUpperCase().split(/\s+/).filter(Boolean);
-  }
-  return [];
-}
-
-/** 组装 RFC 5321 邮件（UTF-8 base64 编码 Subject/正文，中文不乱码；点填充防提前结束 DATA） */
-function buildMessage(from: string, to: string, subject: string, text: string): Uint8Array {
-  const domain = from.includes('@') ? from.split('@')[1] : 'localhost';
-  const lines = [
-    `From: <${from}>`,
-    `To: <${to}>`,
-    `Subject: =?UTF-8?B?${b64(subject)}?=`,
-    `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <${Date.now()}.${Math.random().toString(36).slice(2)}@${domain}>`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    chunk76(b64(text)),
-  ];
-  return utf8.encode(`${lines.map((l) => (l.startsWith('.') ? `.${l}` : l)).join('\r\n')}\r\n`);
-}
-
-/**
- * 单账号完整 SMTP 会话；`DATA` 后的 250 之前任何一步失败都抛错（failover 依据），socket 必关。
- *
- * 关键：`DATA` 已被服务端以 250 收下 => 投递完成。此后的 QUIT 只是礼貌收尾，
- * 服务端可能直接断链或干脆不回 221；把它当成失败会触发 failover，导致**同一封信被第二个账号重发**。
- */
-async function smtpSendOne(
-  acct: SmtpAccount,
-  to: string,
-  subject: string,
-  text: string,
-  opts: { trace?: { stage: string }; sessionTimeout?: number } = {},
-): Promise<void> {
-  const mode = tlsMode(acct.port);
-  const deadline = Date.now() + (opts.sessionTimeout ?? SMTP_SESSION_TIMEOUT);
-  /** 记录失败发生在哪一步（trace 由调用方持有，抛错后仍可读；诊断「收不到验证码」必需） */
-  const at = (stage: string): void => {
-    if (opts.trace) opts.trace.stage = stage;
-  };
-  let socket = connect({ hostname: acct.host, port: acct.port }, { secureTransport: mode });
-  let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
-  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  try {
-    at('connect');
-    writer = socket.writable.getWriter();
-    reader = socket.readable.getReader();
-
-    at('greeting');
-    await expectReply(reader, '220', { deadline }); // 问候
-
-    at('ehlo');
-    const ehlo = `EHLO ${acct.from.split('@')[1] ?? 'localhost'}`;
-    await writeLine(writer, ehlo);
-    let caps = await expectReply(reader, '250', { deadline });
-    if (mode === 'starttls') {
-      // RFC 3207：必须先显式发送 STARTTLS 并等待 220，才能做 TLS 握手。
-      // 直接调用 startTls() 会让服务端在等待明文命令时收到 ClientHello，587 端口全部发信失败。
-      at('starttls');
-      await writeLine(writer, 'STARTTLS');
-      await expectReply(reader, '220', { deadline });
-      // startTls 要求释放流锁后调用；升级后流重新获取
-      writer.releaseLock();
-      reader.releaseLock();
-      socket = socket.startTls();
-      writer = socket.writable.getWriter();
-      reader = socket.readable.getReader();
-      await writeLine(writer, ehlo); // TLS 后重发 EHLO
-      caps = await expectReply(reader, '250', { deadline });
-    }
-
-    // 认证机制按 EHLO 能力选：只支持 AUTH PLAIN 的服务商（Exchange/部分自建）不认 AUTH LOGIN，
-    // 此前一律 LOGIN 会导致这类账号 504 全败。未通告 AUTH（部分服务商在 TLS 前隐藏）时按 LOGIN 试。
-    at('auth');
-    if (authMechanisms(caps).includes('PLAIN') && !authMechanisms(caps).includes('LOGIN')) {
-      await writeLine(writer, `AUTH PLAIN ${b64(`\0${acct.user}\0${acct.pass}`)}`);
-      await expectReply(reader, '235', { deadline });
-    } else {
-      await writeLine(writer, 'AUTH LOGIN');
-      await expectReply(reader, '334', { deadline });
-      await writeLine(writer, b64(acct.user));
-      await expectReply(reader, '334', { deadline });
-      await writeLine(writer, b64(acct.pass));
-      await expectReply(reader, '235', { deadline });
-    }
-
-    at('mailfrom');
-    await writeLine(writer, `MAIL FROM:<${acct.from}>`);
-    await expectReply(reader, '250', { deadline });
-    at('rcpt');
-    await writeLine(writer, `RCPT TO:<${to}>`);
-    await expectReply(reader, '250', { alt: '251', deadline }); // 251 = 非本地用户将转发（合法收件）
-    at('data');
-    await writeLine(writer, 'DATA');
-    await expectReply(reader, '354', { deadline });
-    at('body');
-    await writer.write(buildMessage(acct.from, to, subject, text));
-    await writeLine(writer, '.');
-    await expectReply(reader, '250', { deadline }); // 到这里已确认投递成功
-    at('ok');
-
-    // 收尾尽力而为：不参与成败判定
-    try {
-      await writeLine(writer, 'QUIT');
-      await expectReply(reader, '221', { deadline });
-    } catch {
-      /* 服务端已收信，QUIT 应答缺失/断链不影响投递结果 */
-    }
-  } finally {
-    // 持锁关 socket 会被 workerd 拒绝（抛错后被吞 => 连接泄漏到 GC），先释放流锁
-    try {
-      writer?.releaseLock();
-    } catch {
-      /* 已释放 */
-    }
-    try {
-      reader?.releaseLock();
-    } catch {
-      /* 已释放 */
-    }
-    try {
-      socket.close();
-    } catch {
-      // 已关闭则忽略
-    }
-  }
-}
-
-/**
- * 后台「测试邮箱」：按**已保存**的池逐个账号实发一封测试信，同步返回每个账号的失败阶段与 SMTP 原文。
- *
- * 与正式发信（SmtpPoolProvider.send）的差异只有三点，都是为了诊断：
+ * 与正式发信的差异只有三点，都是为了诊断：
  *  - 同步执行（不用 waitUntil），错误能直接回给管理员，而不是只落日志；
- *  - 不走每日限额（额度闸门会掩盖凭证问题），也不消耗计数；
- *  - 单账号会话超时压到 20s，多账号时管理员不必等满 60s×N。
+ *  - 不走每日限额（额度闸门会掩盖 Key/域名问题），也不消耗计数；
+ *  - 只试前 N 个账号，避免一次点击把整池额度都消耗掉。
  * 顺序固定为池顺序（非轮询），同一个池反复测试的结果可比对。
  */
 export async function sendTestMail(
@@ -709,76 +374,50 @@ export async function sendTestMail(
   opts: { site?: string; maxAccounts?: number } = {},
 ): Promise<MailReport> {
   const [cfg, sec] = await Promise.all([loadExtConfig(cache, db, EMAIL_EXT_ID), loadExtSecret(db, EMAIL_EXT_ID, env)]);
-  const rawPool = Array.isArray(cfg.pool) ? (cfg.pool as Record<string, unknown>[]) : [];
-  const passes = Array.isArray(sec.passes) ? sec.passes : [];
-  const site = str(opts.site) || 'SMTP';
+  const { rows, keys } = poolSource(cfg, sec);
+  const site = str(opts.site) || 'HTTP';
   const maxAccounts = Math.max(1, Math.floor(opts.maxAccounts ?? 3));
   const attempts: MailAttempt[] = [];
-  let dns: DnsProbe | undefined;
 
-  /**
-   * HTTP 通道优先（与 getEmailProvider 的优先级一致）：配置了就只测它。
-   * 这里不探 DNS、不试端口——它走的是 443 HTTPS，出站 TCP 的限制对它无意义。
-   */
-  const http = await readHttpMail(env, db, cache);
-  if (http) {
-    const account = `http:${http.cfg.provider}`;
-    const at = Math.floor(Date.now() / 1000);
-    try {
-      await sendViaHttp(
-        http.cfg,
-        http.key,
-        to,
-        t0('email.testSubject', { site }),
-        t0('email.testBody', { account, host: http.cfg.provider, port: 443 }),
-      );
-      attempts.push({ account, ok: true });
-    } catch (e) {
-      const err = e instanceof Error ? e.message : String(e);
-      console.error(`[email] ${t0('email.acctSendFailed', { account, err })}`);
-      attempts.push({ account, ok: false, stage: 'http', error: err });
-    }
-    const report: MailReport = { ok: attempts.some((a) => a.ok), to, at, test: true, attempts };
-    await recordMailReport(db, report);
-    return report;
-  }
-
-  for (const [i, r] of rawPool.entries()) {
+  for (const [i, raw] of rows.entries()) {
     if (attempts.length >= maxAccounts) break;
-    const acct: SmtpAccount = {
-      from: str(r?.from),
-      host: str(r?.host),
-      port: Math.floor(Number(r?.port ?? 0)),
-      user: str(r?.user),
-      pass: str(passes[i]),
-      dailyLimit: Math.max(0, Math.floor(Number(r?.dailyLimit ?? 0)) || 0),
-      hasPass: str(passes[i]) !== '',
-    };
-    // 缺字段的行在正式发信里会被 readPool 静默剔除（表现为「服务商一个都没连，信凭空消失」），
+    const acct = toAccount(raw, keys[i]);
+    // 缺字段的行在正式发信里会被 readPool 静默剔除（表现为「一个账号都没发，信凭空消失」），
     // 测试时必须显式报出来，否则管理员只会看到「测试不通过」而不知哪一行坏了。
-    const missing = [!acct.from && 'from', !acct.host && 'host', !(acct.port > 0) && 'port', !acct.user && 'user', !acct.pass && 'pass']
-      .filter(Boolean)
-      .join('/');
-    if (missing) {
+    if (!acct) {
+      const view = toView(raw, keys[i]);
+      const missing = [
+        !view.provider && 'provider',
+        !view.from && 'from',
+        view.provider === 'custom' && !view.url && 'url',
+        !view.hasKey && 'key',
+      ]
+        .filter(Boolean)
+        .join('/');
       attempts.push({
-        account: labelOf(acct),
+        account: `${view.provider || '?'}:${view.from || '?'}`,
         ok: false,
         stage: 'config',
         error: t0('email.acctIncomplete', { fields: missing }),
       });
       continue;
     }
-    // 解析证据只查一次（多账号通常同主机），且在实发之前取：解析异常时能立刻看出原因
-    if (!dns) dns = await probeDns(acct.host);
-    attempts.push(
-      ...(await attemptAccount(
-        acct,
+    const account = labelOf(acct);
+    try {
+      await sendViaHttp(
+        cfgOf(acct),
+        acct.key,
         to,
         t0('email.testSubject', { site }),
-        t0('email.testBody', { account: labelOf(acct), host: acct.host, port: acct.port }),
-        { sessionTimeout: 20_000 },
-      )),
-    );
+        t0('email.testBody', { account, provider: acct.provider }),
+      );
+      attempts.push({ account, ok: true });
+    } catch (e) {
+      const err =
+        e instanceof HttpSendError ? e : new HttpSendError(e instanceof Error ? e.message : String(e), 'http');
+      console.error(`[email] ${t0('email.acctSendFailed', { account, err: err.message })}`);
+      attempts.push({ account, ok: false, stage: err.stage, error: err.message });
+    }
   }
 
   const report: MailReport = {
@@ -787,7 +426,6 @@ export async function sendTestMail(
     at: Math.floor(Date.now() / 1000),
     test: true,
     attempts,
-    dns,
   };
   await recordMailReport(db, report);
   return report;

@@ -20,7 +20,7 @@ export const USER_TABS: TabItem[] = [
   { k: 'create', to: '/admin/users/new', textKey: 'admin_user_create', fallback: 'Create User' },
 ];
 
-/** base + email 两档；email 档在 Workers 等价实现为「邮箱设置」（§11.3，socket SMTP 池 → Resend 兼容 HTTP API） */
+/** base + email 两档；email 档为「邮箱设置」（§11.3，HTTP 邮件 API 账号池：Resend / SendGrid / Brevo / 自定义） */
 export const SETTING_TABS: TabItem[] = [
   { k: 'base', to: '/admin/setting', textKey: 'admin_setting_base', fallback: 'Basic Settings' },
   { k: 'email', to: '/admin/setting/email', textKey: 'admin_setting_email', fallback: 'Email Settings' },

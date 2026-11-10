@@ -15,10 +15,10 @@ import { encryptSecret } from '../src/core/crypto';
 const SECRET = 'unit-test-jwt-secret';
 const CLIENT_PW = md5Hex('plain-pw-123'); // 前端预哈希串（既有约定）
 
-/** SMTP 池测试配置：ext:email:config（明文池）+ ext:email:secret（AES-GCM 密文），口径同 §11.3/§17.1 */
+/** 邮件账号池测试配置：ext:email:config（明文池）+ ext:email:secret（AES-GCM 密文），口径同 §11.3/§17.1 */
 const EMAIL_MASTER = btoa(String.fromCharCode(7).repeat(32));
-const EMAIL_POOL = { pool: [{ from: 'noreply@test.local', host: 'smtp.test.local', port: 465, user: 'smtp@test.local', dailyLimit: 0 }] };
-const EMAIL_SECRET_TOKEN = await encryptSecret(JSON.stringify({ passes: ['smtp-pass'] }), EMAIL_MASTER);
+const EMAIL_POOL = { pool: [{ provider: 'resend', from: 'noreply@test.local', url: '', dailyLimit: 0 }] };
+const EMAIL_SECRET_TOKEN = await encryptSecret(JSON.stringify({ keys: ['test-key'] }), EMAIL_MASTER);
 
 const settingJson = (over: Record<string, unknown> = {}) =>
   JSON.stringify({
@@ -49,7 +49,7 @@ function rules(over: SqlRule[] = [], setting = settingJson()): SqlRule[] {
 }
 
 interface EnvOpts {
-  /** 配置 SMTP 邮件池（替代旧 EMAIL_API_KEY）：ext:email:config/secret 落 bbs_kv */
+  /** 配置邮件账号池（HTTP API）：ext:email:config/secret 落 bbs_kv */
   withEmail?: boolean;
   turnstileSecret?: string;
   withJwt?: boolean; // 默认 true
@@ -101,7 +101,11 @@ function allCookies(res: Response): string {
   return g ? g.call(res.headers).join('\n') : (res.headers.get('set-cookie') ?? '');
 }
 
-beforeEach(() => l0Clear());
+beforeEach(() => {
+  l0Clear();
+  // 邮件通道走 fetch：默认桩一个 2xx，避免测试真的打到服务商（需要断言 fetch 的用例会再次覆盖）
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{"ok":true}', { status: 200 })));
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe('注册/登录参数校验', () => {

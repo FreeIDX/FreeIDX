@@ -15,7 +15,7 @@ export interface Env {
   TURNSTILE_SECRET?: string;
   /**
    * 扩展/邮箱私密字段 AES-GCM 主密钥（ext:email:secret 等；base64 的 32 字节或 64 位 hex）。
-   * 可选：缺省或值非法时由 JWT_SECRET 派生（SHA-256），保证「只配必填项」也能保存 SMTP 密码。
+   * 可选：缺省或值非法时由 JWT_SECRET 派生（SHA-256），保证「只配必填项」也能保存邮件 API Key。
    */
   SECRETS_MASTER_KEY?: string;
 }

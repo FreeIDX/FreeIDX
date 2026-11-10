@@ -6,7 +6,7 @@
  * 主密钥解析顺序（零配置优先，见 keyCandidates）：
  *   ① `SECRETS_MASTER_KEY`（base64 的 32 字节，或 64 位 hex）
  *   ② 由必填项 `JWT_SECRET` 派生的 32 字节（SHA-256）
- * 于是「只部署、不配任何额外 Secret」的站点也能保存 SMTP 密码 / 插件私钥；
+ * 于是「只部署、不配任何额外 Secret」的站点也能保存邮件 API Key / 插件私钥；
  * 显式配置仍优先，供希望把邮件凭据与登录密钥分开管理的部署使用。
  */
 import { decryptSecret, deriveMasterKey, encryptSecret, masterKeyShape, normalizeMasterKey } from './crypto';

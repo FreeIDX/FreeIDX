@@ -221,7 +221,7 @@ app.route('/', adminRuntimeRoutes());
 app.route('/', adminMaintenanceRoutes());
 // M3 后台（T3-9）：扩展启停/配置 + ads 广告位 CRUD（§17.5）
 app.route('/', adminExtensionsRoutes());
-// 邮箱设置（§11.3）：EmailProvider 的后台配置端点（SMTP 的 Workers 等价物）
+// 邮箱设置（§11.3）：HTTP 邮件 API 账号池的后台配置端点
 app.route('/', adminEmailRoutes());
 // M5 后台（T5-7）：VIP 计划 CRUD + 订单查询/退款/补单 + 卡密批量生成（§15.4，通道启停/密钥走通用 extensions）
 app.route('/', adminPaymentRoutes());

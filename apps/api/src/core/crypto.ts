@@ -78,7 +78,7 @@ export function masterKeyShape(value?: string): string {
 
 /**
  * 由 `JWT_SECRET` 派生主密钥（SHA-256 → 32 字节 → base64）。
- * 零配置兜底：JWT_SECRET 是每个部署的必填项，于是「只填必填项」也能保存 SMTP 密码。
+ * 零配置兜底：JWT_SECRET 是每个部署的必填项，于是「只填必填项」也能保存邮件 API Key。
  * 代价是轮换 JWT_SECRET 会让已存密文解不开（需重填密码）——文档已注明；
  * 希望隔离的部署仍显式配置 SECRETS_MASTER_KEY（优先级更高）。
  */
