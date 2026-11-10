@@ -4,7 +4,7 @@
  * 不套前台布局——前台/后台模板本就分属两个 view 目录。
  */
 import { Link, Route, Routes, useLocation } from 'react-router';
-import { Suspense, lazy, useEffect, useMemo, type ReactNode } from 'react';
+import { Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { useT } from './lib/i18n';
 import { useAuth } from './store/auth';
 import { detectDevice } from './lib/device';
@@ -12,6 +12,7 @@ import { Icon } from './components/icons';
 import { PageLoading } from './components/PageLoading';
 import { ThemeLayout } from './lib/theme/layout';
 import { ThemeRoute } from './lib/theme/route';
+import { lazyPage } from './lib/lazy-page';
 
 /*
  * 路由级代码分割（§10.2）：前台页面已随「简蓝主题」迁至 apps/web/src/themes/light/pages/，
@@ -19,40 +20,40 @@ import { ThemeRoute } from './lib/theme/route';
  * 后台页在此处懒加载：普通访客只下载当前页 chunk，后台页与富文本编辑器 chunk 永不进入首屏。
  */
 
-/* 后台是独立外壳（自带 Layout 与闸门），整块懒加载：普通访客完全不下发后台代码 */
-const AdminLayout = lazy(() => import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
-const AdminIndexPage = lazy(() => import('./admin/pages/AdminIndexPage').then((m) => ({ default: m.AdminIndexPage })));
-const VersionUpdatePage = lazy(() =>
-  import('./admin/pages/VersionUpdatePage').then((m) => ({ default: m.VersionUpdatePage })),
-);
-const SettingPage = lazy(() => import('./admin/pages/SettingPage').then((m) => ({ default: m.SettingPage })));
+/* 后台是独立外壳（自带 Layout 与闸门），整块懒加载：普通访客完全不下发后台代码。
+ * 统一经 lazyPage 包装：chunk 取不到（发版后旧 hash 失效、资产未上传）或导出缺失时
+ * 抛 ChunkLoadError 而不是让 React 收到 undefined 组件，ErrorBoundary 据此整页刷新取新版本。 */
+const AdminLayout = lazyPage(() => import('./admin/AdminLayout'), 'AdminLayout');
+const AdminIndexPage = lazyPage(() => import('./admin/pages/AdminIndexPage'), 'AdminIndexPage');
+const VersionUpdatePage = lazyPage(() => import('./admin/pages/VersionUpdatePage'), 'VersionUpdatePage');
+const SettingPage = lazyPage(() => import('./admin/pages/SettingPage'), 'SettingPage');
 /* 主题管理：启用/切换内置主题（清单由 lib/theme/registry 构建期自动发现，后端只存启用 id） */
-const ThemePage = lazy(() => import('./admin/pages/ThemePage').then((m) => ({ default: m.ThemePage })));
-const NavBarSettingPage = lazy(() => import('./admin/pages/NavBarSettingPage').then((m) => ({ default: m.NavBarSettingPage })));
-const EmailSettingPage = lazy(() => import('./admin/pages/EmailSettingPage').then((m) => ({ default: m.EmailSettingPage })));
-const ForumListPage = lazy(() => import('./admin/pages/ForumListPage').then((m) => ({ default: m.ForumListPage })));
-const ForumEditPage = lazy(() => import('./admin/pages/ForumEditPage').then((m) => ({ default: m.ForumEditPage })));
-const ThreadAdminPage = lazy(() => import('./admin/pages/ThreadAdminPage').then((m) => ({ default: m.ThreadAdminPage })));
-const GroupListPage = lazy(() => import('./admin/pages/GroupListPage').then((m) => ({ default: m.GroupListPage })));
-const GroupEditPage = lazy(() => import('./admin/pages/GroupEditPage').then((m) => ({ default: m.GroupEditPage })));
-const UserListPage = lazy(() => import('./admin/pages/UserListPage').then((m) => ({ default: m.UserListPage })));
-const UserEditPage = lazy(() => import('./admin/pages/UserEditPage').then((m) => ({ default: m.UserEditPage })));
+const ThemePage = lazyPage(() => import('./admin/pages/ThemePage'), 'ThemePage');
+const NavBarSettingPage = lazyPage(() => import('./admin/pages/NavBarSettingPage'), 'NavBarSettingPage');
+const EmailSettingPage = lazyPage(() => import('./admin/pages/EmailSettingPage'), 'EmailSettingPage');
+const ForumListPage = lazyPage(() => import('./admin/pages/ForumListPage'), 'ForumListPage');
+const ForumEditPage = lazyPage(() => import('./admin/pages/ForumEditPage'), 'ForumEditPage');
+const ThreadAdminPage = lazyPage(() => import('./admin/pages/ThreadAdminPage'), 'ThreadAdminPage');
+const GroupListPage = lazyPage(() => import('./admin/pages/GroupListPage'), 'GroupListPage');
+const GroupEditPage = lazyPage(() => import('./admin/pages/GroupEditPage'), 'GroupEditPage');
+const UserListPage = lazyPage(() => import('./admin/pages/UserListPage'), 'UserListPage');
+const UserEditPage = lazyPage(() => import('./admin/pages/UserEditPage'), 'UserEditPage');
 /* 小黑屋名单（0025）：生效中的封禁与解封入口，挂在「用户」分组的 USER_TABS 上 */
-const BannedPage = lazy(() => import('./admin/pages/BannedPage').then((m) => ({ default: m.BannedPage })));
-const OtherPage = lazy(() => import('./admin/pages/OtherPage').then((m) => ({ default: m.OtherPage })));
+const BannedPage = lazyPage(() => import('./admin/pages/BannedPage'), 'BannedPage');
+const OtherPage = lazyPage(() => import('./admin/pages/OtherPage'), 'OtherPage');
 /* 运行维护两个 tab（OTHER_TABS）：数据库孤儿行清理 / R2 未引用对象清理 */
-const DbMaintenancePage = lazy(() => import('./admin/pages/DbMaintenancePage').then((m) => ({ default: m.DbMaintenancePage })));
-const R2MaintenancePage = lazy(() => import('./admin/pages/R2MaintenancePage').then((m) => ({ default: m.R2MaintenancePage })));
-const ModlogPage = lazy(() => import('./admin/pages/ModlogPage').then((m) => ({ default: m.ModlogPage })));
-const ExtensionPage = lazy(() => import('./admin/pages/ExtensionPage').then((m) => ({ default: m.ExtensionPage })));
-const ExtensionEditPage = lazy(() => import('./admin/pages/ExtensionEditPage').then((m) => ({ default: m.ExtensionEditPage })));
-const VipPlanPage = lazy(() => import('./admin/pages/VipPlanPage').then((m) => ({ default: m.VipPlanPage })));
-const OrderAdminPage = lazy(() => import('./admin/pages/OrderAdminPage').then((m) => ({ default: m.OrderAdminPage })));
-const CardAdminPage = lazy(() => import('./admin/pages/CardAdminPage').then((m) => ({ default: m.CardAdminPage })));
-const PointsPage = lazy(() => import('./admin/pages/PointsPage').then((m) => ({ default: m.PointsPage })));
-const NoticeAdminPage = lazy(() => import('./admin/pages/NoticeAdminPage').then((m) => ({ default: m.NoticeAdminPage })));
-const CheckPage = lazy(() => import('./admin/pages/CheckPage').then((m) => ({ default: m.CheckPage })));
-const AdminVPage = lazy(() => import('./admin/pages/AdminVPage').then((m) => ({ default: m.AdminVPage })));
+const DbMaintenancePage = lazyPage(() => import('./admin/pages/DbMaintenancePage'), 'DbMaintenancePage');
+const R2MaintenancePage = lazyPage(() => import('./admin/pages/R2MaintenancePage'), 'R2MaintenancePage');
+const ModlogPage = lazyPage(() => import('./admin/pages/ModlogPage'), 'ModlogPage');
+const ExtensionPage = lazyPage(() => import('./admin/pages/ExtensionPage'), 'ExtensionPage');
+const ExtensionEditPage = lazyPage(() => import('./admin/pages/ExtensionEditPage'), 'ExtensionEditPage');
+const VipPlanPage = lazyPage(() => import('./admin/pages/VipPlanPage'), 'VipPlanPage');
+const OrderAdminPage = lazyPage(() => import('./admin/pages/OrderAdminPage'), 'OrderAdminPage');
+const CardAdminPage = lazyPage(() => import('./admin/pages/CardAdminPage'), 'CardAdminPage');
+const PointsPage = lazyPage(() => import('./admin/pages/PointsPage'), 'PointsPage');
+const NoticeAdminPage = lazyPage(() => import('./admin/pages/NoticeAdminPage'), 'NoticeAdminPage');
+const CheckPage = lazyPage(() => import('./admin/pages/CheckPage'), 'CheckPage');
+const AdminVPage = lazyPage(() => import('./admin/pages/AdminVPage'), 'AdminVPage');
 
 function ComingSoon({ label }: { label: string }) {
   const t = useT();

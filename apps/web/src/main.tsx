@@ -11,6 +11,7 @@ import { useAuth } from './store/auth';
 import { ThemeProvider } from './lib/theme/provider';
 import { resolveActiveTheme } from './lib/theme/active';
 import { pageNameOfPath } from './lib/theme/page-of-path';
+import { reloadForNewAssets } from './lib/chunk-reload';
 import './styles/globals.css';
 
 /* 主题彩蛋：控制台版权输出（配色 #409EFF / #f2f3f5） */
@@ -23,19 +24,12 @@ console.log(
 /**
  * chunk 加载失败自愈（稳定性项 D1）：发版后仍持有旧 index.html 的客户端会去取已不存在的 hash，
  * Vite 会派发 `vite:preloadError`。阻止其继续抛出并整页重载，即可拿到新的 assets 版本。
- * 10s 内最多重载一次：若新版本本身有问题，避免无限刷新（届时由 ErrorBoundary 兜底展示）。
+ * 节流/刷新动作与 ErrorBoundary 共用 lib/chunk-reload：10s 内最多重载一次，
+ * 若新版本本身有问题则不再刷新，由 ErrorBoundary 展示兜底页。
  */
 window.addEventListener('vite:preloadError', (e) => {
   e.preventDefault();
-  try {
-    const KEY = 'fi:chunk-reload-at';
-    const last = Number(sessionStorage.getItem(KEY) ?? 0);
-    if (Date.now() - last < 10_000) return;
-    sessionStorage.setItem(KEY, String(Date.now()));
-  } catch {
-    // 隐私模式禁用 storage：不节流，直接重载
-  }
-  window.location.reload();
+  reloadForNewAssets();
 });
 
 /**

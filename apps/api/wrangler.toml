@@ -6,7 +6,10 @@ compatibility_date = "2026-10-01"
 [assets]
 directory = "../web/dist"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
+# 不要用 "single-page-application"：未命中的 /assets/*.js（发版后旧 hash 已被替换）会被返回
+# index.html，浏览器把它当模块加载失败，前端只能看到「系统繁忙」而无法判断是资产版本问题。
+# 用 "none" 让静态层回真 404；SPA 深链由 Worker 显式取 /index.html 壳（apps/api/src/index.ts 的 notFound）。
+not_found_handling = "none"
 # 除静态资源目录外的请求一律先进 Worker：/api、/files、爬虫预渲染 HTML、.htm 旧链 301、robots/sitemap。
 # 不列进这里的路径会由静态资源直接应答，Worker 不运行 → 预渲染与 301 失效。
 # /assets/*（构建产物）与 /emoicon /avatars /theme-light /fonts（public/ 根级纯静态资源）

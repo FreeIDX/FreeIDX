@@ -172,6 +172,29 @@ describe('.htm 301 层（经插件路由分发）', () => {
   });
 });
 
+describe('静态资源未命中（not_found_handling="none"）', () => {
+  it('public 根级文件命中 → 原样返回，不被 SPA 壳顶替', async () => {
+    const fake = fakeD1Sql(rules());
+    const env = {
+      DB: fake.db,
+      CACHE: fakeKv(),
+      FILES: {},
+      ASSETS: fakeAssets({ '/favicon.ico': 'ICO' }),
+      SITE_URL: 'http://localhost',
+    };
+    const res = await app.request('/favicon.ico', { headers: HUMAN }, env as never);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ICO');
+  });
+
+  it('缺失的 /assets/*.js → 真 404（不能回 index.html，否则浏览器把 HTML 当模块加载）', async () => {
+    const { env } = envFor();
+    const res = await app.request('/assets/ForumListPage-stalehash.js', { headers: HUMAN }, env as never);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type') ?? '').not.toContain('text/html');
+  });
+});
+
 describe('爬虫预渲染分发（§16.1 核心管线）', () => {
   it('UA 分类：searchbot/aibot/human + 泛化兜底', () => {
     expect(classifyUserAgent(BOT['user-agent']!)).toBe('searchbot');

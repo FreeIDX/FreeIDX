@@ -142,19 +142,21 @@ export function fakeR2() {
 
 /**
  * 合并部署 [assets] 绑定（env.ASSETS）替身：命中 files 则按真实静态资源应答，
- * 否则复现 not_found_handling="single-page-application" —— 一律回 SPA 壳 HTML。
+ * 否则复现 not_found_handling="none" —— 未命中即 404（不再回 SPA 壳）。
+ * SPA 深链由 Worker 显式请求 /index.html 取壳，因此 index.html 始终可命中。
  */
 export function fakeAssets(files: Record<string, string> = {}) {
+  const SHELL =
+    '<!doctype html><html><head><title>FreeIDX</title></head><body><div id="root"></div></body></html>';
   const typeOf = (p: string) =>
     p.endsWith('.js') ? 'text/javascript' : p.endsWith('.css') ? 'text/css' : p.endsWith('.html') ? 'text/html' : 'text/plain';
   return {
     fetch: async (req: Request) => {
       const path = new URL(req.url).pathname;
-      const hit = files[path];
+      // 取壳请求（notFound 显式 /index.html）默认给一个最小壳；真实文件优先用 files 覆盖
+      const hit = files[path] ?? (path === '/index.html' ? SHELL : undefined);
       if (hit === undefined) {
-        return new Response('<!doctype html><html><head><title>FreeIDX</title></head><body><div id="root"></div></body></html>', {
-          headers: { 'content-type': 'text/html; charset=utf-8' },
-        });
+        return new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
       }
       return new Response(hit, { headers: { 'content-type': `${typeOf(path)}; charset=utf-8` } });
     },

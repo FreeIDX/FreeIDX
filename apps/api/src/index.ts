@@ -290,8 +290,9 @@ async function injectShell(res: Response, themeId: string, siteLang: string): Pr
 }
 
 // 合并部署：run_worker_first 让所有请求先进 Worker，未匹配路由必须自己兜底，
-// 否则 BrowserRouter 深链直访会拿到 JSON 404。/api、/files 保持 JSON，其余转交静态资源，
-// 由 not_found_handling="single-page-application" 回退 index.html（爬虫分支已在 prerender() 处理）。
+// 否则 BrowserRouter 深链直访会拿到 JSON 404。/api、/files 保持 JSON；
+// 干净路径由本函数显式取 index.html 壳（爬虫分支已在 prerender() 处理），
+// 带扩展名的路径一律 404 —— 静态层是 not_found_handling="none"，不会拿 HTML 顶替缺失的 .js。
 app.notFound(async (c) => {
   const p = c.req.path;
   if (p === '/api' || p === '/files' || p.startsWith('/api/') || p.startsWith('/files/')) {
@@ -315,14 +316,28 @@ app.notFound(async (c) => {
       404,
     );
   }
-  const res = await c.env.ASSETS.fetch(c.req.raw);
-  // 拿到的是 SPA 壳（而非真实文件）时，只有人类浏览器的干净路径才允许回退到壳：
-  // 爬虫拿到壳页 200 会被当正文收录（§16.1），带扩展名的路径（/sitemap.xml、/xxx.htm）
-  // 拿到壳页则意味着插件路由未注册，同样必须 404。
+  /**
+   * 带扩展名的路径（/favicon.ico、/sitemap.xml、/xxx.htm、/assets/xxx.js）：
+   * 先按**真实静态文件**取一次 —— public/ 根级文件没有前缀路由，只能落到这里；
+   * 命中就原样返回（未命中时资产层是 not_found_handling="none"，回真 404）。
+   * 拿到 HTML 一律改回 JSON 404：回壳页不仅误导爬虫，还会让浏览器把 HTML 当 JS 模块加载
+   * （发版后旧 hash 的经典表现），前端就只剩「系统繁忙」看不出是资产版本问题。
+   */
   const fileLike = /\/[^/]*\.[^/.]+$/.test(p);
-  const bot = classifyUserAgent(c.req.header('user-agent') ?? '') === 'searchbot';
-  if (!res.headers.get('content-type')?.includes('text/html')) return res;
-  if (fileLike || bot) return handleNotFound(c);
+  if (fileLike) {
+    const asset = await c.env.ASSETS.fetch(c.req.raw);
+    if (asset.status >= 400 || asset.headers.get('content-type')?.includes('text/html')) return handleNotFound(c);
+    return asset;
+  }
+  // 爬虫拿壳页 200 会被当正文收录（§16.1）：干净路径也只给人类浏览器
+  if (classifyUserAgent(c.req.header('user-agent') ?? '') === 'searchbot') return handleNotFound(c);
+  /**
+   * 干净路径 = SPA 深链（BrowserRouter）：显式取壳，不依赖资产层 not_found_handling。
+   * wrangler.toml 已改为 "none"：静态资源未命中一律真 404，`/assets/*.js` 不会再被 index.html 顶替，
+   * 前端据此识别「chunk 不存在」并整页刷新取新版本（见 web 的 lib/chunk-reload）。
+   */
+  const res = await c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)));
+  if (!res.ok || !res.headers.get('content-type')?.includes('text/html')) return handleNotFound(c);
   const themeId = await loadThemeId(c.get('cache'), c.get('db'));
   // 站点语言：非法/读取失败回落 DEFAULT_LOCALE（与改版前「无注入」时的行为一致）
   const setting = await loadSetting(c.get('cache'), c.get('db')).catch(() => null);

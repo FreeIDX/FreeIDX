@@ -9,6 +9,7 @@
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { uiT } from '../lib/api';
+import { isChunkLoadError, reloadForNewAssets } from '../lib/chunk-reload';
 
 interface Props {
   children: ReactNode;
@@ -28,6 +29,12 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo): void {
     // 保留到控制台便于线上排查（接入 Sentry 之类的观测点也在这里）
     console.error('[ui] render crashed:', error, info.componentStack);
+    /**
+     * chunk 取不到（旧 hash 失效 / 资产未上传 / 被 HTML 兜底）时，展示「系统繁忙」没有意义：
+     * 唯一有效动作是整页刷新拿新 assets。reloadForNewAssets 自带 10s 节流——
+     * 刷新后仍失败（新版本自身坏了）才落到下面的兜底页，不会无限刷新。
+     */
+    if (isChunkLoadError(error)) reloadForNewAssets();
   }
 
   render(): ReactNode {
