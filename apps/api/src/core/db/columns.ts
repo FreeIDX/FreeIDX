@@ -22,9 +22,10 @@ export const THREAD_DETAIL_COLS = THREAD_LIST_COLS + ',firstpid,mods,userip';
 
 /** lang 为版块绑定内容语言（0024：空串 = 未绑定：顶级不限制 / 子版块继承父版块；'none' = 显式不限制（仅子版块）；其余 = 新主题强制该语言）；
  *  name_i18n 为版块名多语言 JSON（0027：空串 = 未配置，展示回退 name）；
- *  brief_i18n / announcement_i18n / seo_title_i18n / seo_keywords_i18n 为 0028 的四份多语言 JSON（同结构，空串 = 未配置） */
+ *  brief_i18n / announcement_i18n / seo_title_i18n / seo_keywords_i18n 为 0028 的四份多语言 JSON（同结构，空串 = 未配置）；
+ *  icon_show 为版块栏图标显示开关（0029：1 = 显示，0 = 只显示版块名） */
 export const FORUM_COLS =
-  'fid,name,rank,threads,todayposts,todaythreads,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,icon_file,icon_time,thread_check,post_check,edit_check,parent_fid,lang,name_i18n,brief_i18n,announcement_i18n,seo_title_i18n,seo_keywords_i18n';
+  'fid,name,rank,threads,todayposts,todaythreads,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,icon_file,icon_time,thread_check,post_check,edit_check,parent_fid,lang,name_i18n,brief_i18n,announcement_i18n,seo_title_i18n,seo_keywords_i18n,icon_show';
 
 /** 详情页回帖：取 fmt 展示 + message 原文（冻结契约 PostItem.message? "仅详情页返回"，供内联编辑初值）；ok 为审核位 */
 export const POST_PAGE_COLS =

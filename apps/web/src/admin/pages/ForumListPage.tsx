@@ -1,8 +1,10 @@
 /**
  * 版块列表（树形内联编辑）：一级版块 → 其子版块（二级）缩进展示，一级版块可收缩/展开。
  * 列 = 名称(树列，含收缩箭头) / 语言(版块名多语言弹窗) / 版块ID / 父版块(行内下拉，可即时挂到一级版块下) /
- *      内容语言(只读摘要，改在编辑页) / 图标缩略图 / 上传图标 / 排序 / 编辑 / 删除；
- * `<table class="adm-table" style="min-width:1060px">`，页面无二级 Tab（版块菜单的 tab 是空表）。
+ *      内容语言(只读摘要，改在编辑页) / 图标缩略图 / 上传图标 / 图标显示(开关) / 排序 / 编辑 / 删除；
+ * `<table class="adm-table" style="min-width:1160px">`，页面无二级 Tab（版块菜单的 tab 是空表）。
+ * 「图标显示」开关（0029）逐版块独立控制**首页版块栏**是否渲染图标：关掉只影响展示，
+ * 不改 icon_file/icon_time（图标文件保留，重新打开即恢复），也不影响主题列表/版块页头部等其它位置。
  * 实现差异（§7 记账）：
  *  - **图标两列**：缩略图 48px + 行内 file input（选图立即上传
  *    PUT /api/admin/forums/:fid/icon，存 R2 forum/{fid}.{ext}，见 admin/forums.ts）；
@@ -23,7 +25,7 @@ import type { AdminForumRow, ForumInput } from '../types';
 import { useAdminT } from '../t';
 import { useBatchAction } from '../use-action';
 import { useAuth } from '../../store/auth';
-import { Alert, Button, Card, ConfirmModal, ErrorState, Input, PageTitle, Select, cx } from '../ui';
+import { Alert, Button, Card, ConfirmModal, ErrorState, Input, PageTitle, Select, Switch, cx } from '../ui';
 import { NameI18nModal } from '../NameI18nModal';
 import { Icon } from '../../components/icons';
 
@@ -37,6 +39,8 @@ function scalarInput(r: AdminForumRow): ForumInput {
     accesson: r.accesson,
     orderby: r.orderby,
     icon: r.icon,
+    /* 0029：版块栏图标显示开关（逐版块独立，1=显示 / 0=只显示版块名） */
+    icon_show: r.icon_show,
     moduids: r.moduids,
     seo_title: r.seo_title,
     seo_keywords: r.seo_keywords,
@@ -55,7 +59,7 @@ const DIFF_KEYS: (keyof ForumInput)[] = [
   'name', 'name_i18n', 'rank',
   'brief', 'brief_i18n',
   'announcement', 'announcement_i18n',
-  'accesson', 'orderby', 'icon', 'moduids',
+  'accesson', 'orderby', 'icon', 'icon_show', 'moduids',
   'seo_title', 'seo_title_i18n',
   'seo_keywords', 'seo_keywords_i18n',
   'parent_fid', 'lang',
@@ -96,6 +100,7 @@ function BLANK_FORUM(): AdminForumRow {
     accesson: 0,
     orderby: 0,
     icon: 0,
+    icon_show: 1,
     icon_file: '',
     icon_time: 0,
     icon_url: '',
@@ -268,7 +273,7 @@ export function ForumListPage() {
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="adm-table w-full min-w-[1060px] text-base">
+          <table className="adm-table w-full min-w-[1160px] text-base">
             <thead>
               <tr>
                 <th scope="col" className="whitespace-nowrap text-left font-medium">{t('forum_name', '名称')}</th>
@@ -278,6 +283,7 @@ export function ForumListPage() {
                 <th scope="col" className="w-[130px] whitespace-nowrap font-medium">{t('content_lang_label')}</th>
                 <th scope="col" className="w-[72px] whitespace-nowrap font-medium">{t('forum_icon', '图标')}</th>
                 <th scope="col" className="w-[170px] whitespace-nowrap font-medium">{t('admin_upload_icon', '上传图标')}</th>
+                <th scope="col" className="w-[100px] whitespace-nowrap font-medium">{t('forum_icon_show', '图标显示')}</th>
                 <th scope="col" className="w-[100px] whitespace-nowrap font-medium">{t('forum_rank', '排序')}</th>
                 <th scope="col" className="w-[100px] whitespace-nowrap text-center font-medium">{t('forum_edit', '编辑')}</th>
                 <th scope="col" className="w-[100px] whitespace-nowrap text-center font-medium">{t('forum_delete', '删除')}</th>
@@ -371,6 +377,14 @@ export function ForumListPage() {
                           }}
                         />
                       </label>
+                    </td>
+                    {/* 图标显示开关（0029）：逐版块独立，关掉后前台版块栏只显示版块名，图标文件仍保留 */}
+                    <td>
+                      <Switch
+                        checked={r.icon_show !== 0}
+                        onChange={(v) => patch(r.fid, { icon_show: v ? 1 : 0 })}
+                        title={t('forum_icon_show_hint', '控制首页版块栏是否显示该版块图标')}
+                      />
                     </td>
                     <td>
                       <Input type="number" className="w-[80px]" value={String(r.rank)} onChange={(e) => patch(r.fid, { rank: Number(e.target.value || 0) })} />

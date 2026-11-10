@@ -886,6 +886,8 @@
   "forum_icon_read_err": "อ่านรูปภาพล้มเหลว",
   "forum_icon_reset": "คืนค่าเริ่มต้น",
   "forum_icon_reset_err": "คืนค่าเริ่มต้นล้มเหลว",
+  "forum_icon_show": "แสดงไอคอน",
+  "forum_icon_show_hint": "แสดงไอคอนของบอร์ดนี้ในแถบฟอรัมหน้าแรกหรือไม่",
   "forum_icon_size_err": "ไอคอนต้องไม่เกิน 1MB",
   "forum_icon_upload_err": "อัปโหลดไอคอนล้มเหลว",
   "forum_icon_upload_label": "อัปโหลดไอคอนบอร์ด",

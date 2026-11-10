@@ -324,15 +324,19 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   /* 二级版块：一级版块（父不可见的子版块回退为一级，避免入口丢失）+ 其下缩进子项 */
   const tops = forumlist.filter((f) => !f.parentFid || !forumlist.some((p) => p.fid === f.parentFid));
   const kidsOf = (fid: number) => forumlist.filter((f) => f.parentFid === fid);
+  /* 版块栏图标显示开关（0029，后台版块列表逐版块设置）：关掉后只显示版块名。
+     折叠成 56px 图标轨时没有名称可看，仍回退图标，避免出现无法点击识别的空白行 */
+  const iconVisible = (f: ForumNode) => f.iconShow !== 0 || collapsed;
   const forumLink = (f: ForumNode) => (
     <Link to={`/forum/${f.fid}`} title={fname(f)} className={itemCls(false)}>
-      {f.iconUrl ? (
-        <img src={f.iconUrl} alt="" className="size-7 shrink-0 rounded-[8px] object-contain" />
-      ) : (
-        <span className={cx(iconBox, 'bg-lt-soft text-zh-grey')} aria-hidden="true">
-          <Icon name="folder" className="size-[18px]" />
-        </span>
-      )}
+      {iconVisible(f) &&
+        (f.iconUrl ? (
+          <img src={f.iconUrl} alt="" className="size-7 shrink-0 rounded-[8px] object-contain" />
+        ) : (
+          <span className={cx(iconBox, 'bg-lt-soft text-zh-grey')} aria-hidden="true">
+            <Icon name="folder" className="size-[18px]" />
+          </span>
+        ))}
       {/* 版块名多语言：俄语/德语等较长时换行显示，break-words 兜底超长单词 */}
       {!collapsed && <span className="min-w-0 flex-1 break-words">{fname(f)}</span>}
     </Link>

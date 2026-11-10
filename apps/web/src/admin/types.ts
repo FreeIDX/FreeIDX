@@ -41,6 +41,8 @@ export interface AdminForumRow {
   icon_time: number;
   /** 图标直链（icon_file 非空才有值；空 = 前台用内置默认图） */
   icon_url: string;
+  /** 版块栏图标显示开关（0029）：1 = 显示（默认），0 = 前台版块栏只显示版块名 */
+  icon_show: number;
   /** 逗号分隔的版主 uid */
   moduids: string;
   seo_title: string;
@@ -100,6 +102,8 @@ export interface ForumInput {
   accesson?: number;
   orderby?: number;
   icon?: number;
+  /** 版块栏图标显示开关（0029）：0 = 不显示图标；缺省 = 保持原值（新建按 1） */
+  icon_show?: number;
   moduids?: string;
   seo_title?: string;
   /** SEO 标题多语言（0028） */

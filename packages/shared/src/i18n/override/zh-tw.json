@@ -886,6 +886,8 @@
   "forum_icon_read_err": "圖片讀取失敗",
   "forum_icon_reset": "恢復預設",
   "forum_icon_reset_err": "恢復預設失敗",
+  "forum_icon_show": "圖示顯示",
+  "forum_icon_show_hint": "控制首頁板塊欄是否顯示該板塊圖示",
   "forum_icon_size_err": "圖示不能超過 1M。",
   "forum_icon_upload_err": "圖示上傳失敗",
   "forum_icon_upload_label": "上傳板塊圖示",

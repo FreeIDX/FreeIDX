@@ -1119,6 +1119,8 @@ export type AdminKey =
   | 'forum_icon_read_err'
   | 'forum_icon_reset'
   | 'forum_icon_reset_err'
+  | 'forum_icon_show'
+  | 'forum_icon_show_hint'
   | 'forum_icon_size_err'
   | 'forum_icon_upload_err'
   | 'forum_icon_upload_label'

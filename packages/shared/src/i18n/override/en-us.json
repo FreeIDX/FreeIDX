@@ -886,6 +886,8 @@
   "forum_icon_read_err": "Image read failed",
   "forum_icon_reset": "Reset to default",
   "forum_icon_reset_err": "Reset to default failed",
+  "forum_icon_show": "Icon display",
+  "forum_icon_show_hint": "Whether to show this forum's icon in the home forum bar",
   "forum_icon_size_err": "Icon cannot exceed 1MB.",
   "forum_icon_upload_err": "Icon upload failed",
   "forum_icon_upload_label": "Upload forum icon",

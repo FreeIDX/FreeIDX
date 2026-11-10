@@ -879,6 +879,8 @@
   "forum_icon_read_err": "图片读取失败",
   "forum_icon_reset": "恢复默认",
   "forum_icon_reset_err": "恢复默认失败",
+  "forum_icon_show": "图标显示",
+  "forum_icon_show_hint": "控制首页版块栏是否显示该版块图标",
   "forum_icon_size_err": "图标不能超过 1M。",
   "forum_icon_upload_err": "图标上传失败",
   "forum_icon_upload_label": "上传版块图标",

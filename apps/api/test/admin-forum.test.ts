@@ -109,6 +109,20 @@ describe('版块管理 CRUD（T3-5）', () => {
     expect(acc?.params).toEqual([5, 3, 1, 0, 1, 0, 0]);
   });
 
+  it('POST：未提交 icon_show → 按默认「显示」落库（0029）', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request(
+      '/api/admin/forums',
+      { method: 'POST', headers: writeHeaders(await token()), body: JSON.stringify({ name: '无图标开关' }) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const ins = calls.find((c) => /INSERT INTO bbs_forum \(name/.test(c.sql));
+    expect(ins?.sql).toContain('icon_show');
+    // 绑定顺序：… seo_keywords_i18n, icon_show, create_date
+    expect(ins?.params?.at(-2)).toBe(1);
+  });
+
   it('POST：空版块名 → VALIDATION_ERROR', async () => {
     const { env } = makeEnv();
     const res = await app.request(
@@ -157,6 +171,19 @@ describe('版块管理 CRUD（T3-5）', () => {
     const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
     expect(upd?.sql).toBe('UPDATE bbs_forum SET lang=? WHERE fid=?');
     expect(upd?.params).toEqual(['ja', 8]);
+  });
+
+  it('PUT：只提交 icon_show → 只更新 icon_show 列（0029 逐版块开关）', async () => {
+    const { env, calls } = makeEnv();
+    const res = await app.request(
+      '/api/admin/forums/8',
+      { method: 'PUT', headers: writeHeaders(await token()), body: JSON.stringify({ icon_show: 0 }) },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const upd = calls.find((c) => /UPDATE bbs_forum SET/.test(c.sql));
+    expect(upd?.sql).toBe('UPDATE bbs_forum SET icon_show=? WHERE fid=?');
+    expect(upd?.params).toEqual([0, 8]);
   });
 
   it('PUT：空对象且不带 access → VALIDATION_ERROR（不产生 UPDATE）', async () => {

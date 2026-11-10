@@ -54,6 +54,8 @@ export interface ForumRow extends ForumForAccess {
   announcement_i18n: string;
   seo_title_i18n: string;
   seo_keywords_i18n: string;
+  /** 版块栏图标显示开关（0029）：1 = 显示（默认），0 = 只显示版块名 */
+  icon_show: number;
 }
 
 /**
@@ -126,6 +128,8 @@ export async function loadForumlist(cache: Cache, db: D1b): Promise<Record<numbe
       f.announcement_i18n = String(f.announcement_i18n ?? '');
       f.seo_title_i18n = String(f.seo_title_i18n ?? '');
       f.seo_keywords_i18n = String(f.seo_keywords_i18n ?? '');
+      /* 0029：缺列/空值一律按「显示」处理（历史数据与默认口径一致） */
+      f.icon_show = f.icon_show === 0 ? 0 : 1;
       out[f.fid] = { ...f, accesson: Number(f.accesson), accesslist: {} };
     }
     for (const a of access.results) {

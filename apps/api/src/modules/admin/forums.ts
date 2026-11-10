@@ -165,7 +165,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     const ts = now();
     const r = await db
       .prepare<{ fid: number }>(
-        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,name_i18n,brief_i18n,announcement_i18n,seo_title_i18n,seo_keywords_i18n,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
+        'INSERT INTO bbs_forum (name,rank,brief,announcement,accesson,orderby,icon,moduids,seo_title,seo_keywords,parent_fid,lang,name_i18n,brief_i18n,announcement_i18n,seo_title_i18n,seo_keywords_i18n,icon_show,threads,todayposts,todaythreads,create_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING fid',
       )
       .bind(
         name,
@@ -186,6 +186,8 @@ export function adminForumRoutes(): Hono<ReadEnv> {
         stringifyNameI18n(b.announcement_i18n),
         stringifyNameI18n(b.seo_title_i18n),
         stringifyNameI18n(b.seo_keywords_i18n),
+        /* 0029：图标显示开关，未提交按默认「显示」（与列默认值一致） */
+        b.icon_show === undefined ? 1 : as01(b.icon_show),
         ts,
       )
       .first<{ fid: number }>();
@@ -241,6 +243,8 @@ export function adminForumRoutes(): Hono<ReadEnv> {
     if ('moduids' in b) put('moduids', String(b.moduids ?? ''));
     if ('seo_title' in b) put('seo_title', String(b.seo_title ?? ''));
     if ('seo_keywords' in b) put('seo_keywords', String(b.seo_keywords ?? ''));
+    /* 0029：版块栏图标显示开关（不影响 icon_file/icon_time，关掉后图标文件保留） */
+    if ('icon_show' in b) put('icon_show', as01(b.icon_show));
 
     /* 二级版块约束：不得自引用；仅有子版块的版块不能再被设为子版块（否则成三级）；父必须是一级版块 */
     let parentFid = Number(cur.parent_fid ?? 0);

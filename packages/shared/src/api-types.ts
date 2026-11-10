@@ -54,6 +54,8 @@ export interface ForumNode {
   icon?: number;
   /** 自定义图标直链（后台上传，/files/forum/{fid}.xxx?v=ts）；空 = 前台用内置默认图 */
   iconUrl?: string;
+  /** 版块栏图标显示开关（0029）：0 = 前台版块栏只显示版块名、不渲染图标；缺省/1 = 显示 */
+  iconShow?: number;
   /** 版块公告（公告卡/绿底 alert） */
   announcement?: string;
   /** 版块公告多语言（0028）：locale → 公告；缺省/空 = 未配置，展示回退 announcement */

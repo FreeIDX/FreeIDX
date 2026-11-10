@@ -887,6 +887,8 @@
   "forum_icon_read_err": "画像の読み込みに失敗しました",
   "forum_icon_reset": "デフォルトに戻す",
   "forum_icon_reset_err": "デフォルトへのリセットに失敗しました",
+  "forum_icon_show": "アイコンを表示",
+  "forum_icon_show_hint": "ホームのフォーラムバーにこのフォーラムのアイコンを表示するか",
   "forum_icon_size_err": "アイコンは1MBを超えることはできません。",
   "forum_icon_upload_err": "アイコンのアップロードに失敗しました",
   "forum_icon_upload_label": "フォーラムアイコンをアップロード",

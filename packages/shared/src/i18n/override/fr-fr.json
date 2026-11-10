@@ -886,6 +886,8 @@
   "forum_icon_read_err": "Échec de lecture de l'image",
   "forum_icon_reset": "Réinitialiser",
   "forum_icon_reset_err": "Échec de la réinitialisation",
+  "forum_icon_show": "Afficher l'icône",
+  "forum_icon_show_hint": "Afficher ou non l'icône de ce forum dans la barre latérale de la page d'accueil",
   "forum_icon_size_err": "L'icône ne peut pas dépasser 1 Mo.",
   "forum_icon_upload_err": "Échec du téléchargement de l'icône",
   "forum_icon_upload_label": "Télécharger l'icône du forum",

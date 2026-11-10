@@ -47,6 +47,8 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         todaythreads: f.todaythreads,
         icon: f.icon,
         iconUrl: f.icon_url,
+        /* 图标显示开关（0029）：0 = 前台版块栏只显示版块名，不渲染图标 */
+        iconShow: f.icon_show,
         announcement: f.announcement,
         announcementI18n: normNameI18n(f.announcement_i18n),
         seoTitle: f.seo_title,

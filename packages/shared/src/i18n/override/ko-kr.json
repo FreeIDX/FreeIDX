@@ -886,6 +886,8 @@
   "forum_icon_read_err": "이미지 읽기 실패",
   "forum_icon_reset": "기본값으로 복원",
   "forum_icon_reset_err": "기본값 복원 실패",
+  "forum_icon_show": "아이콘 표시",
+  "forum_icon_show_hint": "홈 포럼 바에 이 포럼의 아이콘을 표시할지 여부",
   "forum_icon_size_err": "아이콘은 1MB를 초과할 수 없습니다.",
   "forum_icon_upload_err": "아이콘 업로드 실패",
   "forum_icon_upload_label": "포럼 아이콘 업로드",

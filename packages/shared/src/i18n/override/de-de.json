@@ -886,6 +886,8 @@
   "forum_icon_read_err": "Bildlesen fehlgeschlagen",
   "forum_icon_reset": "Auf Standard zurücksetzen",
   "forum_icon_reset_err": "Zurücksetzen auf Standard fehlgeschlagen",
+  "forum_icon_show": "Symbol anzeigen",
+  "forum_icon_show_hint": "Ob das Symbol dieses Forums in der Forum-Leiste der Startseite angezeigt wird",
   "forum_icon_size_err": "Icon darf 1 MB nicht überschreiten.",
   "forum_icon_upload_err": "Icon-Upload fehlgeschlagen",
   "forum_icon_upload_label": "Forum-Icon hochladen",

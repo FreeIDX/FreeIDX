@@ -886,6 +886,8 @@
   "forum_icon_read_err": "Error al leer imagen",
   "forum_icon_reset": "Restablecer valor predeterminado",
   "forum_icon_reset_err": "Error al restablecer valor predeterminado",
+  "forum_icon_show": "Mostrar icono",
+  "forum_icon_show_hint": "Si se muestra el icono de este foro en la barra de la página de inicio",
   "forum_icon_size_err": "El icono no puede superar 1MB.",
   "forum_icon_upload_err": "Error al subir icono",
   "forum_icon_upload_label": "Subir icono del foro",

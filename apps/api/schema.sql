@@ -135,7 +135,8 @@ CREATE TABLE bbs_forum (
   brief_i18n TEXT NOT NULL DEFAULT '',
   announcement_i18n TEXT NOT NULL DEFAULT '',
   seo_title_i18n TEXT NOT NULL DEFAULT '',
-  seo_keywords_i18n TEXT NOT NULL DEFAULT ''
+  seo_keywords_i18n TEXT NOT NULL DEFAULT '',
+  icon_show INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE bbs_forum_access (
