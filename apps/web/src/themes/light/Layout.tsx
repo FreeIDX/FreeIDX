@@ -172,6 +172,7 @@ function ThemeSwitch() {
 function LangSwitch({ compact }: { compact?: boolean }) {
   const t = useT();
   const lang = useLang();
+  const pref = useLangPref((s) => s.pref);
   const setPref = useLangPref((s) => s.setPref);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -210,6 +211,23 @@ function LangSwitch({ compact }: { compact?: boolean }) {
           className="absolute right-0 top-[calc(100%+6px)] z-[1500] max-h-[70vh] w-44 overflow-y-auto rounded-md bg-card py-1 shadow-[0_3px_15px_rgba(90,97,105,0.1),0_2px_3px_rgba(90,97,105,0.2)]"
           role="menu"
         >
+          {/* 自动：浏览器语言优先（未命中回落站点语言）——清除本地偏好后能回到这一档，
+              否则用户点过任一语言后就再也回不到「跟随浏览器」。 */}
+          <button
+            type="button"
+            role="menuitem"
+            className={cx(
+              'flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent',
+              pref === null ? 'font-semibold text-brand' : 'text-foreground',
+            )}
+            onClick={() => {
+              setPref(null);
+              setOpen(false);
+            }}
+          >
+            {t('lang_auto')}
+            {pref === null && <Icon name="check" className="size-4 shrink-0" />}
+          </button>
           {AVAILABLE_LOCALES.map((l) => (
             <button
               key={l}

@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { useParams, useSearchParams } from 'react-router';
 import { useAuth } from '../../../store/auth';
-import { apiGet } from '../../../lib/api';
+import { apiGet, fmtDate } from '../../../lib/api';
 import { posInt } from '../../../lib/params';
 import { siteThreadsQuery } from '../../../lib/queries';
 import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
@@ -114,7 +114,7 @@ export function HomePage() {
                 : t('account_muted')}
             {' '}
             {me.banUntil && me.banUntil > 0
-              ? t('ban_until_label', { date: new Date(me.banUntil * 1000).toLocaleString() })
+              ? t('ban_until_label', { date: fmtDate(me.banUntil) })
               : t('ban_permanent')}
             {me.banReason ? ` · ${t('ban_reason_label', { reason: me.banReason })}` : ''}
           </Alert>

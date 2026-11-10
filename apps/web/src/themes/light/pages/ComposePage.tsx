@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CONTENT_LANG_NATIVE_NAMES, CONTENT_LANGS, detectContentLang, type ContentLang } from '@freeidx/shared';
 import { BanScope, effectiveBanScope } from '@freeidx/shared';
-import { createThread } from '../../../lib/api';
+import { createThread, fmtDate } from '../../../lib/api';
 import { nonNegInt } from '../../../lib/params';
 import { Composer, type ComposerSubmit } from '../../../components/Composer';
 import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
@@ -112,7 +112,7 @@ export function ComposePage() {
           <Alert tone="warning" icon="warning">
             {t('compose_muted_hint')}{' '}
             {me.banUntil && me.banUntil > 0
-              ? t('ban_until_label', { date: new Date(me.banUntil * 1000).toLocaleString() })
+              ? t('ban_until_label', { date: fmtDate(me.banUntil) })
               : t('ban_permanent')}
             {me.banReason ? ` · ${t('ban_reason_label', { reason: me.banReason })}` : ''}
           </Alert>

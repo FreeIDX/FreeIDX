@@ -16,8 +16,10 @@ import { useAdminT } from '../t';
 import { useAdminAction, useBatchAction } from '../use-action';
 import { Alert, Button, Card, Checkbox, ErrorState, Select, Table, cx, inputCls } from '../ui';
 import { Icon } from '../../components/icons';
+import { fmtDate } from '../../lib/api';
 
-const fmtDate = (sec: number): string => (sec > 0 ? new Date(sec * 1000).toLocaleString() : '—');
+/** 时间列：0 = 无记录显示破折号；格式化走 lib/api 的 fmtDate（跟随界面语言，不受浏览器 locale 影响） */
+const fmtOrDash = (sec: number): string => (sec > 0 ? fmtDate(sec) : '—');
 
 /** 有效期预设：0 = 永不过期，其余为常用天数（后端允许 0–3650） */
 const EXPIRE_PRESETS = [0, 7, 30, 90, 180, 365];
@@ -162,8 +164,8 @@ export function McpTokenGrid() {
               </td>
               <td className="font-mono text-xs">{r.tokenPrefix}…</td>
               <td className="text-xs">{r.scopes}</td>
-              <td className="text-xs">{r.expireAt > 0 ? fmtDate(r.expireAt) : t('mcp_never', '永不过期')}</td>
-              <td className="text-xs">{fmtDate(r.lastUsedAt)}</td>
+              <td className="text-xs">{r.expireAt > 0 ? fmtOrDash(r.expireAt) : t('mcp_never', '永不过期')}</td>
+              <td className="text-xs">{fmtOrDash(r.lastUsedAt)}</td>
               <td className="w-[90px]">
                 {r.revoked ? (
                   <span className="text-xs text-muted">{t('mcp_revoked', '已撤销')}</span>

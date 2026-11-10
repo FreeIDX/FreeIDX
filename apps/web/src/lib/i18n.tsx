@@ -1,4 +1,8 @@
-/** i18n Provider：前台语言 = 用户偏好（右上角切换器，localStorage 持久）> 站点 setting.lang，默认 en-us（§10.3） */
+/**
+ * i18n Provider：前台语言协商链 = 用户偏好（右上角切换器，localStorage 持久）
+ *   > 浏览器语言（navigator.languages，命中 AVAILABLE_LOCALES）> 站点 setting.lang > 默认 en-us。
+ * 浏览器语言是「没选过语言」的访客的默认依据，站点语言退为第二回落（站长语言 ≠ 访客语言时不再强制站点语言）。
+ */
 import {
   createContext,
   useContext,
@@ -15,6 +19,7 @@ import {
   createFrontTranslator,
   DEFAULT_LOCALE,
   localizedSetting,
+  matchBrowserLocale,
   nameI18nOf,
   type ForumNameMap,
   type FrontKey,
@@ -55,22 +60,40 @@ declare global {
 }
 
 /**
- * 首屏语言：bootstrap 到达前的依据，优先级 —— 用户偏好 > 壳注入的站点语言 > 默认 en-us。
+ * 浏览器语言匹配结果（模块级缓存：navigator.languages 运行期不变，也避免每次取词都重新匹配）。
+ * 命中 AVAILABLE_LOCALES 才返回；未命中（如 pt-BR、无 navigator 的 SSR 环境）返回 null，
+ * 由调用方回落到站点语言 —— 与 shared/i18n/locales 的 matchBrowserLocale 同一实现。
+ */
+let browserLocaleCache: string | null | undefined;
+function browserLocale(): string | null {
+  if (browserLocaleCache !== undefined) return browserLocaleCache;
+  const nav = typeof navigator === 'undefined' ? null : navigator;
+  const tags = nav ? (nav.languages?.length ? nav.languages : [nav.language]) : [];
+  browserLocaleCache = tags.length ? matchBrowserLocale(tags) : null;
+  return browserLocaleCache;
+}
+
+/**
+ * 首屏语言：bootstrap 到达前的依据，优先级 —— 用户偏好 > 浏览器语言 > 壳注入的站点语言 > 默认 en-us。
  *
  * 第三个来源（`window.__FI_LANG__`）是性能关键：此前只能按 localStorage/默认值猜，
  * 中文站点首访会先下 en-us 词条包、渲染一帧英文，等 bootstrap 到达后再补下 zh-cn 包
  * （实测同一页面下两个词典 chunk）。拿到注入值后首帧即命中目标语言，少一个请求也不闪。
  * main.tsx 据此在渲染前预载词条，使首次渲染就拿到可用词典，不出现「先显示 key 再补文案」。
+ *
+ * 注意顺序与 apps/api 壳注入的内联脚本逐项一致（那边先算偏好与浏览器语言，再回落站点语言）。
  */
 export function initialLocale(): string {
   const pref = readLangPref();
   if (pref && AVAILABLE_LOCALES.includes(pref)) return pref;
+  const browser = browserLocale();
+  if (browser) return browser;
   const injected = typeof window === 'undefined' ? '' : (window.__FI_LANG__ ?? '');
   return AVAILABLE_LOCALES.includes(injected) ? injected : DEFAULT_LOCALE;
 }
 
 interface LangPrefState {
-  /** null = 跟随站点语言 */
+  /** null = 自动（浏览器语言优先，未命中回落站点语言） */
   pref: string | null;
   setPref: (lang: string | null) => void;
 }
@@ -98,11 +121,12 @@ export const useLangPref = create<LangPrefState>((set) => ({
   },
 }));
 
-/** 前台展示语言：用户偏好（非法值忽略）优先，否则站点语言 */
+/** 前台展示语言：用户偏好（非法值忽略）优先，其次浏览器语言，最后站点语言 */
 export function useLang(): string {
   const siteLang = useAuth((s) => s.setting?.lang ?? DEFAULT_LOCALE);
   const pref = useLangPref((s) => s.pref);
-  return pref && AVAILABLE_LOCALES.includes(pref) ? pref : siteLang;
+  if (pref && AVAILABLE_LOCALES.includes(pref)) return pref;
+  return browserLocale() ?? siteLang;
 }
 
 /**

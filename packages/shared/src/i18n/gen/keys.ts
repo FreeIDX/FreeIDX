@@ -262,6 +262,7 @@ export type FrontKey =
   | 'join_reply_placeholder'
   | 'keyword'
   | 'landlord_label'
+  | 'lang_auto'
   | 'lang_de_de'
   | 'lang_en_us'
   | 'lang_es_es'

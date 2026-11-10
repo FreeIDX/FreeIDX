@@ -20,6 +20,7 @@
  */
 import { createMiddleware } from 'hono/factory';
 import { AVAILABLE_LOCALES } from '@freeidx/shared';
+import { acceptLangOf } from '../i18n';
 import type { Env } from '../../types/env';
 import type { D1b } from '../db';
 import type { Cache } from './index';
@@ -86,6 +87,15 @@ function langCookieOf(cookie: string | null): string | undefined {
   }
 }
 
+/**
+ * 请求的语言维度（缓存键用）：cookie 偏好 > Accept-Language 匹配 > 缺省（undefined）。
+ * 与 i18n 中间件协商的前两档逐项一致 —— 第三档站点语言不参与分键（无 cookie 且浏览器语言
+ * 未命中时全站同一份副本）。两处必须共用 acceptLangOf，否则协商结果与缓存键会漂移。
+ */
+function reqLangOf(cookie: string | null, acceptLanguage: string | null): string | undefined {
+  return langCookieOf(cookie) ?? acceptLangOf(acceptLanguage) ?? undefined;
+}
+
 function bucket(): Bucket | null {
   return typeof caches === 'undefined' ? null : caches.default;
 }
@@ -93,8 +103,8 @@ function bucket(): Bucket | null {
 /**
  * 键 URL：把 UA 分类塞进查询串参数 `fi-ua`（原查询保留）。
  * Cloudflare 缓存键只认 URL，不认 Vary，这是浏览器/爬虫共用一个 URL 时唯一的隔离手段。
- * `fi-lang`：API 响应内容可能随语言 cookie 协商而不同（i18n 中间件），带 `lang` cookie 的
- * 请求把语言值也编进键，避免不同语言用户互串缓存副本；无 cookie（或非法值）共用缺省键。
+ * `fi-lang`：API 响应内容会随语言协商而不同（i18n 中间件：cookie 偏好 > 浏览器 Accept-Language），
+ * 故把协商出的语言编进键，避免不同语言用户互串缓存副本；两者都未命中共用缺省键。
  */
 function keyUrl(url: string, ua: UaClass, lang?: string): string {
   const u = new URL(url);
@@ -193,7 +203,9 @@ export function edgeCache() {
       // /files/* 与语言无关（二进制对象）不编 fi-lang；API 键编入 lang cookie（合法 locale 才编），
       // 防止语言协商后不同语言用户命中同一份缓存副本。
       const ua = filePrefix ? SHARED_UA : (classifyUserAgent(c.req.header('user-agent') ?? '') as UaClass);
-      const lang = filePrefix ? undefined : langCookieOf(raw.headers.get('cookie'));
+      const lang = filePrefix
+        ? undefined
+        : reqLangOf(raw.headers.get('cookie'), raw.headers.get('accept-language'));
       const key = keyRequest(raw.url, ua, lang);
       const hit = await b.match(key);
       if (hit) {

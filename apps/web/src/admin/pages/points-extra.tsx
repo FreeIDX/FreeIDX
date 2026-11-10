@@ -25,12 +25,13 @@ import {
 
 } from '../api';
 import { useAdminT } from '../t';
+import { uiLocale } from '../../lib/api';
 import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
 import { Alert, Badge, Button, Card, ErrorState, Field, Input, Select, Table, AdminPagination } from '../ui';
 
 const asInt = (v: string): number | null => (/^-?\d+$/.test(v.trim()) ? Number(v.trim()) : null);
-const fmtDate = (ts: number) => (ts > 0 ? new Date(ts * 1000).toLocaleString(undefined, { hour12: false }) : '—');
+const fmtDate = (ts: number) => (ts > 0 ? new Date(ts * 1000).toLocaleString(uiLocale(), { hour12: false }) : '—');
 
 /* ---------------- 积分规则矩阵 ---------------- */
 

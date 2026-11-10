@@ -21,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEmailSetting, putEmailSetting, testEmailSetting } from '../api';
 import type { EmailSettingView, HttpMailProvider, MailAccountInput, MailReport } from '../types';
 import { apiErrorMessage } from '../../lib/errors';
+import { fmtDate } from '../../lib/api';
 import { useAdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { SETTING_TABS } from '../tabs';
@@ -77,7 +78,7 @@ function ReportView({ report }: { report: MailReport }) {
           {report.ok ? '✓' : '✗'}
         </span>
         <span className="break-all font-mono text-xs text-ink-soft">{report.to}</span>
-        <span className="text-xs text-muted-2">{new Date(report.at * 1000).toLocaleString()}</span>
+        <span className="text-xs text-muted-2">{fmtDate(report.at)}</span>
       </div>
       {report.attempts.length > 0 && (
         <ul className="mt-2 space-y-1">

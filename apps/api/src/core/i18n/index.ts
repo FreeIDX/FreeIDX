@@ -1,5 +1,6 @@
 /**
- * API 服务端词条库（i18n 基建）：消息层文案按站点语言（setting.lang）取词。
+ * API 服务端词条库（i18n 基建）：消息层文案按请求语言取词（cookie 偏好 > 浏览器 Accept-Language >
+ * 站点 setting.lang，协商在 apps/api/src/index.ts 的中间件里完成）。
  *  - 源语言 zh-cn 必填且与既有测试断言逐字一致；
  *    其余 9 语言（zh-tw en-us ru-ru th-th de-de ja-jp ko-kr es-es fr-fr）全量提供。
  *  - createApiT(lang) 返回同步翻译器：lang 命中 → zh-cn 回落 → 键名兜底；{param} 插值。
@@ -9,7 +10,7 @@
  *  - 占位符用 {name}（如 {credit}/{site}/{code}/{link}/{n}/{old}/{new}/{todo}/{topic}/{forum}/{name}/{subject}）。
  */
 
-import type { ApiKey } from '@freeidx/shared';
+import { matchBrowserLocale, parseAcceptLanguage, type ApiKey } from '@freeidx/shared';
 
 export const LOCALES = ['zh-cn', 'zh-tw', 'en-us', 'ru-ru', 'th-th', 'de-de', 'ja-jp', 'ko-kr', 'es-es', 'fr-fr'] as const;
 type Locale = (typeof LOCALES)[number];
@@ -473,4 +474,15 @@ function translate(key: ApiKey, lang: string, params?: Record<string, string | n
 export function createApiT(lang: string): ApiT {
   const l = String(lang || 'en-us').toLowerCase();
   return (key, params) => translate(key, l, params);
+}
+
+/**
+ * `Accept-Language` → 可选 locale（无命中返回 null）。
+ *
+ * 前台消息层的浏览器兜底：cookie 偏好（用户显式切换）> 浏览器语言 > 站点语言。
+ * 边缘缓存键（core/cache/edge.ts）用同一函数算出语言维度，保证「按语言协商出的响应」
+ * 不会与另一语言的缓存副本互串 —— 两处必须共用本函数，不能在别处另写一套匹配规则。
+ */
+export function acceptLangOf(header: string | null | undefined): string | null {
+  return matchBrowserLocale(parseAcceptLanguage(header));
 }
