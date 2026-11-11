@@ -7,10 +7,15 @@
  */
 import { Hono } from 'hono';
 import {
+  SITE_DESC_MAX,
+  clipText,
   forumNameOf,
   localizedSetting,
   normForumNameI18n,
   normNameI18n,
+  plainText,
+  siteDescriptionOf,
+  siteTitleOf,
   type PageMeta,
   type RobotsContribution,
   type SiteSetting,
@@ -86,21 +91,30 @@ export function newPageMeta(
   const logo = setting.logo_url ? String(setting.logo_url) : '';
   if (favicon) base.head.push(`<link rel="icon" href="${escAttr(favicon)}">`);
   if (logo) base.og['og:image'] = setting.url ? `${setting.url.replace(/\/$/, '')}${logo}` : logo;
+  /**
+   * 站点级 title / description 统一走 shared/site-text：
+   *  - title 后缀与 meta description 取 **desc**（SEO 专用纯文本），不取 brief（富文本，进 title 会带标签、被截断）；
+   *  - 内页 title 补「 - 站点名」，与前端 ThreadPage 的 document.title 同口径（此前只有裸标题）。
+   */
+  const siteTitle = siteTitleOf(site);
+  const siteDesc = siteDescriptionOf(site);
+  const withSiteName = (title: string) => {
+    const name = plainText(site.sitename);
+    const own = plainText(title);
+    if (!own) return name;
+    return name && own !== name ? `${own} - ${name}` : own;
+  };
   switch (kind) {
     case 'index':
-      return { ...base, title: site.sitename, description: site.desc || site.brief };
+      return { ...base, title: siteTitle, description: siteDesc };
     case 'forum':
-      return {
-        ...base,
-        title: entity?.seoTitle || site.sitename,
-        description: site.desc || site.brief,
-      };
+      return { ...base, title: withSiteName(entity?.seoTitle || site.sitename), description: siteDesc };
     case 'thread':
-      return { ...base, title: entity?.seoTitle ?? site.sitename, description: site.desc || site.brief };
+      return { ...base, title: withSiteName(entity?.seoTitle ?? site.sitename), description: siteDesc };
     case 'user':
-      return { ...base, title: `${site.sitename}`, description: site.desc || site.brief, noindex: true };
+      return { ...base, title: site.sitename, description: siteDesc, noindex: true };
     default:
-      return { ...base, title: site.sitename, description: site.desc || site.brief };
+      return { ...base, title: siteTitle, description: siteDesc };
   }
 }
 
@@ -222,8 +236,10 @@ async function buildFallback(
       .bind(fid)
       .all();
     const meta = newPageMeta('forum', rt, setting, { fid, seoTitle, seoKeywords });
-    /* 版块简介（0028 多语言）优先作本页 description：版块页各自有简介时不该全部复用站点描述 */
-    if (forumBrief.trim()) meta.description = forumBrief;
+    /* 版块简介（0028 多语言）优先作本页 description：版块页各自有简介时不该全部复用站点描述。
+       简介允许 HTML，进 meta 属性前必须脱标签并限长，否则 content 里会出现 `&lt;br&gt;` 字面量。 */
+    const briefText = clipText(plainText(forumBrief), SITE_DESC_MAX);
+    if (briefText) meta.description = briefText;
     const list = rows.results
       .map((t) => `<li><a href="/thread/${t.tid}">${escAttr(t.subject)}</a></li>`)
       .join('');

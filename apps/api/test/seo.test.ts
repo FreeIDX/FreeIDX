@@ -217,7 +217,8 @@ describe('爬虫预渲染分发（§16.1 核心管线）', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
-    expect(html).toContain('<title>你好世界</title>');
+    // 内页标题统一补「 - 站点名」，与前端 ThreadPage 的 document.title 同口径
+    expect(html).toContain('<title>你好世界 - FreeIDX</title>');
     expect(html).toContain('<link rel="canonical" href="http://localhost/thread/2">');
     expect(html).toContain('<h1>你好世界</h1>');
     expect(html).toContain('DiscussionForumPosting'); // 契约 ⑤：seo 插件贡献 JSON-LD
@@ -236,7 +237,7 @@ describe('爬虫预渲染分发（§16.1 核心管线）', () => {
     const res = await app.request('/thread/2', { headers: BOT }, env as never);
     const html = await res.text();
     expect(res.status).toBe(200);
-    expect(html).toContain('<title>你好世界</title>');
+    expect(html).toContain('<title>你好世界 - FreeIDX</title>');
     expect(html).toContain('<html lang="zh-cn">');
     expect(html).not.toContain('application/ld+json');
     expect(html).not.toContain('og:title');
@@ -250,6 +251,11 @@ describe('爬虫预渲染分发（§16.1 核心管线）', () => {
     const html = await res.text();
     // 壳页而非预渲染正文：不含 thread 的语义化标题
     expect(html).not.toContain('<h1>你好世界</h1>');
+    /* 但壳页本身要带站点级语义：index.html 的占位标题被替换、补上 description/OG。
+       不执行 JS 的客户端（含不预渲染的 AI 爬虫）看到的是这一段，而不是裸占位。 */
+    expect(html).toContain('<title>FreeIDX - b</title>');
+    expect(html).toContain('<meta name="description" content="b">');
+    expect(html).toContain('<meta property="og:title" content="FreeIDX - b">');
   });
 
   it('列表分页 page>1 兜底页带 noindex（§16.2 保底）', async () => {
@@ -267,7 +273,8 @@ describe('爬虫预渲染分发（§16.1 核心管线）', () => {
     const f = await app.request('/forum/1', { headers: BOT }, env as never);
     expect(await f.text()).toContain('<h1>默认版块</h1>');
     const i = await app.request('/', { headers: BOT }, env as never);
-    expect(await i.text()).toContain('<title>FreeIDX</title>');
+    // 首页 title = 「站点名 - 一句话定位」：本例 desc 为空，按约定回退 brief 的纯文本
+    expect(await i.text()).toContain('<title>FreeIDX - b</title>');
   });
 
   it('主题不存在 → 交回核心 404，不硬造页面', async () => {
@@ -282,7 +289,8 @@ describe('newPageMeta 默认值（核心保底字段）', () => {
   const setting = { sitename: 'S', brief: 'br', desc: 'd' } as SiteSetting;
   it('thread 用实体标题，缺失回落站名；user 页 noindex', () => {
     const t = newPageMeta('thread', 'http://x/thread/1', setting, { tid: 1, seoTitle: 'T' });
-    expect(t.title).toBe('T');
+    // 内页「页面标题 - 站点名」
+    expect(t.title).toBe('T - S');
     const t2 = newPageMeta('thread', 'http://x/thread/1', setting);
     expect(t2.title).toBe('S');
     expect(newPageMeta('user', 'http://x/user/1', setting, { uid: 1 }).noindex).toBe(true);

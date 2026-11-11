@@ -4,7 +4,7 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { AVAILABLE_LOCALES, DEFAULT_LOCALE } from '@freeidx/shared';
+import { AVAILABLE_LOCALES, DEFAULT_LOCALE, localizedSetting, siteDescriptionOf, siteTitleOf } from '@freeidx/shared';
 import type { Env } from './types/env';
 import { D1b } from './core/db';
 import { Cache } from './core/cache';
@@ -22,6 +22,7 @@ import { classifyUserAgent, matchRegisteredPath } from './core/crawler';
 import { prerender, seoCoreRoutes } from './modules/seo/core';
 import { loadSetting } from './core/loaders';
 import { loadThemeId } from './core/theme';
+import { escAttr } from './core/fmt';
 import { acceptLangOf, createApiT, t0, type ApiT } from './core/i18n';
 import { threadRoutes } from './modules/thread/routes';
 import { bootstrapRoutes } from './modules/bootstrap/routes';
@@ -261,9 +262,16 @@ const CJK_FONT_URL = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v1.woff2';
  *    initialLocale 同序，避免首帧先按站点语言下字体、挂载后再换（中文站点的英文浏览器访客同理）。
  *  - 中文界面顺带预载字体：字体是首屏最大的单一资源，等 CSS 解析到 @font-face 才发起太晚。
  *
+ *  - `<title>` / `<meta description>` / OG：壳页本身带有站点级语义，见下方 metaHtml。
+ *
  * 注入失败（读壳失败/无 </head>）一律原样返回，前端会回落到「同名接口 + 默认主题 + 默认语言」。
  */
-async function injectShell(res: Response, themeId: string, siteLang: string): Promise<Response> {
+async function injectShell(
+  res: Response,
+  themeId: string,
+  siteLang: string,
+  site: { title: string; description: string } | null = null,
+): Promise<Response> {
   try {
     const html = await res.text();
     /**
@@ -285,11 +293,30 @@ async function injectShell(res: Response, themeId: string, siteLang: string): Pr
       `try{if(/^zh/.test(fiG)){var k=document.createElement("link");` +
       `k.rel="preload";k.as="font";k.type="font/woff2";k.crossOrigin="";` +
       `k.href=${JSON.stringify(CJK_FONT_URL)};document.head.appendChild(k)}}catch(e){}</script>`;
+    /**
+     * 壳页语义标签：`index.html` 的 `<title>` 是构建期占位（构建时读不到后台设置），
+     * 这里替换为「站点名 + 一句话定位」，并补 description / OG。
+     * 只对人类请求生效——爬虫在 prerender() 就被预渲染正文接管，不走这条分支。
+     * 内页标题在 JS 就绪后由前端路由覆写，两边都用 shared/site-text 的口径，不会前后不一致。
+     * 注意**不给** canonical：壳页服务的是任意深链，写死首页地址会让搜索引擎把深链都收敛到首页。
+     */
+    const metaHtml = site
+      ? [
+          site.description ? `<meta name="description" content="${escAttr(site.description)}">` : '',
+          `<meta property="og:type" content="website">`,
+          `<meta property="og:title" content="${escAttr(site.title)}">`,
+          site.description ? `<meta property="og:description" content="${escAttr(site.description)}">` : '',
+        ].join('')
+      : '';
+    const shell =
+      site && /<title>[\s\S]*?<\/title>/i.test(html)
+        ? html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escAttr(site.title)}</title>`)
+        : html;
     // 优先注入 </head>（脚本在任何业务脚本之前求值）；无 head 时退化到 </body>；都没有则原样返回文本
-    const out = html.includes('</head>')
-      ? html.replace('</head>', `${script}</head>`)
-      : html.includes('</body>')
-        ? html.replace('</body>', `${script}</body>`)
+    const out = shell.includes('</head>')
+      ? shell.replace('</head>', `${metaHtml}${script}</head>`)
+      : shell.includes('</body>')
+        ? shell.replace('</body>', `${metaHtml}${script}</body>`)
         : null;
     if (out === null) return new Response(html, res);
     const headers = new Headers(res.headers);
@@ -356,7 +383,14 @@ app.notFound(async (c) => {
   // 站点语言：非法/读取失败回落 DEFAULT_LOCALE（与改版前「无注入」时的行为一致）
   const setting = await loadSetting(c.get('cache'), c.get('db')).catch(() => null);
   const siteLang = setting && AVAILABLE_LOCALES.includes(setting.lang) ? setting.lang : DEFAULT_LOCALE;
-  return injectShell(res, themeId, siteLang);
+  /* 站点级语义按站点语言取词（与 newPageMeta 的爬虫产物同一口径，不随访客界面语言变） */
+  const site = setting ? localizedSetting(setting, siteLang) : null;
+  return injectShell(
+    res,
+    themeId,
+    siteLang,
+    site ? { title: siteTitleOf(site), description: siteDescriptionOf(site) } : null,
+  );
 });
 
 export default {

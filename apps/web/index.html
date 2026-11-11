@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 占位标题：构建期读不到后台设置，运行时由 Worker 的 injectShell 替换为「站点名 - 一句话定位」
+         （见 apps/api/src/index.ts）；爬虫走 prerender() 的预渲染正文，不读这里。 -->
     <title>FreeIDX</title>
   </head>
   <body>
