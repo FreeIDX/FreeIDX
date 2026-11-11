@@ -6,11 +6,11 @@
  */
 import { cx } from '../lib/cx';
 
-export function Skeleton({ className, circle = false }: { className?: string; circle?: boolean }) {
+export function Skeleton({ className, circle = false, radius }: { className?: string; circle?: boolean; radius?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={cx('animate-pulse bg-zh-line/70 motion-reduce:animate-none', circle ? 'rounded-full' : 'rounded-[4px]', className)}
+      className={cx('animate-pulse bg-zh-line/70 motion-reduce:animate-none', radius ?? (circle ? 'rounded-full' : 'rounded-[4px]'), className)}
     />
   );
 }

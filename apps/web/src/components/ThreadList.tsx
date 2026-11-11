@@ -288,7 +288,7 @@ export function ThreadList(props: {
         <li className="py-12 text-center">
           {props.loading ? (
             <>
-              <Icon name="refresh" className="mx-auto size-10 text-[#dcdcdc]" />
+              <Icon name="refresh" className="mx-auto size-10 animate-spin text-[#dcdcdc] motion-reduce:animate-none" />
               <span className="mt-2 block text-[16px] text-lt-grey">{t('loading')}</span>
             </>
           ) : (

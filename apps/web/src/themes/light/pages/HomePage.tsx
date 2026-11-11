@@ -8,6 +8,7 @@ import { siteThreadsQuery } from '../../../lib/queries';
 import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList } from '../../../components/ThreadList';
+import { ThreadListSkeleton } from '../../../components/ThreadListSkeleton';
 import { AnnouncementBar } from '../../../components/AnnouncementBar';
 import { ContentLangBar } from '../../../components/ContentLangBar';
 import { useContentLangFilter } from '../../../store/contentLang';
@@ -137,6 +138,8 @@ export function HomePage() {
           {/* 内容语言筛选条（后台开启后显示；关闭时组件返回 null，连分隔线都不出现） */}
           <ContentLangBar wrap="bar" />
           {q.isError && <p className="px-5 py-6 text-center text-sm text-destructive">{(q.error as Error).message}</p>}
+          {/* 首次进入（无缓存页）：列表骨架 + 加载中提示，替代此前的空白卡片正文 */}
+          {!q.data && q.isPending && <ThreadListSkeleton />}
           {q.data && <ThreadList data={q.data} baseHref={pageHref} />}
           {q.data && (
             <div className="border-t border-zh-line px-4 py-3">

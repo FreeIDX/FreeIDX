@@ -10,6 +10,7 @@ import { useForumName, useLocalizedName, useT } from '../../../lib/i18n';
 import { NotFoundPage } from './NotFoundPage';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList, type ThreadPageData } from '../../../components/ThreadList';
+import { ThreadListSkeleton } from '../../../components/ThreadListSkeleton';
 import { ContentLangBar } from '../../../components/ContentLangBar';
 import { useContentLangFilter, useContentLangMode } from '../../../store/contentLang';
 import { Alert, Card, CardTabs, CardTitle, CreateButton, HomeSideNav, Modal, SidePanel, TagBadge, TwoCol, cx } from '../../../components/ui';
@@ -348,6 +349,8 @@ export function ForumPage() {
           bodyClass="p-0"
         >
           {q.isError && <p className="px-5 py-6 text-center text-sm text-destructive">{(q.error as Error).message}</p>}
+          {/* 首次进入（无缓存页）：列表骨架 + 加载中提示，替代此前的空白卡片正文 */}
+          {!q.data && q.isPending && <ThreadListSkeleton />}
           {q.data && (
             <ThreadList
               data={q.data}
