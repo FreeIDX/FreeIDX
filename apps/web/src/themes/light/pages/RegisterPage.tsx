@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router';
 import { RegisterForm, AuthAnnouncement } from '../../../components/AuthForms';
+import { useGuestOnly } from '../../../hooks/useGuestOnly';
 import { useLocalizedSetting, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
 import { SiteLogo } from '../../../components/SiteLogo';
@@ -15,6 +16,8 @@ export function RegisterPage() {
   const setting = useLocalizedSetting();
   const t = useT();
   const light = useLight();
+  /* 已登录就不停在注册页（本页用顶栏弹窗登录/注册成功同样要跳走） */
+  useGuestOnly();
 
   return (
     <div className="flex min-h-[calc(100vh_-_10rem)] items-center justify-center py-10">
