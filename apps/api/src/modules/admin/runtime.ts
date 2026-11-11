@@ -14,7 +14,7 @@ import { Code } from '@freeidx/shared';
 import { ok } from '../../middleware/envelope';
 import { BUDGET } from '../../core/db/budget';
 import { loadGrouplist, reqIp } from '../../core/loaders';
-import { core, intParam, totalPageOf, type ReadEnv } from '../shared';
+import { core, intParam, loadRuntime, totalPageOf, type ReadEnv } from '../shared';
 
 const now = () => Math.floor(Date.now() / 1000);
 /** 在线窗口：与 §11.1 Cron 每 5min 刷新节奏对齐 */
@@ -75,7 +75,7 @@ export function adminRuntimeRoutes(): Hono<ReadEnv> {
         )
         .first<{ todaythreads: number | null; todayposts: number | null }>(),
       db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session WHERE last_date > ?').bind(t - ONLINE_WINDOW).first<{ c: number }>(),
-      cache.get<Record<string, number>>('runtime'),
+      loadRuntime({ db, cache }),
       // 三个纯标量值合并成 1 条语句（同 totals 的写法）：D1 按语句计额度，拆开就是白送 1 条查询。
       // 注：不查 sqlite_version()——D1 明确禁用该函数（本地 miniflare 与远端都报
       //   "not authorized to use function: sqlite_version"），版本改由前端常量给。

@@ -10,7 +10,7 @@
  * 该投影带 email，所以编辑态可以直接回填并按 diff 提交。
  * PUT 只更新变化字段（按字段 diff 语义），因此提交前本地 diff，无差异则禁用按钮。
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { GroupId, effectiveBanScope, md5Hex } from '@freeidx/shared';
@@ -23,7 +23,7 @@ import { useAuth } from '../../store/auth';
 import { USER_TABS } from '../tabs';
 import { fmtDate } from '../../lib/api';
 import { BAN_DURATIONS, BanScopePicker, scopeText } from '../ban';
-import { Alert, Button, Card, ErrorState, Field, Input, LinkButton, PageTitle, Select, SubmitRow, TabBar } from '../ui';
+import { Alert, Button, Card, ErrorState, Field, Input, LinkButton, PageTitle, Select, SubmitRow, TabBar, useHydrateOnce } from '../ui';
 
 interface FormState {
   email: string;
@@ -54,12 +54,11 @@ export function UserEditPage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [origin, setOrigin] = useState<FormState>(EMPTY);
 
-  useEffect(() => {
-    if (!row) return;
-    const next: FormState = { email: row.email ?? '', username: row.username, gid: Number(row.gid), ok: Number(row.ok ?? 1), password: '', password2: '' };
+  useHydrateOnce(row, (r) => {
+    const next: FormState = { email: r.email ?? '', username: r.username, gid: Number(r.gid), ok: Number(r.ok ?? 1), password: '', password2: '' };
     setForm(next);
     setOrigin(next);
-  }, [row]);
+  });
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
 

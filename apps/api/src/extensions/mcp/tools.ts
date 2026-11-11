@@ -31,7 +31,7 @@ import { loadForumlist, loadGrouplist, loadSetting } from '../../core/loaders';
 import { canSeeUnapproved, hasSeeCheck } from '../../core/check';
 import { cursorCond } from '../../core/db/paginate';
 import { POST_PAGE_COLS, THREAD_DETAIL_COLS, THREAD_LIST_COLS, USER_PUBLIC_COLS } from '../../core/db/columns';
-import { redactPaidBlocks } from '../../modules/shared';
+import { loadRuntime, redactPaidBlocks } from '../../modules/shared';
 import { L } from '../../core/i18n';
 
 /** 工具业务错误：server 层统一转成 MCP `isError`（让模型自行纠正参数），不占用 JSON-RPC 错误码 */
@@ -443,7 +443,7 @@ async function userGet(args: Record<string, unknown>, ctx: McpCallCtx): Promise<
 
 async function siteInfo(_args: Record<string, unknown>, ctx: McpCallCtx): Promise<McpToolResult> {
   const setting = await loadSetting(ctx.cache, ctx.db);
-  const runtime = (await ctx.cache.get<Record<string, number>>('runtime')) ?? {};
+  const runtime = await loadRuntime({ db: ctx.db, cache: ctx.cache });
   return {
     text: JSON.stringify(
       {

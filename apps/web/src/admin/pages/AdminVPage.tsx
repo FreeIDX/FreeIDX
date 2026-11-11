@@ -1,7 +1,7 @@
 /**
  * 加V认证后台：四档展开为四个子路由同页切换。
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fmtDate } from '../../lib/api';
@@ -25,6 +25,7 @@ import {
   SubmitRow,
   TabBar,
   Table,
+  useHydrateOnce,
   usePage,
 } from '../ui';
 
@@ -226,11 +227,10 @@ function FeeSettingTab() {
   const [type, setType] = useState<VFeeSetting['type']>('golds');
   const [count, setCount] = useState('0');
 
-  useEffect(() => {
-    if (!q.data) return;
-    setType(q.data.type);
-    setCount(String(q.data.count));
-  }, [q.data]);
+  useHydrateOnce(q.data, (d) => {
+    setType(d.type);
+    setCount(String(d.count));
+  });
 
   const save = useAdminAction(() => putVSetting({ type, count: Number(count) || 0 }), {
     ok: t('v_setting_ok', '设置成功！'),

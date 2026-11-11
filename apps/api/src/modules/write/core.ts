@@ -380,7 +380,7 @@ export async function createThreadCore(
     throw e;
   }
 
-  await patchRuntime(deps.cache, { threads: 1, todaythreads: 1 });
+  await patchRuntime(deps, { threads: 1, todaythreads: 1 });
   await deps.cache.del('forumlist');
   await associateAttachments({ db: deps.db, env: deps.env, uid: viewer.uid, tid, pid, isfirst: true, aids: draft.attachAids });
   await emit(core, 'thread:created', { tid, fid, uid: viewer.uid });
@@ -515,7 +515,7 @@ export async function createReplyCore(
   }
   await deps.db.batch(replyStmts);
 
-  await patchRuntime(deps.cache, { posts: 1, todayposts: 1 });
+  await patchRuntime(deps, { posts: 1, todayposts: 1 });
   await deps.cache.del('forumlist');
   await deps.cache.del(`user:${viewer.uid}`);
   await associateAttachments({ db: deps.db, env: deps.env, uid: viewer.uid, tid, pid, isfirst: false, aids: draft.attachAids });

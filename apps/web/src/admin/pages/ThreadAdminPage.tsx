@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
 import { getAdminThread, getAdminThreads, modThreads, updateAdminThread } from '../api';
-import type { AdminThreadDetail, AdminThreadRow } from '../types';
+import type { AdminThreadRow } from '../types';
 import { useAdminT } from '../t';
 import { useBatchAction } from '../use-action';
 import { useAuth } from '../../store/auth';
@@ -35,6 +35,7 @@ import {
   cardBodyCls,
   cardCls,
   cx,
+  useHydrateOnce,
 } from '../ui';
 import { Avatar } from '../../components/Avatar';
 import { Icon } from '../../components/icons';
@@ -154,10 +155,12 @@ export function ThreadAdminPage() {
     queryFn: () => getAdminThread(editTid as number),
     enabled: editTid !== null,
   });
-  useEffect(() => {
-    const d: AdminThreadDetail | undefined = detail.data;
-    if (d) setEf({ subject: d.subject, message: d.message, doctype: d.doctype, fid: d.fid });
-  }, [detail.data]);
+  // 切换编辑对象（editTid）时允许重新灌入一次；同一对象的后台重取不得覆盖未保存编辑
+  useHydrateOnce(
+    detail.data,
+    (d) => setEf({ subject: d.subject, message: d.message, doctype: d.doctype, fid: d.fid }),
+    editTid,
+  );
 
   const saveEdit = async () => {
     if (editTid === null) return;

@@ -40,12 +40,23 @@ export interface SqlRule {
   throws?: string;
 }
 
+/**
+ * 全局基础设施兜底规则（放在调用方规则之后，可被显式规则覆盖）：
+ * bbs_runtime 的 UPSERT/读取由 modules/shared 的 patchRuntime/loadRuntime 在几乎所有写路径触发，
+ * 逐测试补规则既冗长又易漏；这里只兜底这一张表，其余 SQL 仍未匹配即抛错（防漂移机制不变）。
+ */
+const INFRA_RULES: SqlRule[] = [
+  { test: /INSERT INTO bbs_runtime/, rows: [], changes: 1 },
+  { test: /SELECT k,v FROM bbs_runtime/, rows: [] },
+];
+
 /** 按 SQL 模式分发的测试替身（路由集成测试用；未匹配的 SQL 直接抛错防漂移） */
 export function fakeD1Sql(rules: SqlRule[]) {
   const calls: { sql: string; params: readonly unknown[] }[] = [];
+  const allRules = [...rules, ...INFRA_RULES];
   function resolve(sql: string, params: readonly unknown[]): SqlRule {
     calls.push({ sql, params });
-    const rule = rules.find((r) => r.test.test(sql));
+    const rule = allRules.find((r) => r.test.test(sql));
     if (!rule) throw new Error('fakeD1Sql unmatched SQL: ' + sql.replace(/\s+/g, ' '));
     return rule;
   }

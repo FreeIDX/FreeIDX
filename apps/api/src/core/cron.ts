@@ -17,6 +17,7 @@ import { demoteExpiredVip } from './order';
 import { liftExpiredBans } from './ban';
 import { seoRebuildRenamed } from '../modules/seo/generate';
 import { attachObjectKeys } from '../modules/attach/core';
+import { setRuntime } from '../modules/shared';
 
 export const ONLINE_HOLD_TIME_DEFAULT = 300;
 const DAY = 86400;
@@ -66,7 +67,7 @@ async function onlineHoldTime(db: D1b): Promise<number> {
 }
 
 export async function cronFiveMin(deps: CronDeps): Promise<CronFiveMinResult> {
-  const { db, cache, now } = deps;
+  const { db, now } = deps;
   const hold = await onlineHoldTime(db);
   const sessExpiry = now - hold;
   // sess_gc：本 schema 无 session_data 表（§D.8），仅清 session
@@ -74,8 +75,8 @@ export async function cronFiveMin(deps: CronDeps): Promise<CronFiveMinResult> {
   // 在线数刷新
   const cnt = await db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session').first<{ c: number }>();
   const onlines = Math.max(1, Number(cnt?.c ?? 0));
-  const runtime = (await cache.get<Record<string, number>>('runtime')) ?? {};
-  await cache.set('runtime', { ...runtime, onlines });
+  // 只覆盖 onlines 键：原实现先读整对象再写回，会把并发发帖刚累加的 posts/threads 抹掉
+  await setRuntime(deps, { onlines });
   return { sessExpiry, onlines };
 }
 
@@ -147,13 +148,13 @@ export async function cronDaily(deps: CronDeps): Promise<CronDailyResult> {
   // today* 清零（缓存 + forum 表，单语句批刷）；runtime 一并写回校准后的全站数
   // （校准失败时保留 runtime 现值，仅清零 today*）
   try {
-    const runtime = (await cache.get<Record<string, number>>('runtime')) ?? {};
-    const next: Record<string, number> = { ...runtime, todayposts: 0, todaythreads: 0, todayusers: 0 };
+    // 只写本次真正需要改的键（today* 清零 + 校准值），绝不整对象覆盖并发增量
+    const next: Record<string, number> = { todayposts: 0, todaythreads: 0, todayusers: 0 };
     if (calibrated) {
       next.threads = calibrated.threads;
       next.posts = calibrated.posts;
     }
-    await cache.set('runtime', next);
+    await setRuntime({ db, cache }, next);
     await db.prepare('UPDATE bbs_forum SET todayposts = 0, todaythreads = 0').run();
     await cache.del('forumlist');
     res.forumReset = true;

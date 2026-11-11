@@ -69,7 +69,7 @@ export async function purgeThread(
       for (const gc of ups) await rt.bus.emit('user:group-changed', gc);
     }
   }
-  await patchRuntime(cache, { threads: -1 });
+  await patchRuntime({ db, cache }, { threads: -1 });
   await cache.del('forumlist');
   await scheduleSeo({ db, cache }, c, tid, 'del');
   purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
@@ -129,7 +129,7 @@ export function checkRoutes(): Hono<ReadEnv> {
           // 积分回扣条目与附件 key 须在删除语句执行前读取
           const attachKeys = await attachKeysByPid(db, id);
           await db.batch(purge.stmts);
-          await patchRuntime(cache, { posts: -1 });
+          await patchRuntime({ db, cache }, { posts: -1 });
           await cache.del(`user:${purge.uid}`);
           // 与 write 真删同口径：回帖真删要回扣作者已发放的 post_* 积分并按新经验重算等级组
           await revokeForPostDelete({ db, cache }, [{ uid: purge.uid, isfirst: 0, pid: id }]);
@@ -187,8 +187,8 @@ export function checkRoutes(): Hono<ReadEnv> {
           await db.batch(stmts);
           await cache.del(`user:${id}`);
           await cache.del('forumlist');
-          if (tids.length) await patchRuntime(cache, { threads: -tids.length });
-          await patchRuntime(cache, { users: -1 });
+          if (tids.length) await patchRuntime({ db, cache }, { threads: -tids.length });
+          await patchRuntime({ db, cache }, { users: -1 });
           for (const tid of tids) await scheduleSeo({ db, cache }, c, tid, 'del');
           const ex = await getExecCtx(c);
           purgeR2Objects(c.env, ex, attachKeys);

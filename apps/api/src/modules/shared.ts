@@ -1,11 +1,11 @@
 /**
- * 模块间共享工具：分页/排序/关键词高亮等纯函数 + runtime 计数与执行上下文读取。
+ * 模块间共享工具：分页/排序/关键词高亮等纯函数 + runtime 计数（bbs_runtime 表）与执行上下文读取。
  * 后两者原先在 mod/check/write/admin 四处各有一份完全相同的实现，统一收敛到此（唯一事实源）。
  */
 import type { Context } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { Code } from '@freeidx/shared';
-import type { D1b } from '../core/db';
+import type { D1b, Stmt } from '../core/db';
 import type { Cache } from '../core/cache';
 import type { Env } from '../types/env';
 import { AppError } from '../middleware/envelope';
@@ -75,21 +75,84 @@ export async function getExecCtx(c: Context<ReadEnv>): Promise<{ waitUntil?: (pr
   }
 }
 
-/** 站点级 runtime 计数键（§7：无 bbs_runtime 表，统计走缓存键 'runtime'）——首写补齐 0 初值 */
+/** 站点级 runtime 计数键（0031 起落 bbs_runtime 表，缓存只作读加速）——首写补齐 0 初值 */
 const RUNTIME_ZERO = { threads: 0, todaythreads: 0, posts: 0, todayposts: 0 } as const;
 
 /** runtime 计数键（含由 cron/删用户维护的 users/todayusers/onlines） */
 export type RuntimePatch = Partial<Record<keyof typeof RUNTIME_ZERO | 'users' | 'todayusers' | 'onlines', number>>;
 
+export interface RuntimeDeps {
+  db: D1b;
+  cache: Cache;
+}
+
 /**
- * runtime 计数增量写（全仓唯一实现）：读穿缓存 → 按 key 累加并夹到非负 → 写回。
- * 只传增量（如 { threads: -1 }），绝对赋值（cron 的 onlines/today* 清零）仍由调用方自行 set。
+ * runtime 读数：缓存优先，miss 回表 bbs_runtime 并回填。
+ * 表是权威源（缓存丢了也不会把全站计数读成 0）。
  */
-export async function patchRuntime(cache: Cache, patch: RuntimePatch): Promise<void> {
-  const cur = (await cache.get<Record<string, number>>('runtime')) ?? {};
-  const next: Record<string, number> = { ...RUNTIME_ZERO, ...cur };
-  for (const [k, d] of Object.entries(patch)) next[k] = Math.max(0, (next[k] ?? 0) + (d ?? 0));
-  await cache.set('runtime', next);
+export async function loadRuntime(deps: RuntimeDeps): Promise<Record<string, number>> {
+  const hit = await deps.cache.get<Record<string, number>>('runtime');
+  if (hit) return { ...RUNTIME_ZERO, ...hit };
+  const r = await deps.db.prepare<{ k: string; v: number }>('SELECT k,v FROM bbs_runtime').all();
+  const out: Record<string, number> = { ...RUNTIME_ZERO };
+  for (const row of r.results ?? []) out[String(row.k)] = Math.max(0, Number(row.v) || 0);
+  await deps.cache.set('runtime', out);
+  return out;
+}
+
+/**
+ * runtime 计数增量写（全仓唯一实现）：单条 SQL UPSERT 原子自增，不再「读缓存→改→整对象写回」。
+ * 后者在并发发帖时各自读到旧值再写回 +1，N 个并发只增加 1；cron 整对象覆盖还会抹掉并发增量。
+ * 只传增量（如 { threads: -1 }）；绝对赋值走 setRuntime。
+ */
+export async function patchRuntime(deps: RuntimeDeps, patch: RuntimePatch): Promise<void> {
+  const ups: [string, number][] = [];
+  const downs: [string, number][] = [];
+  for (const [k, raw] of Object.entries(patch)) {
+    const d = Math.trunc(Number(raw) || 0);
+    if (!d) continue;
+    if (d > 0) ups.push([k, d]);
+    else downs.push([k, -d]);
+  }
+  const stmts: Stmt[] = [];
+  // 正增量合并成一条多值 UPSERT（发帖一次 = 1 条语句，守住免费层 D1 查询预算）
+  if (ups.length) {
+    const values = ups.map(() => '(?,?)').join(',');
+    const params = ups.flatMap(([k, d]) => [k, d]);
+    stmts.push(
+      deps.db
+        .prepare(`INSERT INTO bbs_runtime (k,v) VALUES ${values} ON CONFLICT(k) DO UPDATE SET v = bbs_runtime.v + excluded.v`)
+        .bind(...params) as unknown as Stmt,
+    );
+  }
+  // 负增量逐条（每行减量不同，且插入初值必须夹到 0）
+  for (const [k, d] of downs) {
+    stmts.push(
+      deps.db
+        .prepare('INSERT INTO bbs_runtime (k,v) VALUES (?,0) ON CONFLICT(k) DO UPDATE SET v = MAX(0, bbs_runtime.v - ?)')
+        .bind(k, d) as unknown as Stmt,
+    );
+  }
+  if (!stmts.length) return;
+  await deps.db.batch(stmts);
+  // L2 与当前 isolate 的 L0 一并失效；其它 isolate 的 L0 最长 10s 陈旧（与原实现一致）
+  await deps.cache.del('runtime');
+}
+
+/** runtime 绝对值写（cron 的 onlines / today* 清零、计数校准）——只覆盖传入的键，不整对象覆盖 */
+export async function setRuntime(deps: RuntimeDeps, values: Record<string, number>): Promise<void> {
+  const stmts: Stmt[] = [];
+  for (const [k, raw] of Object.entries(values)) {
+    const v = Math.max(0, Math.trunc(Number(raw) || 0));
+    stmts.push(
+      deps.db
+        .prepare('INSERT INTO bbs_runtime (k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v = excluded.v')
+        .bind(k, v) as unknown as Stmt,
+    );
+  }
+  if (!stmts.length) return;
+  await deps.db.batch(stmts);
+  await deps.cache.del('runtime');
 }
 
 export function intParam(v: string | undefined, dflt = 0): number {

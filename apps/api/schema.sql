@@ -11,9 +11,9 @@
 --   pnpm --filter @freeidx/api db:apply && pnpm --filter @freeidx/api db:schema:dump
 -- 并把 migrations/ 与 schema.sql 一起提交。
 --
--- 对象统计：35 表 / 78 索引
+-- 对象统计：36 表 / 78 索引
 
--- ===== 表（35）=====
+-- ===== 表（36）=====
 CREATE TABLE bbs_ad_slot (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   position TEXT NOT NULL DEFAULT '',
@@ -196,7 +196,6 @@ CREATE TABLE bbs_mcp_audit (
   ip_hash TEXT NOT NULL DEFAULT '',
   create_date INTEGER NOT NULL DEFAULT 0
 );
-DELETE FROM sqlite_sequence;
 
 CREATE TABLE bbs_mcp_token (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,6 +314,12 @@ CREATE TABLE bbs_queue (
   expiry INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (queueid, v)
 );
+
+CREATE TABLE bbs_runtime (
+  k TEXT PRIMARY KEY,
+  v INTEGER NOT NULL DEFAULT 0
+);
+DELETE FROM sqlite_sequence;
 
 CREATE TABLE bbs_session (
   sid TEXT PRIMARY KEY,

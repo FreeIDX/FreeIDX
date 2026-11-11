@@ -84,6 +84,12 @@ function unwrap<T>(body: ApiEnvelope & { data?: T }): T {
 
 /** 读取 JSON 信封：Worker/反代返回 HTML 5xx 时不能直接 res.json()（SyntaxError 会绕过会话失效兜底） */
 async function envelopeOf(res: Response): Promise<ApiEnvelope & { data?: unknown }> {
+  // HTTP 401 兜底：反代/网关返回的 401 未必带业务信封（code 字段），只认 code 会让界面
+  // 继续显示「已登录」直到用户手动刷新。这里统一触发会话失效通知。
+  if (res.status === 401) {
+    sessionExpiredNotify?.();
+    throw new ApiError(Code.NOT_LOGIN, res.statusText || 'HTTP 401');
+  }
   const ct = res.headers.get('content-type') ?? '';
   if (!ct.includes('application/json')) {
     throw new ApiError(res.status >= 500 ? Code.SYSTEM_ERROR : res.status, res.statusText || `HTTP ${res.status}`);

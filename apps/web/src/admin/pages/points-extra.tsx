@@ -8,7 +8,7 @@
  *  - RankCard      三币排行（GET /api/admin/points/rank）
  * 卡片挂在 PointsPage 三个既有 Tab 下（设置/用户积分/流水），不新增路由。
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import {
@@ -28,7 +28,7 @@ import { useAdminT } from '../t';
 import { uiLocale } from '../../lib/api';
 import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
-import { Alert, Badge, Button, Card, ErrorState, Field, Input, Select, Table, AdminPagination } from '../ui';
+import { Alert, Badge, Button, Card, ErrorState, Field, Input, Select, Table, AdminPagination, useHydrateOnce } from '../ui';
 
 const asInt = (v: string): number | null => (/^-?\d+$/.test(v.trim()) ? Number(v.trim()) : null);
 const fmtDate = (ts: number) => (ts > 0 ? new Date(ts * 1000).toLocaleString(uiLocale(), { hour12: false }) : '—');
@@ -55,13 +55,12 @@ export function RulesCard() {
   const q = useQuery({ queryKey: ['point-rules'], queryFn: getPointRules });
   const [vals, setVals] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    if (!q.data) return;
+  useHydrateOnce(q.data, (d) => {
     const next: Record<string, string> = {};
-    for (const row of RULE_ROWS) for (const col of RULE_COLS) next[`${row.k}_${col.k}`] = String(Number(q.data[`${row.k}_${col.k}`] ?? 0));
-    for (const k of ['limit', 'min', 'exchange_n', 'exchange_c', 'convert_exchange']) next[k] = String(Number(q.data[k] ?? 0));
+    for (const row of RULE_ROWS) for (const col of RULE_COLS) next[`${row.k}_${col.k}`] = String(Number(d[`${row.k}_${col.k}`] ?? 0));
+    for (const k of ['limit', 'min', 'exchange_n', 'exchange_c', 'convert_exchange']) next[k] = String(Number(d[k] ?? 0));
     setVals(next);
-  }, [q.data]);
+  });
 
   const save = useAdminAction(
     () => {
@@ -142,10 +141,9 @@ export function SellGroupsCard() {
   const q = useQuery({ queryKey: ['point-sell-groups'], queryFn: getPointSellGroups });
   const [checked, setChecked] = useState<number[]>([]);
 
-  useEffect(() => {
-    if (!q.data) return;
-    setChecked(q.data.list.filter((g) => Number(g.allowsell) === 1).map((g) => g.gid));
-  }, [q.data]);
+  useHydrateOnce(q.data, (d) => {
+    setChecked(d.list.filter((g) => Number(g.allowsell) === 1).map((g) => g.gid));
+  });
 
   const save = useAdminAction(() => putPointSellGroups(checked), {
     ok: t('point_sell_groups_saved_tip', '已保存，前台收费发帖权限即时生效'),
@@ -197,12 +195,11 @@ export function BalanceCard() {
     enabled: lookup !== '',
   });
 
-  useEffect(() => {
-    if (!q.data) return;
-    setExp(String(q.data.exp));
-    setGolds(String(q.data.golds));
-    setRmbs(String(q.data.rmbs));
-  }, [q.data]);
+  useHydrateOnce(q.data, (d) => {
+    setExp(String(d.exp));
+    setGolds(String(d.golds));
+    setRmbs(String(d.rmbs));
+  });
 
   const save = useAdminAction(() => putPointBalance({ username: lookup, exp: Number(exp) || 0, golds: Number(golds) || 0, rmbs: Number(rmbs) || 0 }), {
     ok: t('point_balance_saved_tip', '余额已按绝对值覆盖（经验差额会记一条「管理员调整」流水）'),

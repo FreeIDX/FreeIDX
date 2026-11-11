@@ -143,7 +143,7 @@ describe('用户管理（T3-6）', () => {
     expect(calls.some((c) => /SELECT aid,filename FROM bbs_attach WHERE uid = \? OR tid IN/.test(c.sql))).toBe(true);
     // 自定义头像对象一并清理（avatar>0 → avatar/{3位}/{uid}.png 加入 R2 删除清单）
     expect(calls.some((c) => /SELECT avatar FROM bbs_user/.test(c.sql))).toBe(true);
-    // runtime.users 无校准兜底 → 删用户即时回退（写 runtime 缓存）
-    expect(calls.some((c) => /REPLACE INTO bbs_cache/.test(c.sql) && JSON.stringify(c.params).includes('runtime'))).toBe(true);
+    // runtime.users 无校准兜底 → 删用户即时回退（原子写 bbs_runtime）
+    expect(calls.some((c) => /INSERT INTO bbs_runtime/.test(c.sql) && c.params[0] === 'users')).toBe(true);
   });
 });

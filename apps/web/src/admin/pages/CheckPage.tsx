@@ -6,7 +6,7 @@
  *  - 设置：一般设置（user_check/recycle）+ 用户组矩阵（发帖/回帖/编辑审核 + 查看回收站）+ 板块矩阵（发帖/回帖/编辑审核），
  *    服务端保存为「先全清后置选中」；广告推广卡不做。
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLocation } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkAudit, fmtDate, recycleThread } from '../../lib/api';
@@ -37,6 +37,7 @@ import {
   Select,
   TabBar,
   Table,
+  useHydrateOnce,
   usePage,
 } from '../ui';
 
@@ -344,13 +345,12 @@ function SettingTab() {
   const [gMatrix, setGMatrix] = useState<Record<number, Record<string, number>>>({});
   const [fMatrix, setFMatrix] = useState<Record<number, Record<string, number>>>({});
 
-  useEffect(() => {
-    if (!q.data) return;
-    setUserCheck(q.data.user_check);
-    setRecycle(q.data.recycle);
+  useHydrateOnce(q.data, (d) => {
+    setUserCheck(d.user_check);
+    setRecycle(d.recycle);
     setGMatrix(
       Object.fromEntries(
-        q.data.groups.map((g) => [
+        d.groups.map((g) => [
           g.gid,
           { thread_check: g.thread_check, post_check: g.post_check, see_check: g.see_check, edit_check: g.edit_check },
         ]),
@@ -358,10 +358,10 @@ function SettingTab() {
     );
     setFMatrix(
       Object.fromEntries(
-        q.data.forums.map((f) => [f.fid, { thread_check: f.thread_check, post_check: f.post_check, edit_check: f.edit_check }]),
+        d.forums.map((f) => [f.fid, { thread_check: f.thread_check, post_check: f.post_check, edit_check: f.edit_check }]),
       ),
     );
-  }, [q.data]);
+  });
 
   const onGroup = (gid: number, key: string, checked: boolean) =>
     setGMatrix((s) => ({ ...s, [gid]: { ...s[gid], [key]: checked ? 1 : 0 } }));

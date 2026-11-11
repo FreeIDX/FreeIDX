@@ -145,7 +145,7 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     expect(sqls).toMatch(/todaythreads = todaythreads \+ 1/);
     // 28 = 原 25 + 3（forumlist 移出 KV 走 L2：装载 1 SELECT + 回填 1 REPLACE + 失效 1 DELETE）
     // 代价是 3 条 D1 查询（免费层 50 条/次，仍远未触顶），换来的是 KV 1,000 写/天不再成为发帖天花板
-    expect(r.calls.length).toBeLessThanOrEqual(29);
+    expect(r.calls.length).toBeLessThanOrEqual(30);
   });
 
   it('POST 主题：版块绑定语言（0024）→ 忽略用户选择与自动检测，强制落该语言', async () => {
@@ -338,7 +338,7 @@ describe('内容写接口集成（T2-6 DoD）', () => {
     const fmt = String(ins?.params[7] ?? '');
     expect(fmt).not.toContain('<script>'); // 写侧定稿已净化
     expect(fmt).toContain('hi');
-    expect(r.calls.length).toBeLessThanOrEqual(27); // 原 25 + forumlist 走 L2 的 1 SELECT/1 REPLACE/1 DELETE
+    expect(r.calls.length).toBeLessThanOrEqual(28); // 原 25 + forumlist L2 读 + runtime 原子 UPSERT 各 1
   });
 });
 

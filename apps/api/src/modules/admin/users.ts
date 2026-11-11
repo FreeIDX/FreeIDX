@@ -310,7 +310,7 @@ async function deleteUserCascade(db: D1b, cache: Cache, uid: number, c: Ctx): Pr
   await db.batch(stmts);
   purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
   // runtime.users 无校准兜底（calibrate 不改 users）→ 删用户即时回退，避免永久虚高
-  await patchRuntime(cache, { users: -1, threads: -tids.length });
+  await patchRuntime({ db, cache }, { users: -1, threads: -tids.length });
   await cache.del(`user:${uid}`);
   await cache.del('forumlist');
 }

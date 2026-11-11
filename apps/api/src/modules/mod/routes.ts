@@ -302,7 +302,7 @@ export function modRoutes(): Hono<ReadEnv> {
     if (touchedForumlist) await cache.del('forumlist');
 
 
-    if (purgedTids.length) await patchRuntime(cache, { threads: -purgedTids.length });
+    if (purgedTids.length) await patchRuntime({ db, cache }, { threads: -purgedTids.length });
     if (seoTids.length) await invalidateSeo({ db, cache }, c, seoTids);
 
     const rt = await getExtensions(cache, db, undefined, { preloadConfigs: false });
@@ -359,8 +359,8 @@ export function modRoutes(): Hono<ReadEnv> {
     await cache.del(`user:${uid}`);
     await cache.del('forumlist');
 
-    if (tids.length) await patchRuntime(cache, { threads: -tids.length });
-    await patchRuntime(cache, { users: -1 });
+    if (tids.length) await patchRuntime({ db, cache }, { threads: -tids.length });
+    await patchRuntime({ db, cache }, { users: -1 });
     await invalidateSeo({ db, cache }, c, tids);
 
     // R2 对象尽力删除（失败不影响一致性）：附件（本人上传 + 本人主题内他人上传）+ 头像（键可由 uid 推导）

@@ -6,7 +6,7 @@
  *  - 积分流水：全站积分账本（发帖/回帖/每日首帖/附件买卖/会员订单/管理员调整），可按 uid、reason 过滤。
  * 表头列名用中文字面量（新增页约定，与「用户列表」等页的处理一致）。
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { adjustPoint, getGroups, getPointLogs, getPointUsers, getRegisterCredits, getSetting, putRegisterCredits, putSetting } from '../api';
@@ -16,7 +16,7 @@ import { useAdminT } from '../t';
 import { useGroupName } from '../../lib/i18n';
 import { useAdminAction } from '../use-action';
 import { POINT_TABS } from '../tabs';
-import { PageTitle, TabBar, Card, Table, Badge, Button, Input, Select, Field, Alert, ErrorState } from '../ui';
+import { PageTitle, TabBar, Card, Table, Badge, Button, Input, Select, Field, Alert, ErrorState, useHydrateOnce } from '../ui';
 import { BalanceCard, PaylogCard, RankCard, RulesCard, SellGroupsCard, ToolsCard } from './points-extra';
 
 const PAGE_SIZE = 20;
@@ -71,13 +71,12 @@ function SettingTab() {
   const [reply, setReply] = useState('');
   const [daily, setDaily] = useState('');
 
-  useEffect(() => {
-    if (!q.data) return;
-    const s = q.data as Record<string, unknown>;
+  useHydrateOnce(q.data, (d) => {
+    const s = d as Record<string, unknown>;
     setThread(String(Number(s.credit_thread ?? 0)));
     setReply(String(Number(s.credit_reply ?? 0)));
     setDaily(String(Number(s.credit_daily_first ?? 0)));
-  }, [q.data]);
+  });
 
   const save = useAdminAction(
     () =>
@@ -141,12 +140,11 @@ function RegisterCreditsCard() {
   const [golds, setGolds] = useState('');
   const [rmbs, setRmbs] = useState('');
 
-  useEffect(() => {
-    if (!q.data) return;
-    setCredits(String(q.data.credits));
-    setGolds(String(q.data.golds));
-    setRmbs(String(q.data.rmbs));
-  }, [q.data]);
+  useHydrateOnce(q.data, (d) => {
+    setCredits(String(d.credits));
+    setGolds(String(d.golds));
+    setRmbs(String(d.rmbs));
+  });
 
   const save = useAdminAction(() => putRegisterCredits({ credits: Number(credits), golds: Number(golds), rmbs: Number(rmbs) }), {
     ok: t('point_register_saved_tip', '已保存，新用户注册即按此发放'),

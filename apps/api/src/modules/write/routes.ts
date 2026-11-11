@@ -6,7 +6,7 @@
  *  DELETE /api/posts/:pid             删除（isfirst→主题级联删；回帖 lastpid 回退）
  * 计数回写在 DB.batch() 事务内完成；读路径零 sanitize——定稿只在写侧发生。
  * 事件发射点（契约②）：post:created / post:updated / post:deleted / thread:created / thread:deleted / user:group-changed。
- * runtime 计数走缓存键 'runtime'（无 bbs_runtime 表）；mypost 倒排由本模块真实维护。
+ * runtime 计数走 bbs_runtime 表（原子 UPSERT，见 modules/shared.ts）；mypost 倒排由本模块真实维护。
  * 人机验证：发帖/回帖在参数解析后立刻校验 Turnstile token（附录 B 覆盖 登录/注册/发帖/回帖/找回密码/发码），早于任何 D1 读写。
  */
 import { Hono, type Context } from 'hono';
@@ -319,7 +319,7 @@ async function deletePost(c: Ctx): Promise<Response> {
     for (const up of await upgradeGroupsByCredits(core, revokeAffectedUids(revokeEntries), ctx.grouplist)) {
       await emit(core, 'user:group-changed', { uid: up.uid, oldGid: up.oldGid, newGid: up.newGid });
     }
-    await patchRuntime(core.cache, { threads: -1 });
+    await patchRuntime(core, { threads: -1 });
     await core.cache.del('forumlist');
     await emit(core, 'post:deleted', { pid, tid, uid: postUid });
     await emit(core, 'thread:deleted', { tid, fid });
@@ -332,7 +332,7 @@ async function deletePost(c: Ctx): Promise<Response> {
   if (purge) {
     const attachKeys = await attachKeysByPid(core.db, pid);
     await core.db.batch(purge.stmts);
-    await patchRuntime(core.cache, { posts: -1 });
+    await patchRuntime(core, { posts: -1 });
     purgeR2Objects(c.env, await getExecCtx(c), attachKeys);
     // 积分回扣（非首帖扣作者 post_*）→ 按新经验重算等级组
     await revokeForPostDelete(core, [{ uid: postUid, isfirst: 0, pid }]);

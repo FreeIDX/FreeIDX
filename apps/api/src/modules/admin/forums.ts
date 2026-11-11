@@ -392,7 +392,7 @@ export function adminForumRoutes(): Hono<ReadEnv> {
 
     await cache.del('forumlist');
     if (tids.length) {
-      await patchRuntime(cache, { threads: -tids.length, posts: -postCount });
+      await patchRuntime({ db, cache }, { threads: -tids.length, posts: -postCount });
       await invalidateThreadSeo({ db, cache }, c, tids);
     }
     return ok(c, t('common.deleted'), { data: { fid, threads: tids.length } });

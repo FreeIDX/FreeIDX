@@ -35,8 +35,9 @@ describe('cron 每 5 分钟档（§11.1：sess_gc + 在线数刷新）', () => {
     expect(r.sessExpiry).toBe(NOW - 120);
     expect(r.onlines).toBe(4);
     expect(d.calls.find((c) => /DELETE FROM bbs_session/.test(c.sql))?.params[0]).toBe(NOW - 120);
-    // runtime 刷新写入缓存（L2 bbs_cache）
-    expect(d.calls.some((c) => /REPLACE INTO bbs_cache/.test(c.sql))).toBe(true);
+    // runtime 刷新落 bbs_runtime 表（只覆盖 onlines 键）
+    const rt = d.calls.find((c) => /INSERT INTO bbs_runtime/.test(c.sql));
+    expect(rt?.params).toEqual(['onlines', 4]);
   });
 
   it('缺省 online_hold_time=300；零 session → onlines 下限 1', async () => {
@@ -90,10 +91,11 @@ describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC
       expect(d.calls.some((c) => re.test(c.sql))).toBe(true);
     }
     expect(d.calls.some((c) => /UPDATE bbs_forum SET todayposts = 0/.test(c.sql))).toBe(true);
-    // 校准后的全站数与 today 清零一起写回 runtime（L2 bbs_cache）
-    const runtimeWrite = d.calls.find((c) => /REPLACE INTO bbs_cache/.test(c.sql));
-    expect(runtimeWrite).toBeTruthy();
-    expect(String(runtimeWrite?.params[1] ?? runtimeWrite?.params.at(-1))).toContain('"threads":10');
+    // 校准后的全站数与 today 清零一起落 bbs_runtime（逐键 UPSERT，不做整对象覆盖）
+    const writes = d.calls.filter((c) => /INSERT INTO bbs_runtime/.test(c.sql));
+    expect(writes.some((c) => c.params[0] === 'threads' && c.params[1] === 10)).toBe(true);
+    expect(writes.some((c) => c.params[0] === 'posts' && c.params[1] === 25)).toBe(true);
+    expect(writes.some((c) => c.params[0] === 'todayposts' && c.params[1] === 0)).toBe(true);
     expect(d.calls.some((c) => /DELETE FROM bbs_queue WHERE expiry > 0/.test(c.sql))).toBe(true);
     // 临时附件 GC 已挪到每小时档（子请求预算约束），每日档不得再触碰 bbs_attach
     expect(d.calls.some((c) => /bbs_attach/.test(c.sql))).toBe(false);
@@ -138,9 +140,11 @@ describe('cron 每日凌晨档（§11.1：计数校准 + today 清零 + queue GC
     expect(d.calls.some((c) => /UPDATE bbs_forum SET todayposts = 0/.test(c.sql))).toBe(true);
     expect(d.calls.some((c) => /DELETE FROM bbs_queue/.test(c.sql))).toBe(true);
     expect(d.calls.some((c) => /DELETE FROM bbs_cache WHERE expiry > 0 AND expiry <= \?/.test(c.sql))).toBe(true);
-    // 校准失败 → runtime 保留现值（不把 0 写回全站数），仅清零 today*
-    const runtimeWrite = d.calls.find((c) => /REPLACE INTO bbs_cache/.test(c.sql));
-    expect(String(runtimeWrite?.params[1] ?? runtimeWrite?.params.at(-1))).not.toContain('"threads":10');
+    // 校准失败 → 不写 threads/posts（不把 0 覆盖全站数），仅清零 today*
+    const writes = d.calls.filter((c) => /INSERT INTO bbs_runtime/.test(c.sql));
+    expect(writes.some((c) => c.params[0] === 'threads')).toBe(false);
+    expect(writes.some((c) => c.params[0] === 'posts')).toBe(false);
+    expect(writes.some((c) => c.params[0] === 'todaythreads')).toBe(true);
   });
 });
 

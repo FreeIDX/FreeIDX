@@ -11,7 +11,7 @@
  * gid 是主键：改 gid 等于新建一个组，原组不会被删（服务端同此语义）。
  * 文案口径：尾注使用 `group_edit_tips`（“请谨慎编辑用户组……”），不与版块编辑页同串。
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { deleteGroup, getGroups, putGroups } from '../api';
@@ -21,7 +21,7 @@ import { useBatchAction } from '../use-action';
 import { useAuth } from '../../store/auth';
 import { USER_TABS } from '../tabs';
 import { toItem } from './group-perms';
-import { Alert, Card, ConfirmModal, ErrorState, InlineEditGrid, PageTitle, TabBar, type GridColumn } from '../ui';
+import { Alert, Card, ConfirmModal, ErrorState, InlineEditGrid, PageTitle, TabBar, useHydrateOnce, type GridColumn } from '../ui';
 
 /** 系统保留组的 gid 集合（不可删除/不可改 gid） */
 const SYSTEM_GIDS = [0, 1, 2, 3, 4, 5, 6, 7, 101];
@@ -56,9 +56,8 @@ export function GroupListPage() {
   const [confirming, setConfirming] = useState<GroupFullRow | null>(null);
   const batch = useBatchAction([['admin', 'groups'], ['admin', 'forums']]);
 
-  useEffect(() => {
-    if (q.data) setRows(q.data.groups);
-  }, [q.data]);
+  // 只灌一次：保存后 invalidate 重取的新引用不得覆盖正在编辑的表格
+  useHydrateOnce(q.data, (d) => setRows(d.groups));
 
   const save = async () => {
     if (await batch.run([() => putGroups(rows.map(toItem))], t('group_saved'))) await refresh();

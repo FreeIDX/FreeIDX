@@ -755,6 +755,33 @@ export function Toast({ text, tone = 'ok', onDone }: { text: string; tone?: 'ok'
   );
 }
 
+/**
+ * 表单初始值灌入（只灌一次）：
+ * 后台页面普遍用 `useEffect(() => { if (!q.data) return; setX(q.data.x) }, [q.data])` 回填，
+ * 而 q.data 的引用在任何 invalidate / 轮询 / 其它页面写共享 key 后都会变化 —— 未保存的草稿
+ * （含密码框、权限矩阵）会被静默清空。首次灌入后即锁定，后续重取不再覆盖用户编辑。
+ * 需要「重置为服务端值」时由页面显式重置本地状态。
+ */
+export function useHydrateOnce<T>(
+  data: T | null | undefined,
+  apply: (data: T) => void,
+  /** 切换编辑对象（如另一条记录的 id）时传新值，允许重新灌入一次 */
+  resetKey?: unknown,
+): void {
+  const appliedRef = useRef(false);
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  // 切换编辑对象时允许下一份数据重新灌入（不在渲染期改 ref，避免 StrictMode 下的副作用争议）
+  useEffect(() => {
+    appliedRef.current = false;
+  }, [resetKey]);
+  useEffect(() => {
+    if (!data || appliedRef.current) return;
+    appliedRef.current = true;
+    applyRef.current(data);
+  }, [data]);
+}
+
 /** 本地 toast 状态：与 useBatchAction 的 flash 并存，页面用 `<Toast {...toast.bind} />` */
 export function useToast() {
   const [toast, setToast] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null);
