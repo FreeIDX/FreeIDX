@@ -415,10 +415,14 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   );
 }
 
-/** 左侧版块导航「主页」版（首页/版块页共用）：置顶「主页」入口 + 版块直链，入口下方有分隔线 */
+/**
+ * 左侧版块导航（首页/版块页共用）：置顶「版块导航」入口（回首页）+ 版块直链，入口下方有分隔线。
+ * 入口标签用 `forum_nav`（版块导航）而不是 `home`：它在这个位置是整列版块链的入口标题，
+ * 与顶栏「首页」区分开，避免同一屏出现两个语义不同的「首页」。
+ */
 export function HomeSideNav() {
   const t = useT();
-  const items: SideNavItem[] = [{ k: 'home', label: t('home'), icon: 'nav_grid', to: '/' }];
+  const items: SideNavItem[] = [{ k: 'home', label: t('forum_nav'), icon: 'nav_grid', to: '/' }];
   return <SideNav items={items} ariaLabel={t('home_forum_nav')} />;
 }
 
