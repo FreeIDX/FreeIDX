@@ -68,15 +68,11 @@ export function ThreadSkeleton() {
           </Card>
         </div>
 
-        {/* 加载提示：浮在内容区正中，字号为常规口径的 3 倍（14px → 42px） */}
+        {/* 加载提示：浮在内容区正中，无底色无边框；字号较上一版减半（42px → 21px） */}
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <div
-            className="flex flex-col items-center gap-3 rounded-[10px] bg-card/85 px-8 py-6 text-lt-grey shadow-sm"
-            role="status"
-            aria-live="polite"
-          >
-            <Icon name="refresh" className="size-[2.625rem] animate-spin motion-reduce:animate-none" />
-            <span className="text-[2.625rem] leading-none">{t('loading')}</span>
+          <div className="flex flex-col items-center gap-2 text-lt-grey" role="status" aria-live="polite">
+            <Icon name="refresh" className="size-[21px] animate-spin motion-reduce:animate-none" />
+            <span className="text-[21px] leading-none">{t('loading')}</span>
           </div>
         </div>
       </div>
