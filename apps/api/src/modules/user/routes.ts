@@ -36,14 +36,17 @@ async function fetchReplies(
   ctx: AccessCtx,
   uid: number,
   beforePid: number | undefined,
+  opts: { includeUnapproved?: boolean } = {},
 ): Promise<ReplyRow[]> {
   const size = PageSize.USER_THREAD_LIST;
   const cur = cursorCond({ column: 'mp.pid', size, before: beforePid, desc: true });
+  // 公开主页只展示已过审回帖；「我的回帖」允许本人看到自己的待审/被拒内容（仍排除回收站）
+  const okCond = opts.includeUnapproved ? 'AND p.ok <> -2' : 'AND p.ok = 1';
   const r = await db
     .prepare<ReplyRow>(
       `SELECT p.pid,p.tid,p.uid,p.create_date,p.message_fmt,t.fid,t.top,t.subject
        FROM bbs_mypost mp JOIN bbs_post p ON p.pid = mp.pid JOIN bbs_thread t ON t.tid = mp.tid
-       WHERE mp.uid = ? ${cur.where} ${cur.order} LIMIT ?`,
+       WHERE mp.uid = ? ${okCond} ${cur.where} ${cur.order} LIMIT ?`,
     )
     .bind(uid, ...cur.params, size)
     .all();
@@ -164,7 +167,8 @@ export function userRoutes(): Hono<ReadEnv> {
     const cur = cursorCond({ column: 'tid', size, before: beforeTid, desc: true });
     const r = await db
       .prepare<Record<string, number | string>>(
-        `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE uid = ? ${cur.where} ${cur.order} LIMIT ?`,
+        // 公开主页只展示已过审主题：待审/被拒/回收站内容不得占用游标配额
+        `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE uid = ? AND ok = 1 ${cur.where} ${cur.order} LIMIT ?`,
       )
       .bind(uid, ...cur.params, size)
       .all();
@@ -209,7 +213,7 @@ export function userRoutes(): Hono<ReadEnv> {
     // 游标口径（before_tid + nextCursor）：不返回 totalPage——固定 1 会让前端页码组件误判总页数，
     // 与 /api/my/favorites 等游标端点保持一致（只给 list/size/nextCursor）。
     return ok(c, 'ok', {
-      data: { list, size, nextCursor: rows.at(-1)?.tid },
+      data: { list, size, nextCursor: list0.at(-1)?.tid },
     });
   });
 
@@ -237,7 +241,7 @@ export function userRoutes(): Hono<ReadEnv> {
     const beforePid = intParam(c.req.query('before_pid')) || undefined;
     const [forumlist, grouplist] = await Promise.all([loadForumlist(cache, db), loadGrouplist(cache, db)]);
     const ctx = makeAccessCtx(viewer, forumlist, grouplist);
-    const list = await fetchReplies(db, ctx, viewer.uid, beforePid);
+    const list = await fetchReplies(db, ctx, viewer.uid, beforePid, { includeUnapproved: true });
     return ok(c, 'ok', { data: { list, size: PageSize.USER_THREAD_LIST, nextCursor: list.at(-1)?.pid } });
   });
 

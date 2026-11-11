@@ -188,7 +188,19 @@ function readableFids(ctx: AccessCtx, forumlist: Record<number, { fid: number }>
 
 async function queryThreadPage(
   db: D1b,
-  opts: { fids: number[]; col: 'tid' | 'lastpid'; digest: boolean; before?: number; size: number; page?: number; tag?: string; lang?: string },
+  opts: {
+    fids: number[];
+    col: 'tid' | 'lastpid';
+    digest: boolean;
+    before?: number;
+    size: number;
+    page?: number;
+    tag?: string;
+    lang?: string;
+    /** 访问者 uid + 审核位：用于把 ok 可见性下推到 SQL，避免取满 size 条后再过滤导致分页空洞 */
+    viewerUid: number;
+    seeCheck: boolean;
+  },
 ): Promise<ThreadRow[]> {
   if (!opts.fids.length) return [];
   const ph = opts.fids.map(() => '?').join(',');
@@ -198,42 +210,64 @@ async function queryThreadPage(
   /* 内容语言筛选：等值命中（lang 为空串的存量帖不参与任何语言过滤，需先回填） */
   const langCond = opts.lang ? ' AND lang = ?' : '';
   const langParams = opts.lang ? [opts.lang] : [];
+  /*
+   * ok 可见性下推（与 canSeeUnapproved 同口径）：
+   *  - 审核位：可见待审/被拒（ok<>-2），回收站仍只在回收站入口展示；
+   *  - 普通访问者：仅 ok=1，外加作者本人可看到自己未过审/被拒的内容（uid=0 的游客不会命中）。
+   * 不下推时，待审/回收站行会占满 LIMIT 配额并在 JS 层被剔除，造成「本页条数不足、
+   * nextCursor 指向不可见行、下一页漏帖/重复」。
+   */
+  const okCond = opts.seeCheck ? ' AND ok <> -2' : ' AND (ok = 1 OR (uid = ? AND ok <> -2))';
+  const okParams = opts.seeCheck ? [] : [opts.viewerUid];
   // 编号分页器（?page=N）走浅层 OFFSET，与主题详情同一语义；游标 before_ 优先（无限滚动）。
   if (opts.before == null && (opts.page ?? 1) > 1) {
     const off = shallowOffset(opts.page!, opts.size);
     const sql =
-      `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE fid IN (${ph}) ` +
+      `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE fid IN (${ph})${okCond} ` +
       (opts.digest ? 'AND digest > 0 ' : '') +
       tagCond +
       langCond +
       ` ORDER BY ${opts.col} DESC ${off.sql}`;
-    const r = await db.prepare<ThreadRow>(sql).bind(...opts.fids, ...tagParams, ...langParams, ...off.params).all();
+    const r = await db
+      .prepare<ThreadRow>(sql)
+      .bind(...opts.fids, ...okParams, ...tagParams, ...langParams, ...off.params)
+      .all();
     return r.results;
   }
   const cur = cursorCond({ column: opts.col, size: opts.size, before: opts.before, desc: true });
   const sql =
-    `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE fid IN (${ph}) ${cur.where}` +
+    `SELECT ${THREAD_LIST_COLS} FROM ${T} WHERE fid IN (${ph})${okCond} ${cur.where}` +
     (opts.digest ? ' AND digest > 0' : '') +
     tagCond +
     langCond +
     ` ${cur.order} LIMIT ?`;
   const r = await db
     .prepare<ThreadRow>(sql)
-    .bind(...opts.fids, ...cur.params, ...tagParams, ...langParams, opts.size)
+    .bind(...opts.fids, ...okParams, ...cur.params, ...tagParams, ...langParams, opts.size)
     .all();
   return r.results;
 }
 
 /** 置顶合并（§D.2）：首页并全局置顶 top=3；版块页并版块置顶 top∈1..2；语言筛选时置顶帖同样受语言约束 */
-async function queryTopThreads(db: D1b, fid: number, readable: Set<number>, lang?: string): Promise<ThreadRow[]> {
+async function queryTopThreads(
+  db: D1b,
+  fid: number,
+  readable: Set<number>,
+  lang: string | undefined,
+  viewerUid: number,
+  seeCheck: boolean,
+): Promise<ThreadRow[]> {
   const cond = fid === 0 ? 'tt.top = 3' : 'tt.fid = ? AND tt.top BETWEEN 1 AND 2';
   const params: Array<number | string> = fid === 0 ? [] : [fid];
   const langCond = lang ? ' AND t.lang = ?' : '';
   if (lang) params.push(lang);
+  // 置顶同样受审核可见性约束（待审/回收站置顶不得出现在列表里）
+  const okCond = seeCheck ? ' AND t.ok <> -2' : ' AND (t.ok = 1 OR (t.uid = ? AND t.ok <> -2))';
+  if (!seeCheck) params.push(viewerUid);
   const r = await db
     .prepare<ThreadRow>(
       `SELECT ${THREAD_LIST_COLS_T} FROM bbs_thread_top tt JOIN ${T} t ON t.tid = tt.tid
-       WHERE ${cond}${langCond} ORDER BY tt.top DESC, t.tid DESC LIMIT 30`,
+       WHERE ${cond}${okCond}${langCond} ORDER BY tt.top DESC, t.tid DESC LIMIT 30`,
     )
     .bind(...params)
     .all();
@@ -254,6 +288,8 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
       loadSetting(cache, db),
     ]);
     const ctx = makeAccessCtx(viewer, forumlist, grouplist);
+    // 审核可见性需要在 SQL 之前确定（ok 条件下推，避免分页空洞）
+    const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
     const col =
       fid > 0
         ? orderCol(c.req.query('orderby'), forumlist[fid]?.orderby ?? 0)
@@ -270,11 +306,11 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
     if (fid > 0) {
       if (!forumlist[fid]) throw new AppError(Code.NOT_FOUND, t('common.forumNotFound'));
       if (!readable.includes(fid)) throw new AppError(Code.NO_PERMISSION, t('common.groupPermDenied'));
-      tasks.push(queryThreadPage(db, { fids: [fid], col, digest, before, size, page, tag, lang }));
+      tasks.push(queryThreadPage(db, { fids: [fid], col, digest, before, size, page, tag, lang, viewerUid: viewer.uid, seeCheck }));
     } else {
-      tasks.push(queryThreadPage(db, { fids: readable, col, digest, before, size, page, tag, lang }));
+      tasks.push(queryThreadPage(db, { fids: readable, col, digest, before, size, page, tag, lang, viewerUid: viewer.uid, seeCheck }));
     }
-    if (page === 1 && !digest) tasks.push(queryTopThreads(db, fid, new Set(readable), lang));
+    if (page === 1 && !digest) tasks.push(queryTopThreads(db, fid, new Set(readable), lang, viewer.uid, seeCheck));
     const results = await Promise.all(tasks);
     const normal = results[0] ?? [];
     const tops = results[1] ?? [];
@@ -282,11 +318,15 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
     const merged = [...tops, ...normal.filter((t) => !tops.some((x) => x.tid === t.tid))];
     // 作者 V 头衔 + 预设头像按页批量一次补查（随行下发，仅激活者带字段）
     const extras = await fetchUserExtrasMap(db, merged.map((t) => Number(t.uid)));
-    // 审核过滤（ok!=1 且非 see_check 组且非作者 → 剔除）
-    const seeCheck = hasSeeCheck(grouplist[viewer.gid]);
+    // 兜底二次过滤（SQL 已下推 ok 条件；这里防 forumlist/权限判定与 SQL 口径漂移）
+    const canSee = (t: ThreadRow) =>
+      canSeeUnapproved(Number(t.ok), { seeCheck, isAuthor: Number(t.uid) === viewer.uid });
     const list = threadListAccessFilter(ctx, merged)
-      .filter((t) => canSeeUnapproved(Number(t.ok), { seeCheck, isAuthor: Number(t.uid) === viewer.uid }))
+      .filter(canSee)
       .map((t) => attachAuthorExtras(toThreadItem(t), extras.get(Number(t.uid))));
+    // 游标必须取「本页最后一条可见的普通主题」：原实现取过滤前的 normal 末行，
+    // 若该行是待审/回收内容，下一页会以它为 before 而重复/跳过。
+    const normalVisible = threadListAccessFilter(ctx, normal).filter(canSee);
     const total =
       fid > 0 ? forumlist[fid]?.threads ?? 0 : readable.reduce((s, f) => s + (forumlist[f]?.threads ?? 0), 0);
     return ok(c, 'ok', {
@@ -295,7 +335,7 @@ async function threadListHandler(c: Context<ReadEnv>, fid: number) {
         page,
         size,
         totalPage: totalPageOf(total, size),
-        nextCursor: normal.at(-1)?.[col],
+        nextCursor: normalVisible.at(-1)?.[col] ?? undefined,
         // 游标列名（tid | lastpid，随 orderby/setting 变）：前端须据此拼 before_<cursorCol>，否则深翻失效
         cursorCol: col,
         ...(fid > 0 && forumlist[fid]
@@ -427,10 +467,13 @@ export function threadRoutes(): Hono<ReadEnv> {
     const match = conds.length ? `(${conds.join(' AND ')})` : '1=0';
     const langCond = lang ? ' AND lang = ?' : '';
     const langParams = lang ? [lang] : [];
-    const where = `WHERE ${match} AND fid IN (${readable.map(() => '?').join(',')})${langCond}`;
+    // ok 可见性下推（与列表同口径）：COUNT 与取数必须一致，否则 totalPage 与实际可翻页数不符
+    const okCond = seeCheck ? ` AND ${T}.ok <> -2` : ` AND (${T}.ok = 1 OR (${T}.uid = ? AND ${T}.ok <> -2))`;
+    const okParams = seeCheck ? [] : [viewer.uid];
+    const where = `WHERE ${match} AND fid IN (${readable.map(() => '?').join(',')})${okCond}${langCond}`;
     const cnt = await db
       .prepare<{ c: number }>(`SELECT COUNT(*) AS c FROM ${T} ${where}`)
-      .bind(...matchParams, ...readable, ...langParams)
+      .bind(...matchParams, ...okParams, ...readable, ...langParams)
       .first<{ c: number }>();
     const total = Number(cnt?.c ?? 0);
     const off = shallowOffset(page, size);
@@ -443,7 +486,7 @@ export function threadRoutes(): Hono<ReadEnv> {
       .prepare<ThreadRow & { snippet_raw?: string | null }>(
         `SELECT ${THREAD_LIST_COLS}${snippetSql} FROM ${T} ${where} ORDER BY tid DESC ${off.sql}`,
       )
-      .bind(...(snippetSql ? [termLikes[0]] : []), ...matchParams, ...readable, ...langParams, ...off.params)
+      .bind(...(snippetSql ? [termLikes[0]] : []), ...matchParams, ...okParams, ...readable, ...langParams, ...off.params)
       .all();
 
     // 作者 V 头衔 + 预设头像按页批量一次补查（随行下发，仅激活者带字段）
@@ -519,11 +562,15 @@ export function threadRoutes(): Hono<ReadEnv> {
     ]);
 
     const off = shallowOffset(page, size);
+    // ok 可见性下推：OFFSET 分页若先取后滤会错位漏楼层（本页少几条、下一页跳过被滤行）；
+    // 口径与 canSeeUnapproved 一致：审核员看非回收站，普通访问者看 ok=1 + 自己的未过审内容。
+    const postOkCond = seeCheck ? ' AND ok <> -2' : ' AND (ok = 1 OR (uid = ? AND ok <> -2))';
+    const postOkParams = seeCheck ? [] : [viewer.uid];
     const postsR = await db
-      .prepare<PostRow>(`SELECT ${POST_PAGE_COLS} FROM ${P} WHERE tid = ? ORDER BY pid ASC ${off.sql}`)
-      .bind(tid, ...off.params)
+      .prepare<PostRow>(`SELECT ${POST_PAGE_COLS} FROM ${P} WHERE tid = ?${postOkCond} ORDER BY pid ASC ${off.sql}`)
+      .bind(tid, ...postOkParams, ...off.params)
       .all();
-    // 回帖审核过滤（ok!=1 且非 see_check 组且非作者 → 剔除）
+    // 兜底二次过滤（防 SQL 与权限口径漂移）
     const posts = postsR.results.filter((p) =>
       canSeeUnapproved(Number(p.ok), { seeCheck, isAuthor: Number(p.uid) === viewer.uid }),
     );

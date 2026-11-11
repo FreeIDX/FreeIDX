@@ -118,6 +118,21 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(p2.calls.some((c) => /bbs_thread_top/.test(c.sql))).toBe(false); // 置顶仅首页并入
   });
 
+  it('列表 SQL 下推审核可见性；游标取本页最后一条可见主题', async () => {
+    // 最后一行 ok=0（待审）：游客不可见，游标必须回退到上一条可见行（T2.lastpid=2），
+    // 否则下一页以 1 为 before 会把 T2 之后的内容整段跳过/重复。
+    const rs = baseRules({ threads: [T2, { ...T1, ok: 0 }] });
+    const { env, calls } = envFor(rs);
+    const body = await json(await app.request('/api/threads?page=1', {}, env as never));
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { list: { tid: number }[]; nextCursor: number };
+    expect(d.list.map((x) => x.tid)).toEqual([2]);
+    expect(d.nextCursor).toBe(2);
+    const q = calls.find((c) => /FROM bbs_thread WHERE fid IN/.test(c.sql));
+    expect(q?.sql).toContain('ok = 1');
+    expect(q?.sql).toContain('ok <> -2');
+  });
+
   it('GET /api/threads/2：作者映射 + 引用块 + 游客权限位 + userip 不外泄', async () => {
     const { env, calls } = envFor(baseRules());
     const waited: Promise<unknown>[] = [];

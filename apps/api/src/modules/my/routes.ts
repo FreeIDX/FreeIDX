@@ -409,7 +409,7 @@ async function myJoinedThreadList(c: Ctx, table: 'bbs_favorite' | 'bbs_like', ri
   const r = await db
     .prepare<Record<string, unknown>>(
       `SELECT j.rowid AS ${ridKey}, ${THREAD_LIST_COLS_T} FROM ${table} j INNER JOIN bbs_thread t ON t.tid = j.tid
-       WHERE j.uid = ? ${cur.where} ${cur.order} LIMIT ?`,
+       WHERE j.uid = ? AND t.ok = 1 ${cur.where} ${cur.order} LIMIT ?`,
     )
     .bind(v.uid, ...cur.params, size)
     .all();

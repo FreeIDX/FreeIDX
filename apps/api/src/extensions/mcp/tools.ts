@@ -396,17 +396,22 @@ async function search(args: Record<string, unknown>, ctx: McpCallCtx): Promise<M
       params.push(lk);
     }
   }
-  const where = `WHERE (${conds.join(' AND ')}) AND fid IN (${fids.map(() => '?').join(',')})`;
+  // 审核可见性下推（与 Web 搜索同口径），避免待审/回收站行占用分页配额
+  const mod = await loadModeration(cache, db, ctx.principal.gid, ctx.principal.uid);
+  const okCond = mod.seeCheck
+    ? ' AND bbs_thread.ok <> -2'
+    : ' AND (bbs_thread.ok = 1 OR (bbs_thread.uid = ? AND bbs_thread.ok <> -2))';
+  const okParams = mod.seeCheck ? [] : [ctx.principal.uid];
+  const where = `WHERE (${conds.join(' AND ')}) AND fid IN (${fids.map(() => '?').join(',')})${okCond}`;
   const cnt = await db
     .prepare<{ c: number }>(`SELECT COUNT(*) AS c FROM bbs_thread ${where}`)
-    .bind(...params, ...fids)
+    .bind(...params, ...fids, ...okParams)
     .first<{ c: number }>();
   const r = await db
     .prepare<ThreadRow>(`SELECT ${THREAD_LIST_COLS} FROM bbs_thread ${where} ORDER BY tid DESC LIMIT ? OFFSET ?`)
-    .bind(...params, ...fids, size, (page - 1) * size)
+    .bind(...params, ...fids, ...okParams, size, (page - 1) * size)
     .all();
 
-  const mod = await loadModeration(cache, db, ctx.principal.gid, ctx.principal.uid);
   const list = threadListAccessFilter(actx, r.results)
     .filter((t) => canSeeUnapproved(Number(t.ok), { seeCheck: mod.seeCheck, isAuthor: mod.isAuthor(Number(t.uid)) }))
     .map(threadBrief);
