@@ -16,6 +16,7 @@
  *
  * 严禁在读路径调用（§8.3 写时定稿硬规则）；仅 post_message_fmt 写侧使用。
  */
+import { isVideoEmbedSrc } from '@freeidx/shared';
 
 // ── 属性值校验规则（PCRE → JS，i 保留；s 标志无 '.' 参与，省略） ──
 const P = {
@@ -30,8 +31,8 @@ const P = {
   word: /^[\w\-\x7f-\uffff]+$/i,
 } as const;
 
-// 仅放行该 youku http 播放器串（src 属性特例）
-const YOUKU_SRC = /^http:\/\/player\.youku\.com\/embed\/[\w=]+$/i;
+// embed/iframe 的 src 只放行视频平台播放器（B 站 / YouTube / Vimeo / 优酷），
+// 白名单与前端「插入视频」共源：packages/shared/src/video-embed.ts
 
 // ── 标签白名单 ──
 const WHITE_TAG = new Set([
@@ -407,7 +408,7 @@ class HtmlWhite {
           const rule = WHITE_VALUE.get('src');
           let ok = false;
           if (rule && rule[0] === 'pcre') for (const p of rule[2]) if (p.test(vs0)) { ok = true; break; }
-          if ((tagname === 'embed' || tagname === 'iframe') && !YOUKU_SRC.test(vs0)) value = '';
+          if ((tagname === 'embed' || tagname === 'iframe') && !isVideoEmbedSrc(vs0)) value = '';
           else if (!ok) value = rule ? rule[1] : '';
         } else {
           const rule = WHITE_VALUE.get(name);

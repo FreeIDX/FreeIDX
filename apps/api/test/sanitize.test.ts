@@ -23,11 +23,27 @@ describe('危险内容剥离（DoD）', () => {
     expect(out).not.toMatch(/expression/i);
     expect(out).not.toMatch(/position/i);
   });
-  it('iframe/embed 非 youku 播放器 src 清空', () => {
+  it('iframe/embed 仅放行视频平台播放器 src（B 站/YouTube/Vimeo/优酷），其余清空', () => {
     expect(xnHtmlSafe('<iframe src="http://player.youku.com/embed/XMTIz"></iframe>')).toBe(
       '<iframe src="http://player.youku.com/embed/XMTIz"></iframe>',
     );
+    // allowfullscreen 走 range 规则：非数字值钳制为 0——浏览器按「属性存在即生效」处理，全屏能力不受影响
+    const yt = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" width="640" height="360" title="YouTube" class="video-embed" frameborder="0" allowfullscreen="true"></iframe>';
+    expect(xnHtmlSafe(yt)).toBe(
+      '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" width="640" height="360" title="YouTube" class="video-embed" frameborder="0" allowfullscreen="0"></iframe>',
+    );
+    expect(
+      xnHtmlSafe('<iframe src="https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&page=1&high_quality=1"></iframe>'),
+    ).toBe('<iframe src="https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&page=1&high_quality=1"></iframe>');
+    expect(xnHtmlSafe('<iframe src="https://player.vimeo.com/video/123456789"></iframe>')).toBe(
+      '<iframe src="https://player.vimeo.com/video/123456789"></iframe>',
+    );
     expect(xnHtmlSafe('<iframe src="http://evil.example/e"></iframe>')).toBe('<iframe src=""></iframe>');
+    // 域名后缀/路径伪装一律不认
+    expect(xnHtmlSafe('<iframe src="https://evil.example/youtube.com/embed/x"></iframe>')).toBe('<iframe src=""></iframe>');
+    expect(xnHtmlSafe('<iframe src="https://player.bilibili.com.evil.example/player.html?bvid=1"></iframe>')).toBe(
+      '<iframe src=""></iframe>',
+    );
   });
   it('data URI 仅放行 data:image/png;base64 形态（pattern 尾无 "=" → 带 padding 亦拒绝，口径保留）', () => {
     expect(xnHtmlSafe('<img src="data:image/png;base64,iVBORw0KGgo">')).toContain('data:image/png;base64,iVBORw0KGgo');

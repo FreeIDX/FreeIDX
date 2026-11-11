@@ -12,3 +12,4 @@ export * from './i18n';
 export * from './i18n/locales';
 export * from './i18n/gen/keys';
 export * from './payment';
+export * from './video-embed';

@@ -697,6 +697,51 @@ html {
   border-left: 5px solid #0084ff;
   padding: 0.5rem 0.75rem;
 }
+/* 视频外链播放器（B 站/YouTube/Vimeo/优酷）：16:9 等比、窄屏自适应，属性里的 width/height 只作兜底 */
+.post-body iframe.video-embed,
+.video-embed-wrap iframe.video-embed {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  border: 0;
+  border-radius: 4px;
+  background: #000;
+}
+.video-embed-wrap {
+  position: relative;
+  max-width: 640px;
+  margin: 8px 0;
+}
+.video-embed-wrap.ProseMirror-selectednode {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* 编辑器内的移除按钮：hover 才显形，避免遮挡播放器控件 */
+.video-embed-del {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #f56c6c;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+.video-embed-wrap:hover .video-embed-del,
+.video-embed-wrap.ProseMirror-selectednode .video-embed-del {
+  opacity: 1;
+}
 .ProseMirror:focus {
   outline: none;
 }

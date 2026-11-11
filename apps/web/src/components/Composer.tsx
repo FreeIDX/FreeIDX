@@ -1,6 +1,7 @@
 /**
  * 富文本编辑器（T2-10）：TipTap 产出 HTML（doctype=0，服务端写时定稿 sanitize）。
- * 工具栏：粗体/斜体/行内码/代码块/链接/图片上传（POST /api/attachments → 插 <img>，aid 计入 attachAids）。
+ * 工具栏：粗体/斜体/行内码/代码块/链接/图片上传（POST /api/attachments → 插 <img>，aid 计入 attachAids）/
+ *         插入视频（B 站 / YouTube / Vimeo / 优酷，落成可播放 iframe，见 VideoEmbed.ts）。
  * 引用回复：父级传 quoted 摘要展示，提交时自行带 quotepid。
  * turnstile=1 时在提交按钮上方挂人机验证挂件（发帖/回帖用）；token 一次性，提交后一律重挂换发。
  */
@@ -9,11 +10,13 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Image as TiptapImage } from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
+import { toVideoEmbed } from '@freeidx/shared';
 import { deleteAttachment, uploadAttachment } from '../lib/api';
 import { apiErrorMessage } from '../lib/errors';
 import { fileToWebpThumb } from '../lib/image';
 import { useT } from '../lib/i18n';
 import { Turnstile, turnstileDisabled } from './Turnstile';
+import { VideoEmbed } from './VideoEmbed';
 import { Button } from './ui';
 
 export interface ComposerChange {
@@ -123,6 +126,7 @@ export function Composer(props: ComposerProps) {
     extensions: [
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
       TiptapImage,
+      VideoEmbed.configure({ removeLabel: t('video_remove') }),
       Placeholder.configure({ placeholder }),
     ],
     content: initialHtml,
@@ -154,6 +158,21 @@ export function Composer(props: ComposerProps) {
     // 协议白名单：只接受 http(s) 与站内绝对路径，阻断 javascript:/data: 等可执行伪协议
     if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) return;
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    emit(editor, attachRef.current);
+  };
+
+  /** 插入视频：分享链接 → 平台播放器 iframe（白名单与写时定稿共用 isVideoEmbedSrc） */
+  const insertVideo = () => {
+    if (!editor) return;
+    const raw = window.prompt(t('enter_video_url'), 'https://')?.trim();
+    if (!raw) return;
+    const v = toVideoEmbed(raw);
+    if (!v) {
+      setError(t('unsupported_video_url'));
+      return;
+    }
+    setError('');
+    editor.chain().focus().insertContent({ type: 'videoEmbed', attrs: { ...v } }).run();
     emit(editor, attachRef.current);
   };
 
@@ -210,7 +229,9 @@ export function Composer(props: ComposerProps) {
     if (!editor) return;
     const html = editor.getHTML();
     const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-    if (!text) {
+    // 纯视频帖（正文只有一个播放器）也算有内容，不能被「请输入内容」拦下
+    const hasVideo = /<iframe[^>]*\bsrc="[^"]+"/i.test(html);
+    if (!text && !hasVideo) {
       setError(t('please_input_message'));
       return;
     }
@@ -281,6 +302,10 @@ export function Composer(props: ComposerProps) {
           {uploading ? t('uploading_dots') : t('attach_short')}
         </button>
         <input ref={rawRef} type="file" className="hidden" onChange={(e) => void onPickFile(e.target.files?.[0])} />
+        {/* 插入视频：粘贴/输入 B 站、YouTube 等分享链接，正文里落成可播放的 iframe */}
+        <button type="button" className={btn} disabled={!editor} onClick={insertVideo}>
+          {t('insert_video')}
+        </button>
         {/* 表情面板：126 张 emoicon，插入 <img class="em_icon"> */}
         <button type="button" className={`${btn} ${emojiOpen ? 'bg-[rgba(41,151,247,0.1)] text-brand' : ''}`} disabled={!editor} onClick={() => setEmojiOpen((v) => !v)}>
           {t('emoji_label')}
