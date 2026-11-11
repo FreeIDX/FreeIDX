@@ -700,12 +700,12 @@ html {
   border-left: 5px solid #0084ff;
   padding: 0.5rem 0.75rem;
 }
-/* 视频外链播放器（B 站/YouTube/Vimeo/优酷）：16:9 等比、窄屏自适应，属性里的 width/height 只作兜底 */
+/* 视频外链播放器（B 站/YouTube/Vimeo/优酷）：铺满正文可用宽度、16:9 等比，
+   属性里的 width/height 只作 CSS 未生效时的兜底与首屏比例预留 */
 .post-body iframe.video-embed,
 .video-embed-wrap iframe.video-embed {
   display: block;
   width: 100%;
-  max-width: 640px;
   aspect-ratio: 16 / 9;
   height: auto;
   border: 0;
@@ -714,7 +714,7 @@ html {
 }
 .video-embed-wrap {
   position: relative;
-  max-width: 640px;
+  width: 100%;
   margin: 8px 0;
 }
 .video-embed-wrap.ProseMirror-selectednode {
@@ -722,11 +722,13 @@ html {
   outline-offset: 2px;
   border-radius: 6px;
 }
-/* 编辑器内的移除按钮：hover 才显形，避免遮挡播放器控件 */
+/* 编辑器内的移除按钮：hover 才显形，避免遮挡播放器控件；
+   贴内边距摆放（不溢出容器），否则编辑器 overflow-y:auto 会带出横向滚动条 */
 .video-embed-del {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: 6px;
+  right: 6px;
+  z-index: 10;
   display: flex;
   width: 20px;
   height: 20px;
