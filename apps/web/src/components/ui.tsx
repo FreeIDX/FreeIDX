@@ -415,11 +415,11 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
   );
 }
 
-/** 左侧版块导航「主页」版（首页/版块页共用）：置顶「主页」入口 + 版块直链，无分隔线 */
+/** 左侧版块导航「主页」版（首页/版块页共用）：置顶「主页」入口 + 版块直链，入口下方有分隔线 */
 export function HomeSideNav() {
   const t = useT();
-  const items: SideNavItem[] = [{ k: 'home', label: t('home'), icon: 'home', to: '/' }];
-  return <SideNav items={items} ariaLabel={t('home_forum_nav')} divider={false} />;
+  const items: SideNavItem[] = [{ k: 'home', label: t('home'), icon: 'nav_grid', to: '/' }];
+  return <SideNav items={items} ariaLabel={t('home_forum_nav')} />;
 }
 
 /** 两栏：主内容 + 右侧栏（9/12 + 3/12 栅格，<lg 隐藏侧栏）。

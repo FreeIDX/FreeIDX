@@ -534,7 +534,8 @@ export function Layout({ children }: { children?: ReactNode }) {
                     className="h-[42px] w-auto max-w-none"
                   />
                 ) : (
-                  <span className="text-xl font-bold tracking-tight text-brand">
+                  <span className="flex items-center gap-1.5 text-xl font-bold tracking-tight text-brand">
+                    <Icon name="nav_grid" className="size-5 shrink-0" aria-hidden="true" />
                     {setting?.sitename || 'FreeIDX'}
                   </span>
                 )}
