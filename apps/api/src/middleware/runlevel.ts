@@ -12,12 +12,12 @@
  *            站点关闭/只读拒写 → RUNLEVEL_CLOSED(-5)。
  */
 import { createMiddleware } from 'hono/factory';
-import { Code, RunLevel, localizedSetting } from '@freeidx/shared';
+import { Code, RunLevel, localizedSetting, type SiteSetting } from '@freeidx/shared';
 import type { Env } from '../types/env';
 import { D1b } from '../core/db';
 import { Cache } from '../core/cache';
 import { loadViewer, loadSetting } from '../core/loaders';
-import type { ApiT } from '../core/i18n';
+import { t0, type ApiT } from '../core/i18n';
 import { AppError } from './envelope';
 
 export const runlevel = createMiddleware<{
@@ -33,16 +33,19 @@ export const runlevel = createMiddleware<{
    */
   if (c.req.path === '/mcp') return next();
   const db = c.get('db');
-  const t = c.get('t');
+  /**
+   * 词条兜底 t0：i18n 中间件正常都会挂 t（含 loadSetting 失败回落 t0 的分支），这里 `?? t0`
+   * 只是防御——档位拦截是本中间件唯一会用到 t 的地方，缺了它就会把「站点关闭」变成 500。
+   * 另见 index.ts 的 i18n 挂载注释：本中间件与 i18n 共用同一次 setting 装载（请求级去重），
+   * 因此不能靠"给静态路径跳过 i18n"省下读次数。
+   */
+  const t = c.get('t') ?? t0;
   let level: number = RunLevel.NORMAL;
-  let reason = '';
+  let setting: SiteSetting | null = null;
   try {
-    // loadSetting 读穿缓存（与 i18n 中间件同一条，命中零 D1）；
-    // 关闭原因支持多语言（0027 后续）：按本次请求协商出的语言取词，未配置回退主文案/内置词条
-    const setting = await loadSetting(c.get('cache'), db);
+    // loadSetting 读穿缓存（与 i18n 中间件同一条，命中零 D1）
+    setting = await loadSetting(c.get('cache'), db);
     level = Number(setting.runlevel ?? RunLevel.NORMAL);
-    const site = localizedSetting(setting, c.get('lang') ?? setting.lang);
-    reason = site.runlevelReason || t('runlevel.closed');
   } catch {
     level = RunLevel.NORMAL;
   }
@@ -63,8 +66,13 @@ export const runlevel = createMiddleware<{
   const isRead = c.req.method === 'GET' || c.req.method === 'HEAD';
   const isGuest = viewer.uid === 0;
   switch (level) {
-    case RunLevel.CLOSED_SITE:
-      throw new AppError(Code.RUNLEVEL_CLOSED, reason);
+    case RunLevel.CLOSED_SITE: {
+      /* 关闭原因按本次请求协商出的语言取词（多语言覆盖），未配置回退内置词条。
+         刻意放在拦截分支里：构造 localizedSetting 要展开整份 setting，而正常档位（99.99% 的请求）
+         走不到这里 —— 此前每个请求都白做一次对象展开与取词。 */
+      const site = setting ? localizedSetting(setting, c.get('lang') ?? setting.lang) : null;
+      throw new AppError(Code.RUNLEVEL_CLOSED, site?.runlevelReason || t('runlevel.closed'));
+    }
     case RunLevel.ADMIN_ONLY:
       throw new AppError(Code.RUNLEVEL_CLOSED, t('runlevel.adminOnly'));
     case RunLevel.MEMBER_READ_ONLY:

@@ -130,6 +130,15 @@ app.use('*', edgeCache());
 //  - 其余前台接口：cookie `lang`（LangSwitch setPref 写入，非 httpOnly，同域自动携带；
 //    值必须在 AVAILABLE_LOCALES 内，非法值忽略）> Accept-Language 匹配到的可选 locale > setting.lang。
 // SEO 产物（sitemap/prerender）是全站性内容，仍按 setting.lang 生成，不参与用户协商。
+//
+// ⚠️ 审计结论（别再尝试「给静态路径收窄本中间件以省 KV/读」）：
+//  - 本中间件的 loadSetting 与 runlevel（紧随其后，除 /api/health 与 /mcp 外所有路径都要查档位）、
+//    notFound 的壳注入共用同一次装载（remember 的请求级去重，见 core/cache/index.ts 的 loaded），
+//    即一次请求只有 1 次真实读；
+//  - 因此「跳过 i18n」既不省 KV 读也不省 D1 读——省下的只有一次 Map 查找，而档位闸门仍要读同一个 key；
+//    真正决定读数速率的是 core/cache/index.ts 的 L0_MAX_TTL（30s）：它决定「每 isolate 每 30s 最多
+//    1 次 KV 读」，调大等于放大后台设置的跨 isolate 生效延迟，属产品参数而非代码优化；
+//  - 兜底已就位：envelope 的 tOf 与 runlevel 的 `?? t0` 都按 zh-cn 取词，缺 t 不会变成 500。
 function cookieLangOf(header: string | undefined): string | null {
   const m = /(?:^|;\s*)lang=([^;]+)/.exec(header ?? '');
   if (!m?.[1]) return null;
