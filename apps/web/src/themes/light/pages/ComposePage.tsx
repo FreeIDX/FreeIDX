@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   CONTENT_LANG_NATIVE_NAMES,
@@ -11,6 +11,7 @@ import {
 import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { createThread, fmtDate } from '../../../lib/api';
 import { nonNegInt } from '../../../lib/params';
+import { clearComposeDraft, readComposeDraft, writeComposeDraft } from '../../../lib/compose-draft';
 import { Composer, type ComposerSubmit } from '../../../components/Composer';
 import { Alert, Button, Card, CardTabs, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
 import { Icon } from '../../../components/icons';
@@ -46,6 +47,9 @@ function ForumPickCard({ f, on, drill, onClick }: { f: ForumNode; on: boolean; d
     </button>
   );
 }
+
+/** 正文 HTML 取纯文本：判空 / 判断草稿是否真有内容（TipTap 空文档是 `<p></p>`） */
+const plainText = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
 
 /** 发帖页（§4.4，/new 或 /forum/:fid/new）：
  *  两栏 —— 左主表单卡（8/12 栅格：版块/标题 + Composer + 标签选择 + 收费设置）、
@@ -110,6 +114,16 @@ export function ComposePage() {
   /* 内容语言：'' = 自动识别（按标题+正文），用户可手动覆盖；正文由 Composer onChange 回传 */
   const [body, setBody] = useState('');
   const [langSel, setLangSel] = useState('');
+  /* 草稿（本地暂存，见 lib/compose-draft）：restoredHtml 仅在恢复时更新一次，作为 Composer 的初始正文 */
+  const [restoredHtml, setRestoredHtml] = useState('');
+  /** 最近一次自动保存时间（0=本次尚未保存，不显示提示） */
+  const [draftAt, setDraftAt] = useState(0);
+  /** 已恢复草稿的 uid（0=尚未恢复）：同一浏览器切换账号时各恢各的稿 */
+  const restoredRef = useRef(0);
+  /** 已提交成功：抑制跳转前的最后一次自动保存 */
+  const publishedRef = useRef(false);
+  /** 「发表主题」并入内容语言行后，页面按钮经该 ref 触发 Composer 内部提交 */
+  const submitRef = useRef<(() => void) | null>(null);
   const detected = detectContentLang(`${subject} ${body}`);
   const [tab, setTab] = useState<'fn' | 'file'>('fn');
   /* 分类弹窗（#staticBackdrop：一级 → 二级两步单选） */
@@ -152,12 +166,61 @@ export function ComposePage() {
         lang: boundLang || langSel || detected || undefined,
       }),
     onSuccess: (d) => {
+      /* 发布成功：先清本地草稿，再跳详情（否则下次进发帖页会把已发布的内容又恢复出来） */
+      publishedRef.current = true;
+      if (me) clearComposeDraft(me.uid);
       void qc.invalidateQueries({ queryKey: ['threads'] });
       void qc.invalidateQueries({ queryKey: ['thread'] });
       void refresh();
       navigate(`/thread/${d.tid}`);
     },
   });
+
+  /* 草稿恢复：bootstrap 到位后把上次未发布的表单灌回来（无实质内容的历史脏数据忽略） */
+  useEffect(() => {
+    if (!loaded || !me || restoredRef.current === me.uid) return;
+    restoredRef.current = me.uid;
+    const d = readComposeDraft(me.uid);
+    if (!d || (!d.subject.trim() && !plainText(d.html))) return;
+    setSubject(d.subject);
+    setRestoredHtml(d.html);
+    setBody(d.html);
+    setLangSel(d.lang);
+    setSelTags(d.tags);
+    if (d.fid > 0) setPickedFid(d.fid);
+    setSellOn(d.sellOn);
+    setSellNum(d.sellNum);
+    setSellType(d.sellType);
+    setDraftAt(d.savedAt);
+  }, [loaded, me]);
+
+  /* 草稿自动保存：标题/正文/标签/语言/版块任一变化，静默 800ms 后写本地；
+     内容被清空时连同草稿一起清掉（否则下次进页面会把已删掉的内容又恢复出来）。 */
+  useEffect(() => {
+    if (!loaded || !me || !restoredRef.current || publishedRef.current) return;
+    const empty = !subject.trim() && !plainText(body);
+    const timer = window.setTimeout(() => {
+      if (publishedRef.current) return;
+      if (empty) {
+        clearComposeDraft(me.uid);
+        setDraftAt(0);
+        return;
+      }
+      setDraftAt(
+        writeComposeDraft(me.uid, {
+          subject,
+          html: body,
+          lang: langSel,
+          tags: selTags,
+          fid: pickedFid,
+          sellOn,
+          sellNum,
+          sellType,
+        }),
+      );
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [loaded, me, subject, body, langSel, selTags, pickedFid, sellOn, sellNum, sellType]);
 
   // bootstrap 未完成前 me 必为 null，先等加载，避免首帧闪「请先登录」
   if (!loaded) return null;
@@ -292,6 +355,13 @@ export function ComposePage() {
               submitLabel={t('thread_create')}
               busy={create.isPending}
               allowSell={canSell && sellOn}
+              /* 正文区固定 700px，超出在编辑器内滚动 */
+              editorHeightClass="h-[700px] max-h-[700px] overflow-y-auto"
+              /* 提交按钮搬到下方「内容语言」行右侧，由 submitRef 触发内部提交 */
+              hideSubmitBar
+              submitRef={submitRef}
+              /* 恢复本地草稿：只在恢复发生的那一刻变化一次，之后由用户编辑接管 */
+              initialHtml={restoredHtml}
               onChange={(c) => setBody(c.html)}
               onSubmit={submit}
               placeholder={t('content_placeholder')}
@@ -327,45 +397,9 @@ export function ComposePage() {
             </div>
           )}
 
-          {/* 内容语言：仅站点开关开启时渲染（关闭 = 与升级前完全一致，服务端仍按绑定/检测写 lang）。
-              开启时：版块绑定（0024，含父版块继承）→ 锁定为该语言（服务端同样强制）；
-              未绑定 → 默认自动识别（标题+正文，和服务端同一检测函数），可手动覆盖。 */}
-          {langMode > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-zh-line pt-3 text-sm">
-              <span className="text-ink-soft">{t('content_lang_label')}</span>
-              {boundLang ? (
-                <select
-                  className={cx(selectCls, 'h-[33px] w-auto px-2')}
-                  value={boundLang}
-                  disabled
-                  aria-label={t('content_lang_label')}
-                >
-                  <option value={boundLang}>{CONTENT_LANG_NATIVE_NAMES[boundLang]}</option>
-                </select>
-              ) : (
-                <select
-                  className={cx(selectCls, 'h-[33px] w-auto px-2')}
-                  value={langSel}
-                  onChange={(e) => setLangSel(e.target.value)}
-                  aria-label={t('content_lang_label')}
-                >
-                  <option value="">
-                    {t('content_lang_auto')}
-                    {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
-                  </option>
-                  {CONTENT_LANGS.map((l) => (
-                    <option key={l} value={l}>
-                      {CONTENT_LANG_NATIVE_NAMES[l]}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
-
           {/* 收费设置（仅 allowsell 组渲染；「购买 :」+ 是/否 radio，选「是」时现数字与币种） */}
           {canSell && (
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-zh-line pt-3 text-sm">
               <span className="text-ink-soft">{t('buy_label')}</span>
               <label className="flex cursor-pointer items-center gap-1">
                 <input type="radio" name="sell" checked={!sellOn} onChange={() => setSellOn(false)} />
@@ -404,6 +438,56 @@ export function ComposePage() {
             </div>
           )}
           {err && <p className="mt-2 text-sm text-destructive">{err}</p>}
+
+          {/* 底部行：内容语言 + 草稿提示 + 「发表主题」（按钮右对齐，与语言同一行）。
+              内容语言仅站点开关开启时渲染（关闭 = 与升级前一致，服务端仍按绑定/检测写 lang）；
+              开启时版块绑定（0024，含父版块继承）→ 锁定该语言（服务端同样强制），未绑定则默认自动识别。 */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-zh-line pt-3 text-sm">
+            {langMode > 0 && (
+              <>
+                <span className="text-ink-soft">{t('content_lang_label')}</span>
+                {boundLang ? (
+                  <select
+                    className={cx(selectCls, 'h-[33px] w-auto px-2')}
+                    value={boundLang}
+                    disabled
+                    aria-label={t('content_lang_label')}
+                  >
+                    <option value={boundLang}>{CONTENT_LANG_NATIVE_NAMES[boundLang]}</option>
+                  </select>
+                ) : (
+                  <select
+                    className={cx(selectCls, 'h-[33px] w-auto px-2')}
+                    value={langSel}
+                    onChange={(e) => setLangSel(e.target.value)}
+                    aria-label={t('content_lang_label')}
+                  >
+                    <option value="">
+                      {t('content_lang_auto')}
+                      {detected ? ` · ${CONTENT_LANG_NATIVE_NAMES[detected as ContentLang]}` : ''}
+                    </option>
+                    {CONTENT_LANGS.map((l) => (
+                      <option key={l} value={l}>
+                        {CONTENT_LANG_NATIVE_NAMES[l]}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {draftAt > 0 && <span className="text-xs text-lt-grey">{t('draft_autosaved')}</span>}
+              <Button
+                type="button"
+                loading={create.isPending}
+                loadingText={t('submitting_dots')}
+                disabled={create.isPending}
+                onClick={() => submitRef.current?.()}
+              >
+                {t('thread_create')}
+              </Button>
+            </div>
+          </div>
         </Card>
       </div>
 

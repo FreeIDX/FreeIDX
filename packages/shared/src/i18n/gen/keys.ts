@@ -140,6 +140,7 @@ export type FrontKey =
   | 'download_dots'
   | 'download_failed'
   | 'downloading_dots'
+  | 'draft_autosaved'
   | 'dynamic_label'
   | 'edit'
   | 'edit_user'

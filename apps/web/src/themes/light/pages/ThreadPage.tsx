@@ -14,6 +14,7 @@ import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
 import { Pagination } from '../../../components/Pagination';
 import { PmButton } from '../../../components/PmButton';
 import { PostCard } from '../../../components/PostCard';
+import { ThreadSkeleton } from '../../../components/ThreadSkeleton';
 import { VBadge } from '../../../components/VBadge';
 import { NotFoundPage } from './NotFoundPage';
 import { Turnstile, turnstileDisabled } from '../../../components/Turnstile';
@@ -688,6 +689,11 @@ export function ThreadPage() {
 
   /* 404 页：主题不存在或已删除（后端 NOT_FOUND）→ 整页 404 替代错误行；其余错误原样展示 */
   if (q.isError && q.error instanceof ApiError && q.error.code === Code.NOT_FOUND) return <NotFoundPage />;
+
+  /* 首屏数据未到位（含切页以外的首次进入）：整页骨架占位。
+   * 此前这里什么也不渲染，只剩底部「返回」按钮悬在空白背景上，很像页面出错；
+   * 出错时（q.isError）不进骨架，继续走下面的错误行 + 返回按钮。 */
+  if (!d && !q.isError) return <ThreadSkeleton />;
 
   return (
     <>

@@ -4,7 +4,7 @@
  * 引用回复：父级传 quoted 摘要展示，提交时自行带 quotepid。
  * turnstile=1 时在提交按钮上方挂人机验证挂件（发帖/回帖用）；token 一次性，提交后一律重挂换发。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Image as TiptapImage } from '@tiptap/extension-image';
@@ -48,6 +48,12 @@ interface ComposerProps {
   turnstile?: boolean;
   /** 收费帖组（allowsell）：工具栏出现「插入付费内容」按钮 */
   allowSell?: boolean;
+  /** 正文区高度类（默认 min-h-[8rem]；发帖页传固定高，把编辑区拉长到 700px 并在内部滚动） */
+  editorHeightClass?: string;
+  /** 隐藏底部提交栏（发帖页把「发表主题」并入内容语言行，右对齐显示） */
+  hideSubmitBar?: boolean;
+  /** 隐藏提交栏时的外部入口：页面按钮调用该 ref 即触发内部 submit（空正文 / 人机验证校验保持一致） */
+  submitRef?: MutableRefObject<(() => void) | null>;
   onChange?: (c: ComposerChange) => void;
   onSubmit?: (c: ComposerSubmit) => void | Promise<unknown>;
   onCancel?: () => void;
@@ -83,6 +89,9 @@ export function Composer(props: ComposerProps) {
     busy,
     turnstile = false,
     allowSell = false,
+    editorHeightClass = 'min-h-[8rem]',
+    hideSubmitBar = false,
+    submitRef,
     onChange,
     onSubmit,
     onCancel,
@@ -118,7 +127,9 @@ export function Composer(props: ComposerProps) {
     ],
     content: initialHtml,
     editorProps: {
-      attributes: { class: 'min-h-[8rem] px-3 py-2 text-sm leading-6 text-foreground focus:outline-none break-words post-body' },
+      attributes: {
+        class: `${editorHeightClass} px-3 py-2 text-sm leading-6 text-foreground focus:outline-none break-words post-body`,
+      },
     },
     onUpdate: ({ editor: e }) => {
       appliedHtmlRef.current = e.getHTML();
@@ -222,6 +233,12 @@ export function Composer(props: ComposerProps) {
     }
   };
 
+  /**
+   * 外部按钮入口（发帖页把「发表主题」并入内容语言行）：渲染期同步最新闭包，
+   * 页面按钮调用 ref 即走本组件 submit —— 空正文 / 人机验证未完成的拦截与提示仍留在编辑器内。
+   */
+  if (submitRef) submitRef.current = () => void submit();
+
   const T = (name: string) => (editor?.isActive(name) ? 'bg-[rgba(41,151,247,0.1)] text-brand' : '');
 
   return (
@@ -317,7 +334,7 @@ export function Composer(props: ComposerProps) {
       )}
       {turnstile && <Turnstile key={tsNonce} onToken={setTsToken} />}
       {error && <p className="px-3 pb-2 text-xs text-destructive">{error}</p>}
-      {onSubmit && (
+      {!hideSubmitBar && onSubmit && (
         <div className="flex items-center gap-2 border-t border-border px-3 py-2">
           <Button
             type="button"
