@@ -13,6 +13,7 @@ import { AppError, ok } from '../../middleware/envelope';
 import { loadViewer } from '../../core/loaders';
 import { cursorCond } from '../../core/db/paginate';
 import { escapeHtml, noticeSend, noticeTypeName, NoticeType } from '../../core/notice';
+import { unescapeHtmlEntities } from '../../core/fmt';
 import type { Stmt } from '../../core/db';
 import type { ReadEnv } from '../shared';
 import { intParam } from '../shared';
@@ -180,16 +181,8 @@ export function noticeRoutes(): Hono<ReadEnv> {
   return app;
 }
 
-/**
- * 公告正文写侧（admin/notices）为防存储型 XSS 统一 escapeHtml 后入库，后台列表以 innerHTML 渲染该转义串。
- * 首页公告条是 React 文本插值（自身会转义），若原样下发会把 `&amp;` 等实体当成字面字符显示。
- * 这里在只读出口还原为原文，由各消费端按自己的渲染方式负责转义。
- */
-function unescapeHtml(s: string): string {
-  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-}
-
-/** 公告列表（bbs_announcement isshow=1，最多 10 条） */
+/** 公告列表（bbs_announcement isshow=1，最多 10 条）。实体还原口径见 core/fmt.ts 的 unescapeHtmlEntities
+ *  —— bootstrap 的 announcements 走同一个函数，两处不得各写一份。 */
 async function listAnnouncements(c: Ctx): Promise<Response> {
   const rows = await c
     .get('db')
@@ -199,7 +192,7 @@ async function listAnnouncements(c: Ctx): Promise<Response> {
     .all();
   const list = rows.results.map((x) => ({
     aid: Number(x.aid),
-    message: unescapeHtml(String(x.message ?? '')),
+    message: unescapeHtmlEntities(String(x.message ?? '')),
     createDate: Number(x.create_date ?? 0),
   }));
   return ok(c, 'ok', { data: { list } });

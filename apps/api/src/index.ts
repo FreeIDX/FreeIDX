@@ -8,7 +8,7 @@ import { AVAILABLE_LOCALES, DEFAULT_LOCALE, localizedSetting, siteDescriptionOf,
 import type { Env } from './types/env';
 import { D1b } from './core/db';
 import { Cache } from './core/cache';
-import { edgeCache } from './core/cache/edge';
+import { edgeCache, shellCache } from './core/cache/edge';
 import { ok, handleError, handleNotFound } from './middleware/envelope';
 import { runlevel } from './middleware/runlevel';
 import { csrf } from './middleware/csrf';
@@ -21,6 +21,7 @@ import { getExtensions } from './core/extensions';
 import { classifyUserAgent, matchRegisteredPath } from './core/crawler';
 import { prerender, seoCoreRoutes } from './modules/seo/core';
 import { loadSetting } from './core/loaders';
+import { loadPreloadMap, shellPreloadTags } from './core/preload-map';
 import { loadThemeId } from './core/theme';
 import { escAttr } from './core/fmt';
 import { acceptLangOf, createApiT, t0, type ApiT } from './core/i18n';
@@ -80,28 +81,42 @@ app.use('*', async (c, next) => {
   if (stats.d1Queries > 40) c.res.headers.set('X-Db-Queries-Warn', String(stats.d1Queries));
 });
 
-app.use(
-  '*',
-  cors({
-    // 白名单化（§20.4 安全项）：credentials:true 下反射任意 Origin = 任意外站可携 Cookie 跨域读响应。
-    // 多域名部署下「站点自身域」按请求 Host 动态判定（各绑定域名各自同源），另放行本地 dev（vite 5173，
-    // dev proxy /api→8787 为同源请求）；白名单外一律回落请求域——ACAO 与请求 Origin 不符 → 浏览器直接
-    // 拒绝跨域读取，不产生暴露。不读 SITE_URL：部署变量可能未配置或与实际绑定域名不一致。
-    origin: (origin, c) => {
-      const self = requestOrigin(c);
-      if (!origin) return self; // 同源/curl：不构成跨域暴露
-      const allow = new Set([self, 'http://localhost:5173', 'http://127.0.0.1:5173']);
-      return allow.has(origin) ? origin : self;
-    },
-    credentials: true,
-    // Authorization：MCP 端点（/mcp）用 Bearer 令牌鉴权，浏览器型 MCP 客户端会带它做 preflight；
-    // Mcp-Protocol-Version / MCP-Protocol-Version：客户端协商协议版本用，不放行会被预检拦掉
-    allowHeaders: ['Content-Type', 'X-CSRF-Token', 'Authorization', 'Mcp-Protocol-Version', 'MCP-Protocol-Version'],
-    exposeHeaders: ['X-Db-Queries-Warn', 'X-Edge-Cache', 'MCP-Protocol-Version'],
-  }),
-);
+/**
+ * CORS 只挂 /api（历史上是 `'*'`）：壳页与静态资源都是同源访问，跨域头对它们毫无意义，
+ * 却会带来两个真实副作用 ——
+ *   ① `Vary: Origin` 让 CDN/浏览器把壳页视为按 Origin 变化，直接挡掉壳页的边缘缓存；
+ *   ② 每个 HTML 响应白背 ~200 字节的 ACAO/ACEH/expose 头。
+ * 收窄后壳页响应只剩内容协商本身的头，可被 shellCache() 正常缓存。
+ */
+const corsMiddleware = cors({
+  // 白名单化（§20.4 安全项）：credentials:true 下反射任意 Origin = 任意外站可携 Cookie 跨域读响应。
+  // 多域名部署下「站点自身域」按请求 Host 动态判定（各绑定域名各自同源），另放行本地 dev（vite 5173，
+  // dev proxy /api→8787 为同源请求）；白名单外一律回落请求域——ACAO 与请求 Origin 不符 → 浏览器直接
+  // 拒绝跨域读取，不产生暴露。不读 SITE_URL：部署变量可能未配置或与实际绑定域名不一致。
+  origin: (origin, c) => {
+    const self = requestOrigin(c);
+    if (!origin) return self; // 同源/curl：不构成跨域暴露
+    const allow = new Set([self, 'http://localhost:5173', 'http://127.0.0.1:5173']);
+    return allow.has(origin) ? origin : self;
+  },
+  credentials: true,
+  // Authorization：MCP 端点（/mcp）用 Bearer 令牌鉴权，浏览器型 MCP 客户端会带它做 preflight；
+  // Mcp-Protocol-Version / MCP-Protocol-Version：客户端协商协议版本用，不放行会被预检拦掉
+  allowHeaders: ['Content-Type', 'X-CSRF-Token', 'Authorization', 'Mcp-Protocol-Version', 'MCP-Protocol-Version'],
+  exposeHeaders: ['X-Db-Queries-Warn', 'X-Edge-Cache', 'MCP-Protocol-Version'],
+});
+/**
+ * 只对 /api（含裸 `/api`）生效。用显式判断而不是 `app.use('/api/*')`：
+ * Hono 的 cors 用 `headers.append('Vary', 'Origin')`，同一请求命中两条挂载会写成
+ * "Origin, Origin"，比不收窄还脏。
+ */
+app.use('*', async (c, next) => {
+  if (c.req.path !== '/api' && !c.req.path.startsWith('/api/')) return next();
+  return corsMiddleware(c, next);
+});
 // 多域名收敛（canonical host）：页面导航落到非主域名时 301 到后台「站点网址」。
-// 必须紧跟 cors（跳转响应同样要带跨域头），先于 edgeCache（避免备用域命中缓存后无法收敛）。
+// 先于 edgeCache / shellCache（避免备用域命中缓存后无法收敛）；两个缓存都以 origin 为键，
+// 收敛必须在它们之前发生。
 app.use('*', canonicalHostRedirect());
 
 // 边缘响应缓存（§7 读取屏障）：游客匿名只读接口命中即返回，不走 runlevel 的 setting 查询。
@@ -144,6 +159,13 @@ app.use('*', async (c, next) => {
   await next();
 });
 app.use('*', runlevel);
+/**
+ * 壳页（SPA HTML）边缘缓存：必须挂在 runlevel **之后** ——
+ * 关闭/只读档位不缓存壳，否则访客会看到「正常打开」的页面而接口全在报错。
+ * 命中即省掉「ASSETS.fetch 取 index.html + 主题/设置装载 + 注入」整段；
+ * 键与请求路径无关，全站深链共用一条副本（见 core/cache/edge.ts 的 shellCache）。
+ */
+app.use('*', shellCache());
 // 小黑屋闸门（0025）：禁言/禁访/禁登按位拦截，须在 runlevel 之后（借其 setting 装载）、csrf 之前
 // （被封用户的写请求无需再付一次 CSRF 校验）。/api/auth/* 与 /api/admin/* 在中间件内豁免。
 app.use('*', banGuard());
@@ -245,10 +267,14 @@ app.route('/', seoCoreRoutes());
 app.onError(handleError);
 
 /**
- * 中文字体子集路径（与 apps/web/src/styles/globals.css 的 @font-face 同源，改文件名须同步两处）。
- * 仅中文界面预载：非中文界面根本不引用这套字体（见 globals.css 的 --font-app），预载会白下 454KB。
+ * 中文字体「第 00 片」路径（完整分片清单见 apps/web/src/styles/font-faces.generated.css，
+ * 改分片参数须同步本处文件名 —— 两边对不上就是白下一个 404）。
+ *
+ * 只预载第 00 片：它是 UI 文案 + 最常用汉字，任何中文页面都会用到（约 123KB）；
+ * 其余 11 片由浏览器按 unicode-range 在真实渲染到片内字符时才取，提前预载等于白下。
+ * 仅中文界面预载：非中文界面根本不引用这套字体（见 globals.css 的 --font-app）。
  */
-const CJK_FONT_URL = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v1.woff2';
+const CJK_FONT_URL = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v2-00.woff2';
 
 /**
  * SPA 壳引导注入：在业务脚本之前写死「启用主题 id + 前台语言」，前端首帧即可用。
@@ -260,9 +286,13 @@ const CJK_FONT_URL = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v1.woff2';
  *  - `<html lang>`：落 CSS 用的语言标记，让 --font-app 从一开始就选中正确字体。按完整协商链取值：
  *    用户偏好（localStorage）> 浏览器语言（navigator.languages）> 站点语言 —— 与 lib/i18n 的
  *    initialLocale 同序，避免首帧先按站点语言下字体、挂载后再换（中文站点的英文浏览器访客同理）。
- *  - 中文界面顺带预载字体：字体是首屏最大的单一资源，等 CSS 解析到 @font-face 才发起太晚。
+ *  - 中文界面顺带预载字体第 00 片：该片是 UI 文案用字，任何中文页面必然用到；
+ *    等 CSS 解析到 @font-face 才发起太晚，而其余分片按 unicode-range 按需取，不该预载。
  *
  *  - `<title>` / `<meta description>` / OG：壳页本身带有站点级语义，见下方 metaHtml。
+ *  - 首屏预载（`preloadHtml`）：词条包的 modulepreload + `/api/bootstrap` 的 fetch preload。
+ *    这两项原本都要等入口 chunk 执行后才发起，写进 HTML 就能与入口 chunk 并行下载，
+ *    少一个 RTT（生成与匹配见 core/preload-map.ts）。
  *
  * 注入失败（读壳失败/无 </head>）一律原样返回，前端会回落到「同名接口 + 默认主题 + 默认语言」。
  */
@@ -271,6 +301,7 @@ async function injectShell(
   themeId: string,
   siteLang: string,
   site: { title: string; description: string } | null = null,
+  preloadHtml = '',
 ): Promise<Response> {
   try {
     const html = await res.text();
@@ -314,9 +345,9 @@ async function injectShell(
         : html;
     // 优先注入 </head>（脚本在任何业务脚本之前求值）；无 head 时退化到 </body>；都没有则原样返回文本
     const out = shell.includes('</head>')
-      ? shell.replace('</head>', `${metaHtml}${script}</head>`)
+      ? shell.replace('</head>', `${preloadHtml}${metaHtml}${script}</head>`)
       : shell.includes('</body>')
-        ? shell.replace('</body>', `${metaHtml}${script}</body>`)
+        ? shell.replace('</body>', `${preloadHtml}${metaHtml}${script}</body>`)
         : null;
     if (out === null) return new Response(html, res);
     const headers = new Headers(res.headers);
@@ -385,11 +416,17 @@ app.notFound(async (c) => {
   const siteLang = setting && AVAILABLE_LOCALES.includes(setting.lang) ? setting.lang : DEFAULT_LOCALE;
   /* 站点级语义按站点语言取词（与 newPageMeta 的爬虫产物同一口径，不随访客界面语言变） */
   const site = setting ? localizedSetting(setting, siteLang) : null;
+  /**
+   * 首屏预载：词条包（`main.tsx` 里唯一阻塞 createRoot 的动态 import）+ bootstrap 请求。
+   * 清单读不到（本地 dev / 旧产物）时仍会给出 bootstrap 那一条纯静态标签，功能不受影响。
+   */
+  const preloadHtml = shellPreloadTags(await loadPreloadMap(c.env, c.req.url), siteLang);
   return injectShell(
     res,
     themeId,
     siteLang,
     site ? { title: siteTitleOf(site), description: siteDescriptionOf(site) } : null,
+    preloadHtml,
   );
 });
 

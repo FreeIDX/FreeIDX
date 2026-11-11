@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* 中文字体分片（unicode-range）：生成文件，见同目录注释与 scripts/gen-font-subset.mjs */
+@import './font-faces.generated.css';
 
 /*
  * Tailwind 4 CSS-first 主题：设计令牌的单一事实源。
@@ -126,19 +128,20 @@ html[lang^='zh'] {
  * 发丝线 rgba(178,186,194,.15)、正文链接 #1f4977。遗留令牌名全部保留并映射到主题色。
  */
 /*
- * 正文字体：源字体 885.7KB（6619 字形）按「常用 3500 字 ∪ 站点用字」再子集为 ~454KB（-49%），
- * 未收录的生僻字回退系统字（微软雅黑/苹方），中文长文实测回退率 0.08%。
- * 生成：pnpm fonts:build（scripts/gen-font-subset.mjs）；校验：pnpm fonts:check。
+ * 正文字体：源字体 885.7KB（6619 字形）按「常用 3500 字 ∪ 站点用字」子集为 3600 字形，
+ * 再按字频切成 12 片（unicode-range，见文件顶部的 @import）。分片产物与浏览器取片规则：
+ *   第 00 片 = UI 文案用字 + 非 CJK + 最常用汉字 —— 任何页面必然命中，且 UI 零回退；
+ *   其余 11 片按词频顺序等分，只有页面真实渲染到片内字符时才会下载。
  *
- * 注意：/fonts/* 在 public/_headers 里声明了 immutable，换字体必须同时升级文件名版本号（v1 → v2），
- * 否则老访客一年内不会重新拉取。
+ * 实测收益（同一份字表，按真实页面渲染到的字符统计）：
+ *   首页（UI 文案 + 列表标题） 454 KiB → 156 KiB（2 片）
+ *   帖子页（含正文全文）        454 KiB → 259 KiB（5 片）
+ * 未收录的生僻字仍回退系统字（微软雅黑/苹方），中文长文实测回退率 0.08%。
+ *
+ * 生成：pnpm fonts:build（scripts/gen-font-subset.mjs）；校验：pnpm fonts:check。
+ * 注意：/fonts/* 在 public/_headers 里声明了 immutable，换字体必须同时升级文件名版本号，
+ * 否则老访客一年内不会重新拉取 —— 版本号在 gen-font-subset.mjs 的 VERSION 常量里（当前 v2）。
  */
-@font-face {
-  font-family: 'HarmonyOS_Sans_SC_Medium';
-  font-style: normal;
-  font-display: swap;
-  src: url('/fonts/HarmonyOS_Sans_SC_Medium.subset.v1.woff2') format('woff2');
-}
 
 @theme {
   /* ===== 简蓝主题专有色（不覆盖默认令牌，仅作为新增工具类）===== */

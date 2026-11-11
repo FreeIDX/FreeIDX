@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { i18nSplitPlugin } from '../../scripts/i18n-split.plugin';
@@ -85,6 +85,38 @@ function vendorChunkOf(id: string): string | undefined {
   return undefined;
 }
 
+/**
+ * 首屏预载清单（dist/assets/preload-map.json）。
+ *
+ * 为什么需要它：首绘前 `main.tsx` 必须等 `loadLocaleBundle()` 的词条 chunk —— 那是入口 chunk
+ * 执行后才发起的动态 import，天然排在入口之后（多一个 RTT）。把它的 hash 文件名交给 Worker，
+ * 就能在 SPA 壳里直接输出 `<link rel="modulepreload">`，让它与入口 chunk 并行下载
+ * （读取方见 apps/api/src/core/preload-map.ts）。
+ *
+ * 只登记前台词条包（assets/i18n-bbs-<locale>-<hash>.js）：
+ *  - 基底主题 light 是**静态引入**的（见 lib/theme/registry.ts），随入口 chunk 一起到达，无需预载；
+ *  - 页面 chunk 在入口执行后立刻并行发起，预载收益 <1 个 RTT 的零头，不值得再引一份路由表。
+ * 文件落在 assets/ 下：该前缀在 wrangler.toml 的 run_worker_first 否定列表里，由静态层直出。
+ */
+function preloadMapPlugin(): Plugin {
+  return {
+    name: 'freeidx-preload-map',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const i18n: Record<string, string> = {};
+      for (const file of Object.keys(bundle)) {
+        const locale = /^assets\/i18n-bbs-([a-z]{2}-[a-z]{2})-[A-Za-z0-9_-]+\.js$/.exec(file)?.[1];
+        if (locale) i18n[locale] = file;
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'assets/preload-map.json',
+        source: JSON.stringify({ i18n }),
+      });
+    },
+  };
+}
+
 export default defineConfig({
   // 构建期确定版本与提交，运行时不发额外请求；后台「版本更新」页直接读取
   define: {
@@ -94,7 +126,12 @@ export default defineConfig({
     __BUILD_NUM__: JSON.stringify(buildNum),
   },
   // 词典按「命名空间 × 语言」分包（前台 bbs / 后台 admin 各自成 chunk，见 packages/shared/src/i18n/bundles.ts）
-  plugins: [react(), tailwindcss(), i18nSplitPlugin(resolve(webRoot, '../../packages/shared/src/i18n'))],
+  plugins: [
+    react(),
+    tailwindcss(),
+    i18nSplitPlugin(resolve(webRoot, '../../packages/shared/src/i18n')),
+    preloadMapPlugin(),
+  ],
   server: {
     proxy: {
       // 本地同域开发：/api 与 /files 转发到 Worker（§13.2 同域方案的本地等价）

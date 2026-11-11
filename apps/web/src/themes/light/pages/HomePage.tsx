@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { useParams, useSearchParams } from 'react-router';
 import { useAuth } from '../../../store/auth';
-import { apiGet, fmtDate } from '../../../lib/api';
+import { fmtDate } from '../../../lib/api';
 import { posInt } from '../../../lib/params';
 import { siteThreadsQuery } from '../../../lib/queries';
 import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
@@ -71,12 +71,8 @@ export function HomePage() {
   const contentLang = useContentLangFilter();
   const q = useQuery({ ...siteThreadsQuery(page, digest, orderby, contentLang), placeholderData: keepPreviousData });
 
-  /** 在线数（GET /api/online?summary=1 只回 total；不带参数会连同 500 行会话列表一起下发） */
-  const online = useQuery({
-    queryKey: ['online'],
-    queryFn: () => apiGet<{ total: number }>('/api/online?summary=1'),
-    staleTime: 60_000,
-  });
+  /** 在线数：随 bootstrap 下发（原先是一次独立的 GET /api/online?summary=1） */
+  const onlineCount = useAuth((s) => s.online);
 
   const totalThreads = forumlist.reduce((s, f) => s + f.threads, 0);
 
@@ -89,7 +85,7 @@ export function HomePage() {
     [totalThreads, t('threads'), 'zt'],
     [runtime?.posts ?? 0, t('posts_count'), 'tz'],
     [runtime?.users ?? 0, t('users'), 'user'],
-    [online.data?.total ?? 0, t('online_count'), 'zx'],
+    [onlineCount, t('online_count'), 'zx'],
   ];
 
   return (

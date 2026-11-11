@@ -9,7 +9,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import type { ThreadListItem } from '@freeidx/shared';
-import { apiGet, fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../../../lib/api';
+import { fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../../../lib/api';
 import { useAuth } from '../../../store/auth';
 import { useForumName, useLocalizedName, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
@@ -123,12 +123,8 @@ export function DiscoveryPage() {
     staleTime: 60_000,
     enabled: discOn,
   });
-  const online = useQuery({
-    queryKey: ['online'],
-    queryFn: () => apiGet<{ total: number }>('/api/online?summary=1'),
-    staleTime: 60_000,
-    enabled: discOn,
-  });
+  /** 在线人数：随 bootstrap 下发（原先是一次独立的 GET /api/online?summary=1） */
+  const onlineCount = useAuth((s) => s.online);
 
   /* 发现页关闭（light.disc_page=0）→ 直接 404，避免空壳页 */
   if (!discOn) return <NotFoundPage />;
@@ -142,7 +138,7 @@ export function DiscoveryPage() {
     ['message', t('threads'), totalThreads],
     ['comment', t('posts_count'), runtime?.posts ?? 0],
     ['users', t('users'), runtime?.users ?? 0],
-    ['chart_bar', t('online_count'), online.data?.total ?? 0],
+    ['chart_bar', t('online_count'), onlineCount],
   ];
 
   return (

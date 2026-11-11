@@ -38,6 +38,9 @@ function baseRules(over: Partial<Record<string, unknown[] | null>> = {}): SqlRul
     /* bootstrap 站点数据卡 runtime 计数（全站贴子/用户数） */
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_post$/, first: { c: 2 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_user$/, first: { c: 2 } },
+    /* bootstrap 顺带下发的首页公告与在线人数（原先各是一个独立请求） */
+    { test: /FROM bbs_announcement/, rows: [{ aid: 3, message: '系统公告 &amp; 提示', create_date: 1700000003 }] },
+    { test: /SELECT COUNT\(\*\) AS c FROM bbs_session$/, first: { c: 7 } },
     { test: /bbs_forum_access/, rows: access },
     { test: /bbs_thread_top/, rows: [] },
     { test: /FROM bbs_thread WHERE fid IN/, rows: threads },
@@ -219,6 +222,19 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(d.setting.sitename).toBe('FreeIDX');
     // 未配置 SMTP 池 ⇒ mailOn=false：前端据此隐藏验证码框（后端此时按「验证关闭」降级）
     expect(d.setting.mailOn).toBe(false);
+  });
+
+  it('GET /api/bootstrap：顺带下发首页公告与在线人数（省掉两个独立请求）', async () => {
+    const { env } = envFor(baseRules());
+    const body = await json(await app.request('/api/bootstrap', {}, env as never));
+    const d = body.data as {
+      announcements: { aid: number; message: string; createDate: number }[];
+      online: number;
+    };
+    /* 公告入库时被转义的实体必须在只读出口还原，否则首页条会显示 &amp; 字面量
+       （与 GET /api/announcements 共用 core/fmt.ts 的 unescapeHtmlEntities） */
+    expect(d.announcements[0]).toEqual({ aid: 3, message: '系统公告 & 提示', createDate: 1700000003 });
+    expect(d.online).toBe(7);
   });
 
   it('GET /api/bootstrap：版块按后台 rank 升序下发，rank 相同按 fid 升序', async () => {

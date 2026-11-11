@@ -1,6 +1,13 @@
 /** useAuth：bootstrap 一次拉取（setting/forumlist/grouplist/me），Zustand 全局态（§10.3） */
 import { create } from 'zustand';
-import { md5Hex, type ForumNode, type GroupRow, type SiteSetting, type UserBrief } from '@freeidx/shared';
+import {
+  md5Hex,
+  type AnnouncementItem,
+  type ForumNode,
+  type GroupRow,
+  type SiteSetting,
+  type UserBrief,
+} from '@freeidx/shared';
 import { bootstrap, login, logout, onSessionExpired, register, type LoginResult, type RegisterResult } from '../lib/api';
 import { queryClient } from '../lib/query-client';
 
@@ -38,6 +45,10 @@ interface AuthState {
   }) | null;
   /** 站点运行数据（posts/users 计数，bootstrap 随下发） */
   runtime?: { posts: number; users: number };
+  /** 首页系统公告（bootstrap 随下发，省掉独立请求） */
+  announcements: AnnouncementItem[];
+  /** 在线人数（bootstrap 随下发，省掉 GET /api/online?summary=1） */
+  online: number;
   /** 扩展插件经 bootstrap:contribute 注入的字段（§12 契约⑦，如 checkin/ads 配置） */
   ext?: Record<string, unknown>;
   error: string | null;
@@ -71,6 +82,8 @@ export const useAuth = create<AuthState>((set, get) => ({
   forumlist: [],
   grouplist: [],
   me: null,
+  announcements: [],
+  online: 0,
   error: null,
   load: async (force = false) => {
     if (!force) {
@@ -84,7 +97,18 @@ export const useAuth = create<AuthState>((set, get) => ({
     inflight = (async () => {
       try {
         const d = await bootstrap();
-        set({ loaded: true, setting: d.setting, forumlist: d.forumlist, grouplist: d.grouplist, me: d.me, runtime: d.runtime, ext: d.ext, error: null });
+        set({
+          loaded: true,
+          setting: d.setting,
+          forumlist: d.forumlist,
+          grouplist: d.grouplist,
+          me: d.me,
+          runtime: d.runtime,
+          ext: d.ext,
+          announcements: d.announcements ?? [],
+          online: d.online ?? 0,
+          error: null,
+        });
       } catch (e) {
         // 原始错误只在这里能看到：超时（ApiTimeoutError）、断网（TypeError）与服务端 5xx
         // 都可能是同一条「系统繁忙」之外的现场信息，控制台留痕便于用户/站长自查

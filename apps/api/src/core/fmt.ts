@@ -27,6 +27,18 @@ export function escAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * 还原入库时转义的 HTML 实体（公告正文专用）。
+ *
+ * 公告写侧（admin/notices）为防存储型 XSS 统一 `htmlSpecialChars` 后入库，后台列表以 innerHTML
+ * 渲染该转义串；而首页公告条是 React 文本插值（自身会转义），原样下发会把 `&amp;` 当字面字符显示。
+ * 只读出口还原为原文，由各消费端按自己的渲染方式负责转义 —— 消费端有两处
+ * （GET /api/announcements 与 bootstrap 的 announcements），必须共用本函数，避免规则漂移。
+ */
+export function unescapeHtmlEntities(s: string): string {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+}
+
 /** HTML 化顺序敏感（空格→&nbsp; 先于 tab，tab 展开内的空格不再二次替换） */
 export function xnTxtToHtml(s: string): string {
   let out = htmlSpecialChars(s);

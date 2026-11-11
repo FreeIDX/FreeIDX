@@ -44,22 +44,21 @@ export interface ForumNode {
   threads: number;
   todayposts: number;
   todaythreads?: number;
+  /** SEO 标题（0028，单值）。**不下发多语言映射**：前端零引用，SEO 产物由 prerender
+   *  直接查库、固定按站点语言取词生成（apps/api/src/modules/seo/core.ts），
+   *  10 个语言副本里只有 1 个会进 HTML —— 下发整份 map 每次 bootstrap 要多背 11KB。 */
   seoTitle: string;
-  /** SEO 标题多语言（0028）：前台按当前界面语言取词，SEO 产物按站点语言取词 */
-  seoTitleI18n?: Record<string, string>;
+  /** SEO 关键词（0028，单值；多语言映射同上，不下发） */
   seoKeywords: string;
-  /** SEO 关键词多语言（0028） */
-  seoKeywordsI18n?: Record<string, string>;
   /** 版块图标版本号（存"最后更新时间"，>0 即有图标） */
   icon?: number;
   /** 自定义图标直链（后台上传，/files/forum/{fid}.xxx?v=ts）；空 = 前台用内置默认图 */
   iconUrl?: string;
   /** 版块栏图标显示开关（0029）：0 = 前台版块栏只显示版块名、不渲染图标；缺省/1 = 显示 */
   iconShow?: number;
-  /** 版块公告（公告卡/绿底 alert） */
+  /** 版块公告（公告卡/绿底 alert）。bootstrap 只下发这个单值；
+   *  公告多语言（0028）由版块页自己的 GET /api/forums/:fid/threads 随 forum 对象下发。 */
   announcement?: string;
-  /** 版块公告多语言（0028）：locale → 公告；缺省/空 = 未配置，展示回退 announcement */
-  announcementI18n?: Record<string, string>;
   /** 上级版块 fid，0/缺省 = 一级版块（0018_forum_parent，仅两级） */
   parentFid?: number;
   /** 生效内容语言（0024，已含父版块继承与「显式不限制」哨兵解析）：空/缺省 = 不限制；
@@ -284,6 +283,18 @@ export interface BootstrapPayload {
   ext?: Record<string, unknown>;
   /** 站点运行数据：全站贴子总数 + 用户数，60s 读穿缓存 */
   runtime?: { posts: number; users: number };
+  /** 首页系统公告（0011）：随 bootstrap 下发，省掉 GET /api/announcements 这一次冷启动请求 */
+  announcements?: AnnouncementItem[];
+  /** 在线人数（bbs_session 计数）：随 bootstrap 下发，省掉 GET /api/online?summary=1 */
+  online?: number;
+}
+
+/** 首页公告条条目（bbs_announcement，isshow=1，aid 倒序 ≤10 条） */
+export interface AnnouncementItem {
+  aid: number;
+  /** 已还原 HTML 实体的原文（写侧入库时转义过，见 apps/api/src/core/fmt.ts 的 unescapeHtmlEntities） */
+  message: string;
+  createDate: number;
 }
 
 export interface SiteSetting {

@@ -9,6 +9,7 @@ import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
 import { forumLangOf, forumRankCompare, loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
 import { remember } from '../../core/cache';
+import { unescapeHtmlEntities } from '../../core/fmt';
 import { getEmailProvider } from '../../core/email';
 import { getExtensions } from '../../core/extensions';
 import { loadThemeId } from '../../core/theme';
@@ -40,7 +41,8 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         nameI18n: normForumNameI18n(f.name_i18n),
         rank: f.rank,
         brief: f.brief,
-        /* 简介 / 公告 / SEO 标题 / SEO 关键词多语言（0028）：整份 map 下发，前端按当前界面语言取词 */
+        /* 简介多语言（0028）：整份 map 下发，前端按当前界面语言取词。
+           保留它的唯一理由是发现页「全部版块」网格从本接口取简介（DiscoveryPage）。 */
         briefI18n: normNameI18n(f.brief_i18n),
         threads: f.threads,
         todayposts: f.todayposts,
@@ -50,11 +52,16 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         /* 图标显示开关（0029）：0 = 前台版块栏只显示版块名，不渲染图标 */
         iconShow: f.icon_show,
         announcement: f.announcement,
-        announcementI18n: normNameI18n(f.announcement_i18n),
+        /* 公告多语言（0028）**不下发**：只有版块页用它，而版块页自己的
+           GET /api/forums/:fid/threads 已随 forum 对象带上 announcementI18n
+           （见 modules/thread/routes.ts）。让全站每次 bootstrap 都背 15KB 没有意义。 */
+        /* SEO 标题/关键词只下发**单值**，不下发 10 语言映射（0028）：
+           - 前端全站零引用（页面标题由 Layout 用站点标题统一设置，版块页不覆盖）；
+           - SEO 产物由 prerender 直接查库生成，且固定按站点语言取词
+             （modules/seo/core.ts），10 个语言里只有 1 个会进 HTML。
+           单值保留是因为量极小（合计 ~1KB），给主题留一个「页面标题」的取词入口。 */
         seoTitle: f.seo_title,
-        seoTitleI18n: normNameI18n(f.seo_title_i18n),
         seoKeywords: f.seo_keywords,
-        seoKeywordsI18n: normNameI18n(f.seo_keywords_i18n),
         /* 二级版块：上级版块 fid，0 = 一级版块（前端据此归并二级导航） */
         parentFid: f.parent_fid,
         /* 生效内容语言（0024，已含父版块继承）：非空时发帖页锁定语言选择，服务端强制该语言 */
@@ -142,9 +149,47 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
     // 启用主题 id：与 ext.light 分开两个概念——theme 选「用哪套外观」，ext.light 是简蓝的配置面
     const theme = await loadThemeId(cache, db);
 
+    /**
+     * 首页公告条与在线人数：原本各是一个独立请求（GET /api/announcements、GET /api/online?summary=1）。
+     * 游客**首访**时这些请求都还没拿到 csrf Cookie（它在首个 API 响应里才签发），边缘缓存一律 miss
+     * → 每个请求都要真打 D1。并入 bootstrap 后：少 2 次 Worker 调用，且冷启动少 2 条 D1 查询。
+     * fail-soft：一条公告和一个数字不值得让整份首屏数据失败（配额耗尽/表缺失时按空处理）。
+     */
+    const [announcements, online] = await Promise.all([
+      db
+        .prepare<{ aid: number; message: string; create_date: number }>(
+          'SELECT aid, message, create_date FROM bbs_announcement WHERE isshow = 1 ORDER BY aid DESC LIMIT 10',
+        )
+        .all()
+        .then((r) =>
+          r.results.map((x) => ({
+            aid: Number(x.aid),
+            message: unescapeHtmlEntities(String(x.message ?? '')),
+            createDate: Number(x.create_date ?? 0),
+          })),
+        )
+        .catch(() => []),
+      db
+        .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session')
+        .first<{ c: number }>()
+        .then((r) => Number(r?.c ?? 0))
+        .catch(() => 0),
+    ]);
+
     return ok(c, 'ok', {
       // mailOn 现算后覆盖：setting 本身是缓存对象，不得就地改写（L0/L1 共享）
-      data: { version: '0.1.0', setting: { ...setting, mailOn }, forumlist: nodes, grouplist: groups, me, runtime, ext, theme },
+      data: {
+        version: '0.1.0',
+        setting: { ...setting, mailOn },
+        forumlist: nodes,
+        grouplist: groups,
+        me,
+        runtime,
+        ext,
+        theme,
+        announcements,
+        online,
+      },
     });
   });
 

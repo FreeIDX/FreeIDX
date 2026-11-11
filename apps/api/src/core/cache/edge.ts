@@ -19,7 +19,7 @@
  * 不可缓存性由 envelope.ts 统一打 `Cache-Control: no-store` 来保证，而不是靠异常传播。
  */
 import { createMiddleware } from 'hono/factory';
-import { AVAILABLE_LOCALES } from '@freeidx/shared';
+import { AVAILABLE_LOCALES, RunLevel } from '@freeidx/shared';
 import { acceptLangOf } from '../i18n';
 import type { Env } from '../../types/env';
 import type { D1b } from '../db';
@@ -221,6 +221,88 @@ export function edgeCache() {
       const res = c.res;
       if (!storeEligible(res)) return;
       const copy = cachedCopy(res.clone(), ttl, filePrefix);
+      c.res = withState(res, 'MISS');
+      wait(b.put(key, copy), maybeCtx(c));
+    },
+  );
+}
+
+/* ==================== SPA 壳 HTML 的边缘缓存 ==================== */
+
+/**
+ * 壳 HTML 的 TTL（秒）。
+ *
+ * 壳页只承载「启用主题 id + 站点语言 + 站点标题/描述」——全是**全站同值**的信息，
+ * 与请求路径、访客身份都无关（注入逻辑见 apps/api/src/index.ts 的 injectShell）。
+ * 因此整个站点只占**一条**缓存条目、所有深链共用（见 shellKeyRequest），
+ * 命中率不随长尾 URL 摊薄 —— 这是 HTML 缓存最容易做砸的地方。
+ *
+ * 代价：后台改设置 / 切主题后最长 60s 的陈旧窗口。站长轨（admin_at）跳过读缓存，自查即时。
+ */
+export const SHELL_TTL = 60;
+
+/** 站长轨 Cookie：改完设置、切完主题当场可见，不被 TTL 挡住 */
+const ADMIN_TRACK = /(?:^|;\s*)admin_at=/;
+
+/**
+ * 壳页路径判定：只接「干净路径」（无扩展名）的人类页面导航。
+ * 排除 /api、/files、/mcp 与一切带扩展名的路径（/assets/*.js、/robots.txt、/sitemap.xml…）：
+ * 后者各自有专门的直出/缓存路径，不能被壳缓存抢在前面。
+ */
+function isShellPath(path: string): boolean {
+  if (path === '/api' || path.startsWith('/api/')) return false;
+  if (path === '/files' || path.startsWith('/files/')) return false;
+  if (path === '/mcp' || path.startsWith('/mcp/')) return false;
+  return !/\/[^/]*\.[^/.]+$/.test(path);
+}
+
+/**
+ * 壳缓存键：**每个 origin 一条固定 URL**，与请求路径无关。
+ * 依据：notFound 对任何干净深链都取同一份 /index.html，再注入同一组全站同值信息，
+ * 所以深链之间可以共用一份副本（键里也不需要语言维度 —— 站点语言只有一种）。
+ * `/__fi/spa-shell` 是纯键名，不对应任何真实资源，永远不会被请求。
+ */
+function shellKeyRequest(origin: string): Request {
+  return new Request(`${origin}/__fi/spa-shell`, { method: 'GET' });
+}
+
+/**
+ * 壳缓存中间件（注册在 runlevel 之后）：
+ * 命中即返回，省掉「ASSETS.fetch 取 index.html」子请求 + 主题/设置装载 + 字符串注入；
+ * 未命中则照常走完整链路，并把产物回填。
+ *
+ * 不接爬虫：它们的正文 HTML 由 prerender() 产出并有自己的边缘条目（键按 fi-ua 隔离）。
+ * 不接非正常档位：壳页 200 会让访客以为站点正常，而所有接口都在报错。
+ */
+export function shellCache() {
+  return createMiddleware<{ Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number } }>(
+    async (c, next) => {
+      if (c.req.method !== 'GET') return next();
+      if (!isShellPath(c.req.path)) return next();
+      if (classifyUserAgent(c.req.header('user-agent') ?? '') !== 'human') return next();
+      if (Number(c.get('runlevel') ?? RunLevel.NORMAL) !== RunLevel.NORMAL) return next();
+      const b = bucket();
+      if (!b) return next();
+
+      const key = shellKeyRequest(new URL(c.req.url).origin);
+      if (!ADMIN_TRACK.test(c.req.header('cookie') ?? '')) {
+        const cached = await b.match(key);
+        if (cached) {
+          const out = withState(cached, 'HIT');
+          /* 浏览器侧必须每次回源校验：发版后旧壳会指向已被删除的 asset hash，
+             吃浏览器缓存就是白屏（前端的 chunk 自愈重载是兜底，不该变成常规路径）。 */
+          out.headers.set('cache-control', 'public, max-age=0, must-revalidate');
+          c.res = out;
+          return;
+        }
+      }
+
+      await next();
+      const res = c.res;
+      if (res.status !== 200) return;
+      if (res.headers.has('set-cookie')) return;
+      if (!(res.headers.get('content-type') ?? '').includes('text/html')) return;
+      const copy = cachedCopy(res.clone(), SHELL_TTL);
       c.res = withState(res, 'MISS');
       wait(b.put(key, copy), maybeCtx(c));
     },

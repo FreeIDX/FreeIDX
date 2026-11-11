@@ -1,10 +1,12 @@
 /** §20.4 安全项：CORS 白名单化——credentials:true 下不得反射任意 Origin（否则任意外站可携 Cookie 跨域读响应） */
 import { describe, it, expect } from 'vitest';
 import { app } from '../src/index';
-import { fakeD1 } from './helpers/fake-d1';
+import { fakeAssets, fakeD1, fakeKv } from './helpers/fake-d1';
 
 const SITE = 'http://localhost:8787';
 const env = () => ({ DB: fakeD1().db, CACHE: undefined, SITE_URL: SITE }) as never;
+/** 壳页需要 ASSETS（取 index.html）与 CACHE，给一套最小可用的页面环境 */
+const pageEnv = () => ({ DB: fakeD1().db, CACHE: fakeKv(), ASSETS: fakeAssets(), SITE_URL: SITE }) as never;
 /** 多域名部署后「站点自身域」按请求 Host 判定，故请求一律带绝对 URL（与真实请求一致） */
 const url = (p: string) => `${SITE}${p}`;
 
@@ -37,5 +39,22 @@ describe('CORS Origin 白名单（§20.4）', () => {
       env(),
     );
     expect(res.headers.get('access-control-allow-origin')).toBe(SITE);
+  });
+
+  it('API 响应的 Vary 里 Origin 只出现一次（防重复挂载写成 "Origin, Origin"）', async () => {
+    const res = await app.request(url('/api/health'), {}, env());
+    const origins = (res.headers.get('vary') ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s === 'Origin');
+    expect(origins).toHaveLength(1);
+  });
+
+  it('壳页（HTML 导航）不带跨域头、也没有 Vary: Origin —— 否则会挡掉壳页的边缘缓存', async () => {
+    const res = await app.request(url('/forum/1'), { headers: { origin: 'https://evil.example.com' } }, pageEnv());
+    expect(res.headers.get('content-type')).toContain('text/html');
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    expect(res.headers.get('access-control-allow-credentials')).toBeNull();
+    expect(res.headers.get('vary')).toBeNull();
   });
 });

@@ -301,3 +301,98 @@ describe('边缘缓存：爬虫预渲染前置', () => {
     expect(Array.from(edge.entries.keys()).filter((k) => k.includes('fi-ua=human'))).toHaveLength(0);
   });
 });
+
+describe('边缘缓存：SPA 壳 HTML（人类页面导航）', () => {
+  /** 计数的 ASSETS 替身：HIT 后不应再出现「取 index.html」这一次子请求 */
+  function countingEnv() {
+    const base = envFor();
+    const assets = fakeAssets();
+    let shellFetches = 0;
+    return {
+      env: {
+        ...base.env,
+        ASSETS: {
+          fetch: async (req: Request) => {
+            if (new URL(req.url).pathname === '/index.html') shellFetches++;
+            return assets.fetch(req);
+          },
+        },
+      },
+      calls: base.calls,
+      count: () => shellFetches,
+    };
+  }
+
+  it('首次 MISS 落边缘；二次 HIT 不再取 index.html 壳', async () => {
+    const s = countingEnv();
+    const first = await hit('/', {}, s as never);
+    expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(await first.res.text()).toContain('id="root"');
+    expect(s.count()).toBe(1);
+
+    const second = await hit('/', {}, s as never);
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(s.count()).toBe(1);
+  });
+
+  it('任意深链共用同一条副本（键与请求路径无关）', async () => {
+    const s = countingEnv();
+    await hit('/', {}, s as never);
+    const deep = await hit('/thread/2', {}, s as never);
+    expect(deep.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(s.count()).toBe(1);
+    // 全站只占一条壳条目（键是固定 URL，不随深链摊薄）
+    expect(Array.from(edge.entries.keys()).filter((k) => k.endsWith('/__fi/spa-shell'))).toHaveLength(1);
+  });
+
+  it('HIT 仍要求浏览器回源校验（不下发缓存副本的 max-age=60）', async () => {
+    const s = countingEnv();
+    await hit('/', {}, s as never);
+    const res = await hit('/', {}, s as never);
+    expect(res.res.headers.get('cache-control')).toContain('max-age=0');
+  });
+
+  it('站长轨（admin_at）跳过读缓存：改完设置/切完主题当场可见', async () => {
+    const s = countingEnv();
+    await hit('/', {}, s as never);
+    const admin = await hit('/', { cookie: 'csrf=token1; admin_at=tok' }, s as never);
+    expect(admin.res.headers.get('x-edge-cache')).not.toBe('HIT');
+    expect(s.count()).toBe(2);
+  });
+
+  it('爬虫不写壳条目（正文 HTML 由 prerender 自己的条目负责）', async () => {
+    const s = countingEnv();
+    await hit('/thread/2', BOT, s as never);
+    expect(Array.from(edge.entries.keys()).filter((k) => k.endsWith('/__fi/spa-shell'))).toHaveLength(0);
+  });
+
+  it('带扩展名的路径不参与壳缓存（/robots.txt 走自己的条目）', async () => {
+    const s = countingEnv();
+    await hit('/', {}, s as never);
+    const res = await hit('/robots.txt', {}, s as never);
+    expect(res.res.headers.get('x-edge-cache')).not.toBe('HIT');
+  });
+
+  it('壳页注入首屏预载：bootstrap 的 fetch 预载 + 站点语言的词条包 modulepreload', async () => {
+    const base = envFor();
+    const s = {
+      env: {
+        ...base.env,
+        ASSETS: fakeAssets({
+          '/assets/preload-map.json': JSON.stringify({ i18n: { 'zh-cn': 'assets/i18n-bbs-zh-cn-AAA.js' } }),
+        }),
+      },
+      calls: base.calls,
+    };
+    const html = await (await hit('/', {}, s as never)).res.text();
+    expect(html).toContain('as="fetch" href="/api/bootstrap" crossorigin="use-credentials"');
+    expect(html).toContain('rel="modulepreload" crossorigin href="/assets/i18n-bbs-zh-cn-AAA.js"');
+  });
+
+  it('预载清单缺失（本地 dev / 旧产物）：壳页仍带 bootstrap 预载，功能不受影响', async () => {
+    const s = countingEnv(); // fakeAssets() 不含 preload-map.json → 404
+    const html = await (await hit('/', {}, s as never)).res.text();
+    expect(html).toContain('as="fetch" href="/api/bootstrap"');
+    expect(html).not.toContain('modulepreload" crossorigin href="/assets/i18n-bbs');
+  });
+});

@@ -19,7 +19,8 @@
     "i18n:baseline": "node scripts/check-hardcoded-zh.mjs --update",
     "i18n:progress": "node scripts/i18n-progress.mjs",
     "fonts:build": "node scripts/gen-font-subset.mjs",
-    "fonts:check": "node scripts/check-fonts.mjs"
+    "fonts:check": "node scripts/check-fonts.mjs",
+    "images:optimize": "python scripts/optimize-images.py"
   },
   "devDependencies": {
     "eslint": "^9.34.0",
