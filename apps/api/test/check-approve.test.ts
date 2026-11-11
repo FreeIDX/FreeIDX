@@ -51,6 +51,18 @@ describe('POST /api/check（回帖过审补列）', () => {
     expect(tail?.params).toEqual([100, 7, 1700000000, 7, 9, 100]);
   });
 
+  it('act=1 opt=-2：see_check 但无目标版块 allowdelete → 拒绝回帖真删（不执行任何删除）', async () => {
+    const rs = rules();
+    rs.push(
+      { test: /SELECT t\.fid FROM bbs_post p INNER JOIN bbs_thread t/, first: { fid: 1 } },
+      { test: /DELETE FROM bbs_post|DELETE FROM bbs_attach|DELETE FROM bbs_mypost/, rows: [] },
+    );
+    const { env, calls } = makeEnv(rs);
+    const res = await app.request('/api/check', { method: 'POST', headers: headers(), body: JSON.stringify({ act: 1, id: 100, opt: -2 }) }, env);
+    expect(((await res.json()) as { code: number }).code).toBe(Code.NO_PERMISSION);
+    expect(calls.some((c) => /DELETE FROM bbs_post|DELETE FROM bbs_attach|DELETE FROM bbs_mypost/.test(c.sql))).toBe(false);
+  });
+
   it('act=0 opt=-2：see_check 但无目标版块 allowdelete → 拒绝真删（不执行任何删除）', async () => {
     const rs = rules();
     rs.push(

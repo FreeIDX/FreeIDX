@@ -107,7 +107,9 @@ export const useAuth = create<AuthState>((set, get) => ({
   signIn: async (input) => {
     const r = await login({ account: input.account, password: md5Hex(input.password), turnstileToken: input.turnstileToken });
     await get().load(true);
-    void queryClient.invalidateQueries();
+    // 跨账号切换必须清空查询缓存：私域 key（['me']/['my-credits']/['my-favorites']…）不含 uid，
+    // invalidate 只标 stale，新账号首帧仍会渲染上一账号的邮箱/余额/订单。
+    queryClient.clear();
     return r;
   },
   signUp: async (input) => {
@@ -119,7 +121,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       turnstileToken: input.turnstileToken,
     });
     await get().load(true);
-    void queryClient.invalidateQueries();
+    queryClient.clear();
     return r;
   },
   signOut: async () => {
@@ -133,7 +135,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       // 前端继续显示「已登录」会造成后续请求 401 而界面不自知。
     } finally {
       await get().load(true);
-      void queryClient.invalidateQueries();
+      // 登出必须移除私域缓存（邮箱/余额/订单/收藏），否则同浏览器下一账号可见
+      queryClient.clear();
     }
   },
 }));

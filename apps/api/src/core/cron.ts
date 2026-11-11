@@ -207,21 +207,28 @@ export async function attachGc(deps: CronDeps, now: number, limit = ATTACH_GC_BA
     .all();
   if (!stale.results.length) return 0;
 
+  // 顺序：先「条件删除 D1 行」，只有确实删掉（changes=1）的 aid 才去删 R2 对象。
+  // 反序（先删对象再删行）存在竞态：SELECT 与 DELETE 之间用户发帖把附件关联上（status→1、写 tid/pid），
+  // 对象已被删、行又被无条件删掉 → 已发布帖子里的图片/附件永久丢失。
+  // 代价是对象删除失败时行已不存在，孤儿对象由桶上 `tmp/` 生命周期规则兜底（原注释的兜底语义仍然成立）。
   const removed: number[] = [];
   for (const r of stale.results) {
+    const aid = Number(r.aid);
+    const del = await db
+      .prepare('DELETE FROM bbs_attach WHERE aid = ? AND status = 0 AND create_date < ?')
+      .bind(aid, now - DAY)
+      .run();
+    if (Number(del.meta?.changes ?? 0) === 0) continue; // 窗口内已被关联/已处理：跳过，绝不删对象
+    removed.push(aid);
     try {
       // 原件 + 缩略图一次批删（R2 批量删除按 1 个子请求计，不突破 ATTACH_GC_BATCH 的子请求预算）
       if (files && typeof files.delete === 'function') {
-        await Promise.resolve(files.delete(attachObjectKeys(Number(r.aid), String(r.filename))));
+        await Promise.resolve(files.delete(attachObjectKeys(aid, String(r.filename))));
       }
-      removed.push(Number(r.aid));
     } catch {
-      /* 尽力而为：对象没删掉就保留行，下轮重试（桶上 tmp/ 生命周期规则兜底） */
+      /* 尽力而为：对象没删掉成为孤儿，由桶上 tmp/ 生命周期规则最终清理 */
     }
   }
-  if (!removed.length) return 0;
-  const placeholders = removed.map(() => '?').join(',');
-  await db.prepare(`DELETE FROM bbs_attach WHERE aid IN (${placeholders})`).bind(...removed).run();
   return removed.length;
 }
 

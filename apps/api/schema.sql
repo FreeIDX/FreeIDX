@@ -258,7 +258,10 @@ CREATE TABLE bbs_order (
   provider_ref TEXT NOT NULL DEFAULT '',
   created_date INTEGER NOT NULL DEFAULT 0,
   paid_date INTEGER NOT NULL DEFAULT 0,
-  fulfilled_date INTEGER NOT NULL DEFAULT 0
+  fulfilled_date INTEGER NOT NULL DEFAULT 0,
+  plan_duration_days INTEGER NOT NULL DEFAULT -1,
+  plan_credits INTEGER NOT NULL DEFAULT -1,
+  plan_gid INTEGER NOT NULL DEFAULT -1
 );
 
 CREATE TABLE bbs_paylist (

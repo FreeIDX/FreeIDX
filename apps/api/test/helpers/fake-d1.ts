@@ -34,8 +34,8 @@ export interface SqlRule {
   test: RegExp;
   rows?: unknown[] | ((params: readonly unknown[]) => unknown[]);
   first?: unknown | null | ((params: readonly unknown[]) => unknown | null);
-  /** 模拟 D1 batch 语句的 meta.changes（扣减入账守卫用） */
-  changes?: number;
+  /** 模拟 D1 语句的 meta.changes（扣减入账守卫用）；函数形式可按参数返回不同值 */
+  changes?: number | ((params: readonly unknown[]) => number);
   /** 模拟该语句执行时抛错（如唯一约束冲突） */
   throws?: string;
 }
@@ -68,9 +68,10 @@ export function fakeD1Sql(rules: SqlRule[]) {
         const rl = resolve(sql, params);
         maybeThrow(rl);
         const r = rl.rows;
+        const changes = typeof rl.changes === 'function' ? rl.changes(params) : rl.changes;
         return {
           success: true,
-          meta: rl.changes !== undefined ? { changes: rl.changes } : {},
+          meta: changes !== undefined ? { changes } : {},
           results: (typeof r === 'function' ? r(params) : (r ?? [])) as never,
         };
       },
@@ -81,7 +82,8 @@ export function fakeD1Sql(rules: SqlRule[]) {
       run: async () => {
         const rl = resolve(sql, params);
         maybeThrow(rl);
-        return { success: true, meta: rl.changes !== undefined ? { changes: rl.changes } : {} };
+        const changes = typeof rl.changes === 'function' ? rl.changes(params) : rl.changes;
+        return { success: true, meta: changes !== undefined ? { changes } : {} };
       },
     };
     return self as D1PreparedStatement;

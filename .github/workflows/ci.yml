@@ -30,6 +30,8 @@ jobs:
         run: |
           npx wrangler d1 create freeidx --local || true
           npx wrangler d1 migrations apply freeidx --local
+      # 门禁 3.5：迁移终态与 schema.sql 快照必须逐对象一致（上方已全量 apply，assertNotPending 满足）
+      - run: pnpm db:schema:check
       # 门禁 4：lint
       - run: pnpm lint
 

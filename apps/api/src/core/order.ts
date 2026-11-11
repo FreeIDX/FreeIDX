@@ -36,9 +36,15 @@ export interface OrderRow extends PayOrder {
   createdDate: number;
   paidDate: number;
   fulfilledDate: number;
+  /** 下单时的计划时长快照（天）；-1 = 旧订单无快照，回退读 bbs_vip_plan */
+  planDurationDays: number;
+  /** 下单时的赠送积分快照；-1 = 旧订单无快照 */
+  planCredits: number;
+  /** 下单时的挂组快照（0 = 不挂组）；-1 = 旧订单无快照 */
+  planGid: number;
 }
 
-const ORDER_COLS = 'order_no,uid,plan_id,amount_cents,currency,status,provider,provider_ref,created_date,paid_date,fulfilled_date';
+const ORDER_COLS = 'order_no,uid,plan_id,amount_cents,currency,status,provider,provider_ref,created_date,paid_date,fulfilled_date,plan_duration_days,plan_credits,plan_gid';
 
 /** 纯状态机：是否允许 from→to（单测全覆盖） */
 export function canTransit(from: OrderStatusValue, to: OrderStatusValue): boolean {
@@ -113,6 +119,10 @@ function mapOrder(r: Record<string, unknown>): OrderRow {
     createdDate: Number(r.created_date),
     paidDate: Number(r.paid_date),
     fulfilledDate: Number(r.fulfilled_date),
+    // 快照列缺失（旧测试夹具/未迁移库）一律按 -1 处理，回退到计划表，行为与发布前一致
+    planDurationDays: r.plan_duration_days == null ? -1 : Number(r.plan_duration_days),
+    planCredits: r.plan_credits == null ? -1 : Number(r.plan_credits),
+    planGid: r.plan_gid == null ? -1 : Number(r.plan_gid),
   };
 }
 
@@ -216,13 +226,20 @@ export async function getOrderByProviderRef(db: D1b, providerRef: string): Promi
   return r ? mapOrder(r) : null;
 }
 
-/** 掉单对账候选：近 sinceTs 内、已指定通道且非卡密、仍 pending 的订单（§15.3 cron 每小时拉取） */
+/**
+ * 掉单对账候选：已指定通道、且仍 pending（近 sinceTs 内）或已落账但未履约（paid，不限时间）的订单。
+ * - 纳入 paid：履约阶段失败（计划被硬删 / DB 抖动 / isolate 中断）时订单停在 paid，
+ *   而 webhook 已 ack、provider 不会重放；只捞 pending 会让这类订单永久掉单。
+ * - 不排除 card：pending 卡密单在上层因无 queryOrder 被跳过；已落账的卡密单同样需要补发。
+ */
 export async function listPendingForReconcile(db: D1b, sinceTs: number, limit = 100): Promise<OrderRow[]> {
   const r = await db
     .prepare<Record<string, unknown>>(
-      `SELECT ${ORDER_COLS} FROM bbs_order WHERE status = ? AND provider <> '' AND provider <> 'card' AND created_date >= ? ORDER BY id ASC LIMIT ?`,
+      `SELECT ${ORDER_COLS} FROM bbs_order
+       WHERE status IN (?, ?) AND provider <> '' AND (status = ? OR created_date >= ?)
+       ORDER BY id ASC LIMIT ?`,
     )
-    .bind(OrderStatus.PENDING, sinceTs, limit)
+    .bind(OrderStatus.PAID, OrderStatus.PENDING, OrderStatus.PAID, sinceTs, limit)
     .all();
   return r.results.map(mapOrder);
 }
@@ -249,11 +266,27 @@ export async function createOrder(
   args: { uid: number; plan: VipPlanRow; provider: string; ts: number },
 ): Promise<OrderRow> {
   const orderNo = newOrderNo(args.ts);
+  // 快照计划权益：此后计划被删/改价都不影响本单的履约与退款口径
+  const planDurationDays = Math.max(0, Math.trunc(Number(args.plan.duration_days ?? 0)));
+  const planCredits = perksCredits(args.plan.perks);
+  const planGid = Math.trunc(Number(args.plan.gid ?? 0));
   await core.db
     .prepare(
-      'INSERT INTO bbs_order (order_no,uid,plan_id,amount_cents,currency,status,provider,created_date) VALUES (?,?,?,?,?,?,?,?)',
+      'INSERT INTO bbs_order (order_no,uid,plan_id,amount_cents,currency,status,provider,created_date,plan_duration_days,plan_credits,plan_gid) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
     )
-    .bind(orderNo, args.uid, args.plan.id, args.plan.price_cents, args.plan.currency, OrderStatus.PENDING, args.provider, args.ts)
+    .bind(
+      orderNo,
+      args.uid,
+      args.plan.id,
+      args.plan.price_cents,
+      args.plan.currency,
+      OrderStatus.PENDING,
+      args.provider,
+      args.ts,
+      planDurationDays,
+      planCredits,
+      planGid,
+    )
     .run();
   return {
     orderNo,
@@ -267,6 +300,9 @@ export async function createOrder(
     createdDate: args.ts,
     paidDate: 0,
     fulfilledDate: 0,
+    planDurationDays,
+    planCredits,
+    planGid,
   };
 }
 
@@ -308,13 +344,14 @@ export async function fulfillOrder(core: Core, orderNo: string, ts: number, t: A
   if (!order) throw new AppError(Code.NOT_FOUND, t('common.orderNotFound'));
   if (order.status === OrderStatus.FULFILLED) return order; // 幂等
   assertTransit(order.status, OrderStatus.FULFILLED, t);
-  const plan = await findPlan(core.db, order.planId);
-  // 计划被硬删（deletePlan）后仍可能收到 paid 事件/对账：此时若继续翻转状态，
-  // 会得到「已履约但 VIP 时长=0、perks=0、未挂组」的不可逆空履约（refunded 是终态迁移）。
-  // 故阻断履约，保持 paid 待人工补单（调用方记录日志，对账下一轮会重试同一路径）。
-  if (!plan) throw new AppError(Code.SYSTEM_ERROR, t('order.planMissing'));
-  const durationDays = Number(plan.duration_days ?? 0);
-  const credits = perksCredits(plan.perks);
+  // 有快照的订单（0030 之后创建）不再依赖计划表：计划被硬删/改价也能按购买时的权益履约。
+  // 无快照的旧订单回退读计划；计划已删则保持 paid 待人工补单（避免「已履约但权益为 0」）。
+  const snapshotted = order.planDurationDays >= 0;
+  const plan = snapshotted ? null : await findPlan(core.db, order.planId);
+  if (!snapshotted && !plan) throw new AppError(Code.SYSTEM_ERROR, t('order.planMissing'));
+  const durationDays = snapshotted ? order.planDurationDays : Number(plan?.duration_days ?? 0);
+  const credits = snapshotted ? order.planCredits : perksCredits(plan?.perks ?? '');
+  const targetGid = snapshotted ? order.planGid : Math.trunc(Number(plan?.gid ?? 0));
 
   // 先以「paid→fulfilled」条件更新占位：只有真正把行从 paid 翻成 fulfilled 的那一次（meta.changes>0）才发放权益。
   // 并发/重复的 paid 事件（webhook 重试、Stripe across isolates）翻不动 → 幂等返回，绝不二次延长 VIP。
@@ -344,7 +381,6 @@ export async function fulfillOrder(core: Core, orderNo: string, ts: number, t: A
     // 挂组（0004/0005）：会员体系与用户组合一——履约即把买家挂入计划关联组（gid>=100）；
     // 首次挂组用 CASE 记下原组到 vip_from_gid（续费/换组不覆盖），到期由 cron demoteExpiredVip 回落；
     // `gid >= ? AND gid < ?` 守卫：① 管理组（<100）不受购买影响，防误配提权；② 禁止把更高等级用户降级到低等级组。
-    const targetGid = Math.trunc(Number(plan.gid ?? 0));
     if (targetGid >= LEVEL_GROUP_MIN) {
       stmts.push(
         core.db
@@ -419,7 +455,13 @@ export async function demoteExpiredVip(
  *  - 会员因此过期时立即回落到 vip_from_gid 原组（不必等 cron）。
  * 冻结 schema 无 refunded_date 列（G1），故不落退款时刻，仅回写状态。
  */
-export async function refundOrder(db: D1b, orderNo: string, ts: number, t: ApiT = t0): Promise<OrderRow> {
+export async function refundOrder(
+  db: D1b,
+  orderNo: string,
+  ts: number,
+  t: ApiT = t0,
+  cache?: { del(key: string): Promise<void> },
+): Promise<OrderRow> {
   const order = await getOrder(db, orderNo);
   if (!order) throw new AppError(Code.NOT_FOUND, t('common.orderNotFound'));
   if (order.status === OrderStatus.REFUNDED) return order;
@@ -437,16 +479,18 @@ export async function refundOrder(db: D1b, orderNo: string, ts: number, t: ApiT 
     throw new AppError(Code.SYSTEM_ERROR, t('order.refundFailed'));
   }
 
-  const plan = await findPlan(db, order.planId);
+  // 回收口径以订单快照为准：计划被硬删（days=0/credits=0 全额白送）或改价后不得改变本单权益
+  const snapshotted = order.planDurationDays >= 0;
+  const plan = snapshotted ? null : await findPlan(db, order.planId);
   const stmts: Stmt[] = [];
-  const days = Number(plan?.duration_days ?? 0);
+  const days = snapshotted ? order.planDurationDays : Number(plan?.duration_days ?? 0);
   if (days > 0) {
     // 履约时按 duration_days 延长，退款等额扣回（余额不为负，最多扣到 0）
     stmts.push(
       db.prepare('UPDATE bbs_user SET vip_expire_at = MAX(0, vip_expire_at - ?) WHERE uid = ?').bind(days * 86400, order.uid),
     );
   }
-  const credits = perksCredits(plan?.perks ?? '');
+  const credits = snapshotted ? order.planCredits : perksCredits(plan?.perks ?? '');
   if (credits > 0) {
     stmts.push(
       ...creditDeltaStmts(
@@ -474,6 +518,9 @@ export async function refundOrder(db: D1b, orderNo: string, ts: number, t: ApiT 
     throw e;
   }
 
+  // 退款可能回落用户组（gid 变更）：与 fulfillOrder 对称地立即失效 user:{uid}，
+  // 否则 L0+L2 的 30s TTL 内用户仍以 VIP 组权限访问（缓存投影含 gid）。
+  if (cache) await cache.del(`user:${order.uid}`);
   const updated = await getOrder(db, orderNo);
   if (!updated) throw new AppError(Code.SYSTEM_ERROR, t('order.refundFailed'));
   return updated;

@@ -255,7 +255,8 @@ describe('reconcilePending（掉单对账 cron 编排）', () => {
   it('外部 pending 单 → provider 复核 paid → 补款履约，计入 recovered', async () => {
     registerProvider(mockProvider('stripe', { query: 'paid' }), { installed: 1, enable: 1 });
     const listRule: SqlRule = {
-      test: /FROM bbs_order WHERE status = \? AND provider/,
+      // 对账候选查询改为 status IN (paid, pending) + (paid 不限时间 OR created_date >= since)
+      test: /FROM bbs_order\s+WHERE status IN/,
       rows: [{ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'pending', provider: 'stripe', provider_ref: '', created_date: 1700000000, paid_date: 0, fulfilled_date: 0 }],
     };
     let reads = 0;
@@ -279,7 +280,7 @@ describe('reconcilePending（掉单对账 cron 编排）', () => {
   it('queryOrder=failed → 关单，计入 failed', async () => {
     registerProvider(mockProvider('stripe', { query: 'failed' }), { installed: 1, enable: 1 });
     const listRule: SqlRule = {
-      test: /FROM bbs_order WHERE status = \? AND provider/,
+      test: /FROM bbs_order\s+WHERE status IN/,
       rows: [{ order_no: 'FI1', uid: 7, plan_id: 3, amount_cents: 1900, currency: 'CNY', status: 'pending', provider: 'stripe', provider_ref: '', created_date: 1700000000, paid_date: 0, fulfilled_date: 0 }],
     };
     let reads = 0;

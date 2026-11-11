@@ -99,9 +99,16 @@ async function checkout(c: Ctx): Promise<Response> {
     // 通道未启用/无 checkout：回落 pending，由前端轮询 /api/orders/:no 兜底（§15.4）
     return ok(c, t('pay.pending'), { data: { order_no: orderNo, status: order.status, mode: 'pending' } });
   }
-  // 外部通道可回填 provider_ref（幂等 webhook 反查用）；卡密 redeem 无 ref
+  // 外部通道可回填 provider_ref（幂等 webhook 反查用）；卡密 redeem 无 ref。
+  // 并发 checkout 时只有第一个会话能绑定成功：未绑定的会话必须丢弃（不返回给用户），
+  // 否则用户用该链接付款后 webhook 反查不到订单 —— 已扣款但永不发货。
   const ref = (result as { providerRef?: string }).providerRef;
-  if (ref) await linkProviderRef(core.db, orderNo, ref);
+  if (ref && !(await linkProviderRef(core.db, orderNo, ref))) {
+    const again = await core.cache.get<{ mode: string; url?: string; content?: string }>(ckKey);
+    if (again) return ok(c, 'ok', { data: { order_no: orderNo, status: order.status, mode: again.mode, ...(again.url ? { url: again.url } : {}), ...(again.content ? { content: again.content } : {}) } });
+    // 对方请求尚未写缓存：本次不返回未绑定会话，让前端按 pending 轮询后重试
+    return ok(c, t('pay.pending'), { data: { order_no: orderNo, status: order.status, mode: 'pending' } });
+  }
   // 24h 内复用同一会话（Stripe Checkout 会话有效期上限）；卡密态同缓存，避免重复渲染查询
   await core.cache.set(ckKey, result, 86400);
   return ok(c, 'ok', {

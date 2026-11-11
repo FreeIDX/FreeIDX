@@ -367,7 +367,7 @@ export async function loadViewer(cache: Cache, db: D1b, c: ViewerCtx): Promise<V
     const at = cookieOf(c, 'at');
     const secret = c.env.JWT_SECRET;
     if (at && secret) {
-      const p = await verifyJwt(at, secret);
+      const p = await verifyJwt(at, secret, undefined, 'at');
       if (p) {
         uid = p.uid;
         jwtTv = p.tv;

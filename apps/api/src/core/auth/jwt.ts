@@ -5,11 +5,16 @@
  * 比对复用 user:{uid} 装载查询，无额外 D1 成本）。
  */
 
+/** 令牌轨道：at=前台会话，admin_at=后台轨。两轨载荷同构，必须靠 typ 区分，否则前台令牌可当后台令牌用。 */
+export type JwtTokenType = 'at' | 'admin_at';
+
 export interface JwtPayload {
   uid: number;
   tv: number;
   iat: number;
   exp: number;
+  /** 旧版本签发的令牌没有该字段；验签侧按 expectedTyp 严格拒绝，避免跨轨复用。 */
+  typ?: JwtTokenType;
 }
 
 /** Access token TTL（秒） */
@@ -48,33 +53,45 @@ export async function signJwt(payload: JwtPayload, secret: string): Promise<stri
   return `${data}.${b64urlEnc(new Uint8Array(sig))}`;
 }
 
-/** 验签 + exp 检查；失败返回 null（不抛错，热路径零成本拒绝） */
+/** 验签 + exp 检查 + 令牌轨道校验；失败返回 null（不抛错，热路径零成本拒绝） */
 export async function verifyJwt(
   token: string,
   secret: string,
   now: number = Math.floor(Date.now() / 1000),
+  expectedTyp?: JwtTokenType,
 ): Promise<JwtPayload | null> {
   const parts = token.split('.');
   if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+  // 三段都必须符合 base64url 字符集：atob 对非法字符会抛 InvalidCharacterError，
+  // 若不预先白名单校验，畸形 cookie 会把请求打成 500（低成本 DoS/探测面）。
+  if (!parts.every((p) => /^[A-Za-z0-9_-]+$/.test(p))) return null;
   let payload: unknown;
   try {
     payload = JSON.parse(new TextDecoder().decode(b64urlDec(parts[1])));
   } catch {
     return null;
   }
-  const ok = await crypto.subtle.verify(
-    'HMAC',
-    await hmac(secret),
-    b64urlDec(parts[2]),
-    enc.encode(`${parts[0]}.${parts[1]}`),
-  );
+  let ok: boolean;
+  try {
+    ok = await crypto.subtle.verify(
+      'HMAC',
+      await hmac(secret),
+      b64urlDec(parts[2]),
+      enc.encode(`${parts[0]}.${parts[1]}`),
+    );
+  } catch {
+    return null;
+  }
   if (!ok) return null;
   const p = payload as Partial<JwtPayload>;
   if (typeof p.uid !== 'number' || typeof p.tv !== 'number' || typeof p.iat !== 'number' || typeof p.exp !== 'number') {
     return null;
   }
   if (p.exp <= now || p.iat > now + 60) return null;
-  return { uid: p.uid, tv: p.tv, iat: p.iat, exp: p.exp };
+  // 带期望轨道时严格相等：旧令牌（无 typ）一律拒绝，宁可让用户重新登录也不接受跨轨令牌。
+  if (expectedTyp && p.typ !== expectedTyp) return null;
+  if (p.typ !== undefined && p.typ !== 'at' && p.typ !== 'admin_at') return null;
+  return { uid: p.uid, tv: p.tv, iat: p.iat, exp: p.exp, ...(p.typ ? { typ: p.typ } : {}) };
 }
 
 export async function issueAccessToken(
@@ -83,5 +100,5 @@ export async function issueAccessToken(
   tokenVersion: number,
   now: number = Math.floor(Date.now() / 1000),
 ): Promise<string> {
-  return signJwt({ uid, tv: tokenVersion, iat: now, exp: now + ACCESS_TOKEN_TTL }, secret);
+  return signJwt({ uid, tv: tokenVersion, iat: now, exp: now + ACCESS_TOKEN_TTL, typ: 'at' }, secret);
 }

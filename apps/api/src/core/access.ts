@@ -120,31 +120,36 @@ export function forumListAccessFilter<T extends ForumForAccess>(
   return out;
 }
 
-/** 主题列表过滤：仅 accesson 版块过滤；置顶帖（top>0）不过滤 */
-export function threadListAccessFilter<T extends { fid: number; top: number }>(
+/**
+ * 主题列表过滤：公开版块放行，私有版块按 allowread 判定。
+ * 失败关闭：版块不在 forumlist（数据不一致/已删除）时一律过滤，绝不因元数据缺失而放行；
+ * 置顶（top>0）也不再短路——置顶只影响排序，不能突破版块可读性，否则私有版块的置顶帖会出现在
+ * 发现页/用户主页/最新评论等未按 fid 预过滤的公共列表里（并被边缘缓存放大）。
+ */
+export function threadListAccessFilter<T extends { fid: number }>(
   ctx: AccessCtx,
   rows: T[],
 ): T[] {
   return rows.filter((t) => {
     const forum = ctx.forumlist[t.fid];
-    if (!forum?.accesson) return true;
-    if (t.top > 0) return true;
+    if (!forum) return false;
+    if (!forum.accesson) return true;
     return forumAccessUser(ctx, t.fid, 'allowread');
   });
 }
 
-/** 回帖列表过滤：tid→fid/top 上下文由调用方以 Map 提供（反 N+1，免每行一查） */
+/** 回帖列表过滤：tid→fid 上下文由调用方以 Map 提供（反 N+1，免每行一查）；同上失败关闭 */
 export function postListAccessFilter<T extends { tid: number }>(
   ctx: AccessCtx,
   rows: T[],
-  threadCtx: Map<number, { fid: number; top: number }>,
+  threadCtx: Map<number, { fid: number }>,
 ): T[] {
   return rows.filter((p) => {
     const th = threadCtx.get(p.tid);
-    if (!th) return true;
+    if (!th) return false;
     const forum = ctx.forumlist[th.fid];
-    if (!forum?.accesson) return true;
-    if (th.top > 0) return true;
+    if (!forum) return false;
+    if (!forum.accesson) return true;
     return forumAccessUser(ctx, th.fid, 'allowread');
   });
 }

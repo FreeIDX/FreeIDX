@@ -33,6 +33,7 @@ jobs:
           # 版本号（git describe 最近 Tag）与提交计数都依赖全量历史
           fetch-depth: 0
       - name: 同步上游 main 与 tags
+        id: sync
         run: |
           set -euo pipefail
           git config user.name "sync-upstream[bot]"
@@ -44,6 +45,7 @@ jobs:
           UPSTREAM=$(git rev-parse upstream/main)
           if [ "$LOCAL" = "$UPSTREAM" ]; then
             echo "已与上游一致（$UPSTREAM），无需同步"
+            echo "updated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -54,9 +56,15 @@ jobs:
 
           git push origin main
           git push origin --tags
+          echo "updated=true" >> "$GITHUB_OUTPUT"
           echo "已同步到上游 $UPSTREAM，触发部署…"
 
       - name: 触发部署
+        # 仅在有更新时触发；否则每天空跑一次部署（且 workflow_dispatch 默认跳过迁移）
+        if: steps.sync.outputs.updated == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run deploy.yml --ref main
+        # GITHUB_TOKEN 的 push 不触发其他 workflow，故显式 dispatch；
+        # 必须显式 apply_migrations=true：workflow_dispatch 事件不满足 deploy.yml 里 `event_name == 'push'` 条件，
+        # 否则上游新增迁移会被跳过，出现「新代码 + 旧 schema」导致全站 500。
+        run: gh workflow run deploy.yml --ref main -f apply_migrations=true

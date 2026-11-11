@@ -86,9 +86,10 @@ export function ForumPage() {
   const contentLang = useContentLangFilter();
   const q = useQuery({
     queryKey: ['threads', fid, page, digest, orderby, curTag, contentLang],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiGet<ForumPageData>(
         `/api/forums/${fid}/threads?page=${page}${digest ? '&digest=1' : ''}&orderby=${orderby}${curTag ? `&tag=${encodeURIComponent(curTag)}` : ''}${contentLang ? `&lang=${encodeURIComponent(contentLang)}` : ''}`,
+        { signal },
       ),
     placeholderData: keepPreviousData,
   });

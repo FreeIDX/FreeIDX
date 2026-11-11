@@ -153,6 +153,7 @@ After the first deployment runs green, `freeidx-api` will appear in the Workers 
 | Name                 | Purpose                                                                    | Required                                          |
 | -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
 | `JWT_SECRET`         | Login token / CSRF signing                                                 | Yes                                               |
+| `ADMIN_JWT_SECRET`   | Separate signing key for admin-console tokens (falls back to `JWT_SECRET` when omitted) | No (recommended) |
 | `TURNSTILE_SECRET`   | Server-side CAPTCHA verification (must be paired with `TURNSTILE_SITEKEY`) | No                                                |
 | `SECRETS_MASTER_KEY` | AES-GCM master key for SMTP mailbox passwords and plugin secrets | No (omitted ⇒ derived from `JWT_SECRET`) |
 

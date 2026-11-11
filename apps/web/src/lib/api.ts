@@ -45,6 +45,10 @@ const DOWNLOAD_TIMEOUT_MS = 60_000;
 
 async function request(url: string, init?: RequestInit, timeoutMs = API_TIMEOUT_MS): Promise<Response> {
   const ctl = new AbortController();
+  // 内部 controller 只负责超时；外部 signal（React Query 的取消信号）通过 AbortSignal.any 合并，
+  // 否则路由/参数快速切换、组件卸载时旧请求无法取消，只会白等 20s 超时。
+  const outer = init?.signal;
+  const signal = outer ? AbortSignal.any([ctl.signal, outer]) : ctl.signal;
   // 只用「是否由本超时定时器中止」判定超时：页面卸载等原因的 abort 不该被误报成超时
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -52,7 +56,7 @@ async function request(url: string, init?: RequestInit, timeoutMs = API_TIMEOUT_
     ctl.abort();
   }, timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: ctl.signal });
+    return await fetch(url, { ...init, signal });
   } catch (e) {
     if (timedOut) throw new ApiTimeoutError();
     throw e;
@@ -97,9 +101,9 @@ async function sendWithCsrf<T>(doFetch: () => Promise<Response>): Promise<T> {
   return unwrap<T>(body as ApiEnvelope & { data?: T });
 }
 
-/** 信封解包（§6.1）：code<0 抛出；data 平铺返回 */
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await request(path, { credentials: 'include' });
+/** 信封解包（§6.1）：code<0 抛出；data 平铺返回；opts.signal 供 React Query 取消 */
+export async function apiGet<T>(path: string, opts?: { signal?: AbortSignal }): Promise<T> {
+  const res = await request(path, { credentials: 'include', ...(opts?.signal ? { signal: opts.signal } : {}) });
   return unwrap<T>((await envelopeOf(res)) as ApiEnvelope & { data?: T });
 }
 
@@ -109,14 +113,20 @@ function csrfToken(): string {
   return v ? decodeURIComponent(v) : '';
 }
 
-/** 写请求（T2-3 双提交）：非 GET 自动携带 X-CSRF-Token */
-export function apiSend<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, payload?: unknown): Promise<T> {
+/** 写请求（T2-3 双提交）：非 GET 自动携带 X-CSRF-Token；opts.signal 支持取消 */
+export function apiSend<T>(
+  method: 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  payload?: unknown,
+  opts?: { signal?: AbortSignal },
+): Promise<T> {
   return sendWithCsrf<T>(() =>
     request(path, {
       method,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
       body: payload === undefined ? undefined : JSON.stringify(payload),
+      ...(opts?.signal ? { signal: opts.signal } : {}),
     }),
   );
 }

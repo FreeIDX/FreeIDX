@@ -48,6 +48,8 @@ crons = ["*/5 * * * *", "0 * * * *", "1 3 * * *"]
 SITE_URL = ""
 # 密钥不入库（§13.1）：
 #   wrangler secret put JWT_SECRET      # JWT/HMAC 密钥（含 csrf 签名）
+#   wrangler secret put ADMIN_JWT_SECRET  # 可选但建议：后台轨独立签名密钥；不配则回退 JWT_SECRET
+#                                       # （两轨已用 typ 硬隔离，回退不会导致前台令牌越权进后台）
 #   （邮件无仓库密钥：发信走 HTTP 邮件 API 账号池（443 HTTPS），账号与 Key 在后台「邮件设置」配置，
 #     落 ext:email:config / ext:email:secret；README 旧文档中的 EMAIL_API_KEY 已废弃）
 #   wrangler secret put TURNSTILE_SECRET

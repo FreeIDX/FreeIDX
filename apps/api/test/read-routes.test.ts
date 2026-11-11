@@ -44,7 +44,7 @@ function baseRules(over: Partial<Record<string, unknown[] | null>> = {}): SqlRul
     { test: /FROM bbs_thread WHERE uid = \?/, rows: [T2] },
     { test: /FROM bbs_thread WHERE tid = \?/, first: DETAIL },
     /* 上一篇/下一篇（同版块 tid 邻接；UNION ALL 单语句取两条） */
-    { test: /FROM bbs_thread WHERE fid = \? AND tid [<>] \?/, rows: [] },
+    { test: /FROM bbs_thread WHERE fid = \? AND ok = 1 AND tid [<>] \?/, rows: [] },
     /* 用户页「最后活跃」（0002 后 user/routes 实时查 session 最后心跳） */
     { test: /FROM bbs_session WHERE uid = \?/, first: { last_date: 1700000002 } },
     /* 主题详情点赞计数 + 访问者态（A4/A5：bbs_like 实时 COUNT） */

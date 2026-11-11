@@ -96,15 +96,20 @@ jobs:
           sed -i -E "s|^database_id = .*|database_id = \"$DB\"|" wrangler.toml
           sed -i -E "s|^id = .*|id = \"$KV\"|" wrangler.toml
 
+          # R2 桶同样自动开通（幂等）：桶不存在时 FILES 绑定无效，附件上传 / SEO 预渲染写入会在运行时失败。
+          # 已存在时 wrangler 返回非零，用 || true 吞掉，不影响后续步骤。
+          npx wrangler r2 bucket create freeidx-files </dev/null >/dev/null 2>&1 || true
+
           if [ -n "${SITE_URL:-}" ]; then
-            case "$SITE_URL" in
-              https://[A-Za-z0-9._-]*)
-                sed -i -E "s|^SITE_URL = .*|SITE_URL = \"$SITE_URL\"|" wrangler.toml ;;
-              *)
-                echo "::error::仓库 Variable SITE_URL 需为 https:// 开头的纯域名，当前值不合法"; exit 1 ;;
-            esac
+            # 用 bash 正则做完整锚定：case 的 * 是 glob 通配符，会放行引号/分号/空格，
+            # 未转义写进 TOML 会破坏配置。
+            if [[ "$SITE_URL" =~ ^https://[A-Za-z0-9._-]+$ ]]; then
+              sed -i -E "s|^SITE_URL = .*|SITE_URL = \"$SITE_URL\"|" wrangler.toml
+            else
+              echo "::error::仓库 Variable SITE_URL 需为 https:// 开头的纯域名，当前值不合法"; exit 1
+            fi
           else
-            echo "::warning::未设置 Variable SITE_URL，沿用仓库默认 http://localhost:8787（邮件链接与 canonical 会用错域名）"
+            echo "::warning::未设置 Variable SITE_URL（wrangler.toml 保持空值，运行时回落当前请求域）；邮件链接与 canonical 将使用请求域名"
           fi
 
           echo "D1=$DB  KV=$KV"
@@ -127,16 +132,7 @@ jobs:
         working-directory: apps/api
         run: npx wrangler d1 execute freeidx --remote --file=./seed/seed.sql
 
-      - name: 构建前端
-        run: pnpm --filter @freeidx/web build
-        env:
-          # 未设置时前端不渲染人机验证组件（Turnstile.tsx:28），不影响部署
-          VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
-
-      - name: 部署 Worker（含前端静态资源）
-        working-directory: apps/api
-        run: npx wrangler deploy
-
+      # 放在部署之前：桶刚创建时就把兜底规则挂上，避免「部署成功但首个 24h 内无生命周期」的空窗。
       - name: 配置 R2 生命周期（tmp/ 前缀 1 天后过期）
         working-directory: apps/api
         run: |
@@ -149,6 +145,16 @@ jobs:
             echo "::warning::R2 生命周期配置失败，请到 Dashboard → R2 → freeidx-files → Settings → Object Lifecycle Rules 手动添加「前缀 tmp/、过期 1 天」"
           fi
 
+      - name: 构建前端
+        run: pnpm --filter @freeidx/web build
+        env:
+          # 未设置时前端不渲染人机验证组件（Turnstile.tsx:28），不影响部署
+          VITE_TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+
+      - name: 部署 Worker（含前端静态资源）
+        working-directory: apps/api
+        run: npx wrangler deploy
+
       - name: 写入运行摘要
         if: ${{ !cancelled() }}
         run: |
@@ -157,6 +163,6 @@ jobs:
             echo ""
             echo "- 站点：${SITE_URL:-https://freeidx-api.<你的子域>.workers.dev}"
             echo "- D1/KV ID 由本次构建解析并回填，仓库里保持占位值"
-            echo "- 运行时密钥（JWT_SECRET / TURNSTILE_SECRET / SECRETS_MASTER_KEY）在 Cloudflare 后台该 Worker 的 Settings → Variables and secrets 里配，本流水线不覆盖；GitHub 仓库 Secrets 里加它们是无效的"
+            echo "- 运行时密钥（JWT_SECRET / ADMIN_JWT_SECRET / TURNSTILE_SECRET / SECRETS_MASTER_KEY）在 Cloudflare 后台该 Worker 的 Settings → Variables and secrets 里配，本流水线不覆盖；GitHub 仓库 Secrets 里加它们是无效的"
             echo "- SECRETS_MASTER_KEY 可选：不配（或值非法）时自动用 JWT_SECRET 派生加密密钥，邮箱密码可直接保存；配置独立密钥时轮换 JWT_SECRET 才不会影响已存密码"
           } >> "$GITHUB_STEP_SUMMARY"

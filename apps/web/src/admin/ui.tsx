@@ -7,7 +7,7 @@
  *  E AdminPagination 分页（搜索/列表由各页组合 InlineEditGrid/Field 实现）
  * 令牌来自 globals.css 的 @theme（前后台共用），勿写死色值。
  */
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ApiError } from '../lib/api';
 import { Code } from '@freeidx/shared';
@@ -737,10 +737,14 @@ export function Modal({
  * 后台写操作成功统一走它（列表页删行后就地 Toast），失败仍用 Alert/ErrorState。
  */
 export function Toast({ text, tone = 'ok', onDone }: { text: string; tone?: 'ok' | 'warn'; onDone?: () => void }) {
+  // onDone 通常是内联函数（每次渲染新建）：放进依赖会让父组件任意重渲染都重置 3s 定时器，
+  // Toast 可能永不消失。用 ref 固定回调引用，effect 只随文案变化重挂。
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
   useEffect(() => {
-    const timer = setTimeout(() => onDone?.(), 3000);
+    const timer = setTimeout(() => onDoneRef.current?.(), 3000);
     return () => clearTimeout(timer);
-  }, [text, onDone]);
+  }, [text]);
   return (
     <div className="fixed top-4 right-4 z-[1080] flex items-center gap-2" role="status" aria-live="polite">
       <div className="flex items-center gap-2 rounded-[8px] border border-line-soft bg-surface px-4 py-[.75rem] text-sm text-ink shadow-[0_8px_24px_rgba(0,0,0,.12)]">

@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../src/index';
 import { l0Clear } from '../src/core/cache';
 import { ACCESS_TOKEN_TTL, issueAccessToken, signJwt, verifyJwt } from '../src/core/auth/jwt';
+import { issueAdminToken, readAdminToken } from '../src/core/auth/admin';
 import { ipToLong } from '../src/core/auth/session';
 import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
 
@@ -71,6 +72,21 @@ describe('JWT HS256（WebCrypto）', () => {
     const p = await verifyJwt(fresh, SECRET);
     expect(p && p.exp - p.iat).toBe(ACCESS_TOKEN_TTL);
   });
+
+  it('轨道隔离：前台 at 不能通过后台轨校验，admin_at 不能当前台令牌', async () => {
+    const at = await issueAccessToken(SECRET, 1, 7);
+    // 即使两轨共用同一 JWT_SECRET（ADMIN_JWT_SECRET 缺省回退），typ 也必须挡住跨轨复用
+    expect(await readAdminToken(at, SECRET)).toBeNull();
+    const adminAt = await issueAdminToken(SECRET, 1, 7);
+    expect(await verifyJwt(adminAt, SECRET, undefined, 'at')).toBeNull();
+    expect((await readAdminToken(adminAt, SECRET))?.uid).toBe(1);
+  });
+
+  it('畸形签名段/非法 base64url 一律返回 null，不抛 500', async () => {
+    expect(await verifyJwt('a.b.!!!', SECRET)).toBeNull();
+    expect(await verifyJwt('a.b.%%%', SECRET)).toBeNull();
+    expect(await verifyJwt('a.b', SECRET)).toBeNull();
+  });
 });
 
 describe('ipToLong', () => {
@@ -122,7 +138,7 @@ describe('双轨合并', () => {
 
   it('>30min 且 token_version 不符 → 改密吊销，游客处理', async () => {
     const now = Math.floor(Date.now() / 1000);
-    const stale = await signJwt({ uid: 1, tv: 123, iat: now - 3600, exp: now + 3600 }, SECRET);
+    const stale = await signJwt({ uid: 1, tv: 123, iat: now - 3600, exp: now + 3600, typ: 'at' }, SECRET);
     const { env } = envFor(rules());
     const me = await meOf(env, `at=${stale}`);
     expect(me).toBeNull();
@@ -130,7 +146,7 @@ describe('双轨合并', () => {
 
   it('>30min 且 token_version 相符 → 放行', async () => {
     const now = Math.floor(Date.now() / 1000);
-    const ok = await signJwt({ uid: 1, tv: USER.token_version, iat: now - 3600, exp: now + 3600 }, SECRET);
+    const ok = await signJwt({ uid: 1, tv: USER.token_version, iat: now - 3600, exp: now + 3600, typ: 'at' }, SECRET);
     const { env } = envFor(rules());
     const me = await meOf(env, `at=${ok}`);
     expect(me?.uid).toBe(1);

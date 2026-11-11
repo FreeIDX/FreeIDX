@@ -354,8 +354,7 @@ export function ThreadPage() {
   const queryKey = ['thread', tid, page];
   const q = useQuery({
     queryKey,
-    queryFn: () =>
-      apiGet<ThreadDetail>(`/api/threads/${tid}?page=${page}`),
+    queryFn: ({ signal }) => apiGet<ThreadDetail>(`/api/threads/${tid}?page=${page}`, { signal }),
     placeholderData: keepPreviousData,
   });
 
@@ -486,7 +485,9 @@ export function ThreadPage() {
           doctype: 0,
           quotepid: vars.quotepid,
           message: vars.html,
-          messageFmt: vars.html,
+          // 乐观项不写未净化 HTML：服务端写时定稿 sanitize，直接用编辑器原文注入 DOM 会绕过净化。
+          // 提交后 onSettled 以服务端真值刷新。
+          messageFmt: '',
           images: 0,
           files: 0,
           createDate: Math.floor(Date.now() / 1000),
@@ -529,8 +530,9 @@ export function ThreadPage() {
       }),
     onMutate: async (vars) => {
       await qc.cancelQueries({ queryKey });
+      // 只更新纯文本 message；messageFmt 保留服务端已净化的旧值，避免乐观阶段把未净化 HTML 直接渲染
       const prev = mutateList((list) =>
-        list.map((p) => (p.pid === vars.pid ? { ...p, message: vars.change.html, messageFmt: vars.change.html } : p)),
+        list.map((p) => (p.pid === vars.pid ? { ...p, message: vars.change.html } : p)),
       );
       return { prev };
     },

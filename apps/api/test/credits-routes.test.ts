@@ -44,7 +44,11 @@ function rules(over: Record<string, Partial<SqlRule>> = {}): SqlRule[] {
     { test: /FROM bbs_session WHERE sid/, first: (p: readonly unknown[]) => ({ uid: Number(p[0]) === 0 ? 0 : 2, last_date: now() }) },
     { test: /FROM bbs_user WHERE uid = \?/, first: () => BUYER },
     { test: /FROM bbs_group/, rows: [GROUP_ADMIN] },
-    { test: /FROM bbs_forum ORDER BY/, rows: [] },
+    // 已购清单走 threadListAccessFilter（失败关闭）：forumlist 必须包含主题所属版块 fid=1
+    {
+      test: /FROM bbs_forum ORDER BY/,
+      rows: [{ fid: 1, name: '默认版块', rank: 1, threads: 1, todayposts: 0, todaythreads: 0, brief: '', announcement: '', accesson: 0, orderby: 0, icon: 0, moduids: '', seo_title: '', seo_keywords: '' }],
+    },
     { test: /bbs_forum_access/, rows: [] },
     // —— 缓存层 ——
     { test: /SELECT v FROM bbs_cache/, first: null },

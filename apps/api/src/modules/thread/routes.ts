@@ -690,9 +690,10 @@ export function threadRoutes(): Hono<ReadEnv> {
     //   是否渲染由前台按 light.preNextThread 开关决定）
     const neighborsR = await db
       .prepare<{ tid: number; subject: string }>(
-        `SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND tid < ? ORDER BY tid DESC LIMIT 1)
+        // ok=1 必须下推：否则软删（-2）/待审（0）主题的 tid+subject 会作为「上一篇/下一篇」下发给任意访问者
+        `SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND ok = 1 AND tid < ? ORDER BY tid DESC LIMIT 1)
          UNION ALL
-         SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND tid > ? ORDER BY tid ASC LIMIT 1)`,
+         SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND ok = 1 AND tid > ? ORDER BY tid ASC LIMIT 1)`,
       )
       .bind(thread.fid, tid, thread.fid, tid)
       .all();

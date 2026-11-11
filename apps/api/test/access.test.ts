@@ -193,33 +193,26 @@ describe('三级过滤器', () => {
     expect(forumListAccessFilter(strict, 102, g)[2]).toBeUndefined();
   });
 
-  it('threadListAccessFilter：非 accesson 版块直通；置顶帖不过滤', () => {
+  it('threadListAccessFilter：非 accesson 版块直通；私有版块置顶帖同样过滤（失败关闭）', () => {
     const rows = [
       { fid: 1, top: 0 },
       { fid: 2, top: 0 },
-      { fid: 2, top: 1 }, // 版块内置顶 → 保留
-      { fid: 3, top: 3 }, // 全局置顶 → 保留
+      { fid: 2, top: 1 }, // 私有版块内置顶 → 仍须过滤，置顶不能突破可读性
+      { fid: 3, top: 3 }, // 私有版块全局置顶 → 同样过滤
+      { fid: 99, top: 0 }, // 版块不在 forumlist（数据不一致）→ 失败关闭
     ];
     const out = threadListAccessFilter(ctx(20, 0), rows);
-    expect(out).toEqual([
-      { fid: 1, top: 0 },
-      { fid: 2, top: 1 },
-      { fid: 3, top: 3 },
-    ]);
+    expect(out).toEqual([{ fid: 1, top: 0 }]);
   });
 
-  it('postListAccessFilter：按 thread 上下文过滤，缺上下文不误删', () => {
+  it('postListAccessFilter：按 thread 上下文过滤，缺上下文失败关闭', () => {
     const threadCtx = new Map([
       [11, { fid: 2, top: 0 }],
       [12, { fid: 2, top: 1 }],
       [13, { fid: 1, top: 0 }],
     ]);
     const rows = [{ tid: 11 }, { tid: 12 }, { tid: 13 }, { tid: 99 }];
-    expect(postListAccessFilter(ctx(20, 0), rows, threadCtx)).toEqual([
-      { tid: 12 },
-      { tid: 13 },
-      { tid: 99 },
-    ]);
+    expect(postListAccessFilter(ctx(20, 0), rows, threadCtx)).toEqual([{ tid: 13 }]);
   });
 });
 

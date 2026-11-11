@@ -25,13 +25,18 @@ type WebhookOutcome =
   | { handled: true; action: 'paid' | 'refunded' | 'closed' | 'ignored'; orderNo?: string }
   | { handled: false; reason: 'invalid-signature' | 'unknown-order' };
 
-/** checkout 侧回填 provider_ref（外部通道在下单拿到会话/订单号后关联到 pending 单，供 webhook 反查） */
-export async function linkProviderRef(db: D1b, orderNo: string, providerRef: string): Promise<void> {
-  if (!providerRef) return;
-  await db
+/**
+ * checkout 侧回填 provider_ref（外部通道在下单拿到会话/订单号后关联到 pending 单，供 webhook 反查）。
+ * 返回是否真正写入：并发 checkout 时只有第一个会话能绑定，调用方据此丢弃未绑定的会话，
+ * 否则用户可能拿到一笔 webhook 永远反查不到的支付链接。
+ */
+export async function linkProviderRef(db: D1b, orderNo: string, providerRef: string): Promise<boolean> {
+  if (!providerRef) return false;
+  const r = await db
     .prepare('UPDATE bbs_order SET provider_ref = ? WHERE order_no = ? AND status = ? AND provider_ref = ?')
     .bind(providerRef, orderNo, 'pending', '')
     .run();
+  return Number(r.meta?.changes ?? 0) > 0;
 }
 
 /**
@@ -87,7 +92,7 @@ export async function applyProviderEvent(
       }
       // 非法迁移（事件重放/单已被对账关单）不得抛错：抛错会让 provider 重试风暴并丢失 ack 语义
       try {
-        await refundOrder(core.db, order.orderNo, ts);
+        await refundOrder(core.db, order.orderNo, ts, undefined, core.cache);
         return { handled: true, action: 'refunded', orderNo: order.orderNo };
       } catch (e) {
         console.warn(`[payment] ${t0('pay.logRefundIgnored', { orderNo: order.orderNo, err: e instanceof Error ? e.message : String(e) })}`);
@@ -160,10 +165,25 @@ export async function reconcilePending(
   env: Env | undefined,
   now: number,
 ): Promise<ReconcileReport> {
-  const orders = await listPendingForReconcile(core.db, now - 86400);
+  // 窗口取 72h（与 sweepStaleOrders 的 <72h 正好衔接）：此前用 24h，导致 24~72h 的掉单
+  // 两条 cron 都取不到，形成 48 小时无人复核的空窗。
+  const orders = await listPendingForReconcile(core.db, now - STALE_ORDER_TTL);
   const report: ReconcileReport = { scanned: orders.length, recovered: 0, failed: 0 };
   for (const o of orders) {
+    // 已落账未履约：无需再问 provider（webhook 已 ack，重放不会来），直接补发权益。
+    // 失败只记日志并保留 paid，下一轮继续重试，绝不中断整轮对账。
+    if (o.status === OrderStatus.PAID) {
+      try {
+        await fulfillOrder(core, o.orderNo, now);
+        report.recovered++;
+      } catch (e) {
+        console.error(`[payment] ${t0('pay.logReconFulfillFailed', { orderNo: o.orderNo, err: e instanceof Error ? e.message : String(e) })}`);
+        report.failed++;
+      }
+      continue;
+    }
     const provider = getProvider(o.provider);
+    // 卡密等无 provider 侧查询能力的通道：pending 单无法自动复核，跳过（已落账的走上面的 paid 分支）
     if (!provider?.queryOrder) continue;
     const cfg = await resolveProviderConfig(core.cache, core.db, env, o.provider);
     let state: 'pending' | 'paid' | 'failed';
@@ -175,9 +195,16 @@ export async function reconcilePending(
     }
     if (state === 'paid') {
       const ref = o.providerRef || `recon:${o.orderNo}`;
-      await linkProviderRef(core.db, o.orderNo, ref);
-      const after = await markPaid(core.db, o.orderNo, ref, now);
       // 单已被其它路径推进到终态（关闭/退款）：跳过履约、不计 recovered，避免抛错中断整轮对账。
+      let after: Awaited<ReturnType<typeof markPaid>>;
+      try {
+        await linkProviderRef(core.db, o.orderNo, ref);
+        after = await markPaid(core.db, o.orderNo, ref, now);
+      } catch (e) {
+        console.error(`[payment] markPaid failed order=${o.orderNo}:`, e instanceof Error ? e.message : e);
+        report.failed++;
+        continue;
+      }
       if (after.status !== OrderStatus.PAID && after.status !== OrderStatus.FULFILLED) continue;
       try {
         await fulfillOrder(core, o.orderNo, now);
@@ -188,8 +215,14 @@ export async function reconcilePending(
         report.failed++;
       }
     } else if (state === 'failed') {
-      await closeOrder(core.db, o.orderNo);
-      report.failed++;
+      // 单子状态可能已被并发事件推进到 paid/closed，closeOrder 会抛非法迁移；
+      // 逐单兜住，避免一个单子异常让本轮剩余订单全部跳过。
+      try {
+        await closeOrder(core.db, o.orderNo);
+        report.failed++;
+      } catch (e) {
+        console.warn(`[payment] closeOrder skipped order=${o.orderNo}:`, e instanceof Error ? e.message : e);
+      }
     }
   }
   return report;
@@ -273,6 +306,6 @@ export async function issueRefund(
     const r = await provider.refund(order, cfg);
     if (!r.ok) return { ok: false, reason: r.reason ?? 'order.providerRefundFailed' };
   }
-  const updated = await refundOrder(core.db, orderNo, ts, t);
+  const updated = await refundOrder(core.db, orderNo, ts, t, core.cache);
   return { ok: true, order: updated };
 }

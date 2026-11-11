@@ -4,7 +4,7 @@
  * 引用回复：父级传 quoted 摘要展示，提交时自行带 quotepid。
  * turnstile=1 时在提交按钮上方挂人机验证挂件（发帖/回帖用）；token 一次性，提交后一律重挂换发。
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Image as TiptapImage } from '@tiptap/extension-image';
@@ -104,6 +104,12 @@ export function Composer(props: ComposerProps) {
     onChangeRef.current?.({ html: editor ? editor.getHTML() : '', attachAids: list.map((a) => a.aid) });
   };
 
+  /**
+   * TipTap 的 `content` 只在挂载时读取一次：同一实例被复用到另一篇帖子（编辑态跨 tid 切换、
+   * 服务端刷新了 op.message）时，编辑器会继续显示旧内容，提交时把旧正文写到新 pid 上。
+   * 这里监听 initialHtml 变化显式 setContent（emitUpdate:false 防止回调污染父级状态）。
+   */
+  const appliedHtmlRef = useRef(initialHtml);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
@@ -114,8 +120,17 @@ export function Composer(props: ComposerProps) {
     editorProps: {
       attributes: { class: 'min-h-[8rem] px-3 py-2 text-sm leading-6 text-foreground focus:outline-none break-words post-body' },
     },
-    onUpdate: ({ editor: e }) => emit(e, attachRef.current),
+    onUpdate: ({ editor: e }) => {
+      appliedHtmlRef.current = e.getHTML();
+      emit(e, attachRef.current);
+    },
   });
+
+  useEffect(() => {
+    if (!editor || initialHtml === appliedHtmlRef.current) return;
+    appliedHtmlRef.current = initialHtml;
+    editor.commands.setContent(initialHtml, { emitUpdate: false });
+  }, [editor, initialHtml]);
 
   const insertLink = () => {
     if (!editor) return;
@@ -123,8 +138,10 @@ export function Composer(props: ComposerProps) {
       editor.chain().focus().unsetLink().run();
       return;
     }
-    const url = window.prompt(t('enter_link_url'), 'https://');
+    const url = window.prompt(t('enter_link_url'), 'https://')?.trim();
     if (!url) return;
+    // 协议白名单：只接受 http(s) 与站内绝对路径，阻断 javascript:/data: 等可执行伪协议
+    if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) return;
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
     emit(editor, attachRef.current);
   };
