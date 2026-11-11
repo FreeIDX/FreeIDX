@@ -40,6 +40,7 @@ function NavItem({
   onClick,
   compact,
   icon,
+  iconUrl,
 }: {
   to: string;
   label: string;
@@ -47,8 +48,10 @@ function NavItem({
   external?: boolean;
   onClick?: () => void;
   compact?: boolean;
-  /** 首位固定入口（首页/发现/排行）带图标；后台「导航栏设置」里给自定义项配了图标时同样生效 */
+  /** 首位固定入口（首页/发现/排行）带内置图标；后台「导航栏设置」里配了内置图标名的自定义项同样生效 */
   icon?: IconName;
+  /** 后台上传的自定义图标图（后台「导航栏设置」逐项上传，/files/site/nav/…）；优先于内置图标 */
+  iconUrl?: string;
 }) {
   const cls = cx(
     'flex items-center gap-1.5 whitespace-nowrap transition-colors',
@@ -57,8 +60,15 @@ function NavItem({
   );
   const inner = (
     <>
-      {/* 自定义图标优先；没配图标时，外部链接才补外链小图标（两个一起画会太挤） */}
-      {icon ? (
+      {/* 上传的图标图优先，其次内置图标名；都没有时，外部链接才补外链小图标（两个一起画会太挤） */}
+      {iconUrl ? (
+        <img
+          src={iconUrl}
+          alt=""
+          aria-hidden="true"
+          className={cx('shrink-0 object-contain', compact ? 'size-3.5' : 'size-[17px]', active ? 'opacity-100' : 'opacity-80')}
+        />
+      ) : icon ? (
         <Icon
           name={icon}
           className={cx('shrink-0', compact ? 'size-3.5' : 'size-[17px]', active ? 'opacity-100' : 'opacity-80')}
@@ -482,6 +492,9 @@ export function Layout({ children }: { children?: ReactNode }) {
 
   /* 顶栏导航与一级版块均为派生数据：Layout 在每个页面常驻、路由与 store 变化都会重渲染，
      故按来源引用记忆化；原 topForums 用 filter + some 为 O(版块数²)，改为 Set 查找 O(n)。 */
+  /* 「未配置」与「已配置但全部停用」必须分开：前者回退版块列表（默认导航），后者按配置渲染（可能 0 项）。
+     若只看过滤后的数量，把唯一一项停用后前台会突然回退成一堆一级版块，与后台所见完全不一致。 */
+  const navConfigured = (setting?.nav?.length ?? 0) > 0;
   const customNav = useMemo(
     () =>
       (setting?.nav ?? []).filter((n) => n.on && n.label && n.url).sort((a, b) => a.sort - b.sort),
@@ -505,20 +518,26 @@ export function Layout({ children }: { children?: ReactNode }) {
   const rankActive = pathname.startsWith('/rank');
   /* 自定义导航项：label 是默认名称，命中当前语言的 labels 则覆盖（后台「导航栏设置」可配）；
      icon 同样来自后台配置，渲染前按图标集白名单校验（历史数据/改名后的无效名 = 只显示名称） */
-  const forumItems =
-    customNav.length > 0
-      ? customNav.map((n) => ({
-          ...n,
-          label: lname(n.label, n.labels),
-          icon: isIconName(n.icon) ? n.icon : undefined,
-        }))
-      : topForums.map((f) => ({
-          label: fname(f),
-          url: `/forum/${f.fid}`,
-          sort: f.rank,
-          on: 1 as const,
-          icon: undefined as IconName | undefined,
-        }));
+  const forumItems = navConfigured
+    ? customNav.map((n) => ({
+        ...n,
+        label: lname(n.label, n.labels),
+        icon: isIconName(n.icon) ? n.icon : undefined,
+        /* 上传的图标图：只认站内上传目录（历史数据/手改数据里的外链一律不渲染，避免坏图与外链） */
+        iconUrl: /^\/files\/site\/nav\/[A-Za-z0-9_-]+\.(?:png|jpe?g|gif|webp|bmp)$/.test(
+          String(n.iconUrl ?? ''),
+        )
+          ? n.iconUrl
+          : undefined,
+      }))
+    : topForums.map((f) => ({
+        label: fname(f),
+        url: `/forum/${f.fid}`,
+        sort: f.rank,
+        on: 1 as const,
+        icon: undefined as IconName | undefined,
+        iconUrl: undefined as string | undefined,
+      }));
   const contact: IconName[] = ['message', 'comment', 'envelope'];
   /** 发现页显示名（可后台自定义；缺省回落 i18n「发现」） */
   const discLabel = light.discPageTitle || t('discovery');
@@ -571,6 +590,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                     to={f.url}
                     label={f.label}
                     icon={f.icon}
+                    iconUrl={f.iconUrl}
                     active={
                       pathname === f.url ||
                       pathname.startsWith(`${f.url}/`) ||
@@ -703,6 +723,7 @@ export function Layout({ children }: { children?: ReactNode }) {
                     to={f.url}
                     label={f.label}
                     icon={f.icon}
+                    iconUrl={f.iconUrl}
                     active={pathname.startsWith(f.url)}
                     compact
                     external={/^https?:\/\//i.test(f.url)}

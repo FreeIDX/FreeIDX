@@ -168,10 +168,15 @@ function parseNavItems(raw: unknown): NavItem[] | undefined {
     const labels = normNameI18n(o.labels);
     /* 图标名（可选）：只在非空时落字段；是否可用由前台按图标集白名单判定 */
     const icon = String(o.icon ?? '').trim();
+    /* 上传的自定义图标直链（可选）：只认本站 site/nav/ 前缀（与后台保存白名单同口径），其余丢弃 */
+    const iconUrl = String(o.iconUrl ?? '').trim();
     out.push({
       label,
       ...(Object.keys(labels).length ? { labels } : {}),
       ...(icon ? { icon } : {}),
+      ...(/^\/files\/site\/nav\/[A-Za-z0-9_-]+\.(?:png|jpe?g|gif|webp|bmp)$/.test(iconUrl)
+        ? { iconUrl }
+        : {}),
       url,
       sort: Number(o.sort ?? 0) || 0,
       on: o.on === 0 || o.on === '0' ? 0 : 1,

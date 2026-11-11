@@ -3,6 +3,7 @@
  *  GET /api/admin/setting   返回存储态（snake 键，供后台表单回显/编辑）
  *  PUT  /api/admin/setting   白名单合并写回 + 失效 L1 'setting'（前台 bootstrap/读路径下次即生效，零部署）
  *  PUT/DELETE /api/admin/setting/logo|favicon   站点 Logo / Favicon 上传与恢复（base64 → R2 site/，写 kv setting logo_url/favicon_url）
+ *  PUT /api/admin/setting/nav-icon             导航项自定义图标上传（base64 → R2 site/nav/，只回直链，由 nav 项的 iconUrl 保存）
  *  runlevel 闸门中间件每请求直读 kv 'setting'（不走缓存），故改 runlevel 即时影响全站访问控制。
  *  挂载在 adminGuard 之后（app.use('/api/admin/*') 已先注册，守卫覆盖本模块所有路由）。
  */
@@ -80,6 +81,11 @@ const BOOL_KEYS = new Set([
 ]);
 const asBool01 = (v: unknown): number =>
   v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0;
+/**
+ * 导航项自定义图标直链（「导航栏设置」上传）：只认 site/nav/ 下的本站文件。
+ * 保存时用它做白名单校验 —— 后台不提供「填链接」入口，外链也不会被写进 nav。
+ */
+const NAV_ICON_URL_RE = /^\/files\/(site\/nav\/[A-Za-z0-9_-]+\.(?:png|jpe?g|gif|webp|bmp))$/;
 
 function validate(
   input: Record<string, unknown>,
@@ -121,8 +127,18 @@ function validate(
         const label = String(o.label ?? '').trim();
         const url = String(o.url ?? '').trim();
         if (!label || !url) continue;
+        /* labels/icon/iconUrl 必须原样透传：丢一个字段，后台配的多语言名称与图标保存后即消失，
+           前台（loaders.parseNavItems）自然永远读不到，表现为「设了不生效」。 */
+        const labels = normNameI18n(o.labels);
+        const icon = String(o.icon ?? '').trim();
+        /* 自定义图标只认本系统「导航项图标上传」落库的 site/nav/ 直链：外部 URL 一律丢弃
+           （顶栏图标由站长上传维护，避免外链失效/被当作图床） */
+        const iconFile = NAV_ICON_URL_RE.exec(String(o.iconUrl ?? '').trim())?.[1] ?? '';
         items.push({
           label,
+          ...(Object.keys(labels).length ? { labels } : {}),
+          ...(icon ? { icon } : {}),
+          ...(iconFile ? { iconUrl: `/files/${iconFile}` } : {}),
           url,
           sort: Number(o.sort ?? 0) || 0,
           on: o.on === 0 || o.on === '0' ? 0 : 1,
@@ -303,6 +319,21 @@ export function adminRoutes(): Hono<ReadEnv> {
   app.put('/api/admin/setting/favicon', (c) => putSiteIcon(c, 'favicon'));
   app.delete('/api/admin/setting/logo', (c) => deleteSiteIcon(c, 'logo'));
   app.delete('/api/admin/setting/favicon', (c) => deleteSiteIcon(c, 'favicon'));
+
+  /**
+   * PUT /api/admin/setting/nav-icon —— 导航项自定义图标上传（base64 提交，仅落 R2 不写 setting）。
+   * 与 logo/favicon 的区别：图标属于「某一导航项」，故返回直链由前端写进该行的 iconUrl，
+   * 随 PUT /api/admin/setting 的 nav 一起保存（未保存的直链就是孤儿对象，由存储维护按 site/ 前缀回收）。
+   * key 带随机段 ⇒ 同一项反复更换不会覆盖旧文件，线上已保存的顶栏图标不会被换图牵连。
+   */
+  app.put('/api/admin/setting/nav-icon', async (c) => {
+    const t = c.get('t');
+    const input = await readJson(c);
+    const { bytes, ext } = decodeSiteIcon(String(input.data ?? ''), t, false);
+    const key = `site/nav/${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
+    await filesBucket(c.env).put(key, bytes, { httpMetadata: { contentType: SITE_ICON_MIME[ext] } });
+    return ok(c, t('admin.iconUpdated'), { data: { icon_url: `/files/${key}` } });
+  });
 
   return app;
 }

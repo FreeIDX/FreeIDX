@@ -293,16 +293,32 @@ function idOfKey(key: string): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** site/ 前缀：setting 里 logo_url / favicon_url 指向的 key 即「在用」 */
+/** site/ 前缀：setting 里 logo_url / favicon_url 以及「导航栏设置」各项 iconUrl 指向的 key 即「在用」 */
 async function siteKeysInUse(db: D1b): Promise<Set<string>> {
   const row = await db.prepare<{ v: string }>("SELECT v FROM bbs_kv WHERE k = 'setting'").first<{ v: string }>();
   if (!row) return new Set();
   try {
     const raw = JSON.parse(row.v) as Record<string, unknown>;
     const out = new Set<string>();
-    for (const field of ['logo_url', 'favicon_url']) {
-      const m = /\/files\/(site\/[^\s?#]+)/.exec(String(raw[field] ?? ''));
+    const add = (v: unknown): void => {
+      const m = /\/files\/(site\/[^\s?#]+)/.exec(String(v ?? ''));
       if (m) out.add(m[1]!);
+    };
+    for (const field of ['logo_url', 'favicon_url']) add(raw[field]);
+    /* 导航项上传的图标同属 site/ 前缀（site/nav/…）：不计入「在用」会被当孤儿删掉，
+       线上顶栏图标随即 404。nav 存 JSON 字符串（也可能是数组），两种都兼容。 */
+    let nav: unknown = raw.nav;
+    if (typeof nav === 'string') {
+      try {
+        nav = JSON.parse(nav);
+      } catch {
+        nav = null;
+      }
+    }
+    if (Array.isArray(nav)) {
+      for (const it of nav) {
+        if (it && typeof it === 'object') add((it as Record<string, unknown>).iconUrl);
+      }
     }
     return out;
   } catch {

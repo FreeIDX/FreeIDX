@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { app } from '../src/index';
 import { Code } from '@freeidx/shared';
-import { fakeD1Sql, fakeKv, type SqlRule } from './helpers/fake-d1';
+import { fakeD1Sql, fakeKv, fakeR2, type SqlRule } from './helpers/fake-d1';
 import { l0Clear } from '../src/core/cache';
 import { issueAdminToken } from '../src/core/auth/admin';
 
@@ -64,6 +64,73 @@ describe('站点设置后台（T3-4 DoD）', () => {
     expect(written.runlevel).toBe(3);
     expect(written.user_create_on).toBe(1); // bool → 0/1
     expect(written.custom_ext_keep).toBe('yes'); // 非白名单键保留
+  });
+
+  it('PUT nav：归一化为 JSON 字符串，labels/icon/iconUrl 原样保留（否则后台保存后多语言名与图标消失）', async () => {
+    const { env, calls } = makeEnv(rules());
+    const res = await app.request(
+      '/api/admin/setting',
+      {
+        method: 'PUT',
+        headers: { cookie: `admin_at=${await token()}; csrf=t`, 'content-type': 'application/json', 'x-csrf-token': 't' },
+        body: JSON.stringify({
+          nav: JSON.stringify([
+            { label: '测试', labels: { 'zh-cn': '测试', 'en-us': 'Test', 'xx-xx': 'nope' }, icon: 'home', iconUrl: '/files/site/nav/a1b2c3.png', url: '/forum/1', sort: 0, on: 1 },
+            { label: '停用项', url: '/new', sort: 1, on: 0, iconUrl: 'https://cdn.example.com/x.png' }, // 外链图标 → 丢弃
+            { label: '', url: '/drop' }, // 缺名称 → 丢弃
+            { label: '缺链接', url: '' }, // 缺链接 → 丢弃
+          ]),
+        }),
+      },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    const written = JSON.parse(String(calls.find((c) => /REPLACE INTO bbs_kv/.test(c.sql))?.params[1])) as Record<string, unknown>;
+    const nav = JSON.parse(String(written.nav)) as Record<string, unknown>[];
+    expect(nav).toHaveLength(2);
+    expect(nav[0]).toMatchObject({ label: '测试', icon: 'home', iconUrl: '/files/site/nav/a1b2c3.png', url: '/forum/1', sort: 0, on: 1 });
+    expect(nav[0]!.labels).toEqual({ 'zh-cn': '测试', 'en-us': 'Test' }); // 不支持语言被剔除
+    expect(nav[1]).toMatchObject({ label: '停用项', url: '/new', on: 0 }); // 停用项保留，不加默认 icon/labels
+    expect(nav[1]!.icon).toBeUndefined();
+    expect(nav[1]!.labels).toBeUndefined();
+    expect(nav[1]!.iconUrl).toBeUndefined(); // 只收本站上传目录的直链
+  });
+
+  it('PUT nav-icon：上传的图片只落 R2 site/nav/ 并回直链，不写 setting', async () => {
+    const { db, calls } = fakeD1Sql(rules());
+    const r2 = fakeR2();
+    const env = { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: r2 };
+    const res = await app.request(
+      '/api/admin/setting/nav-icon',
+      {
+        method: 'PUT',
+        headers: { cookie: `admin_at=${await token()}; csrf=t`, 'content-type': 'application/json', 'x-csrf-token': 't' },
+        body: JSON.stringify({ data: 'data:image/png;base64,iVBORw0KGgo=' }),
+      },
+      env as never,
+    );
+    const body = await jsonOf(res);
+    expect(body.code).toBe(Code.OK);
+    const url = String((body.data as Record<string, unknown>).icon_url);
+    expect(url).toMatch(/^\/files\/site\/nav\/[a-f0-9]+\.png$/);
+    expect(r2.store.has(url.replace('/files/', ''))).toBe(true);
+    // 图标直链由「导航栏设置」随 nav 保存，上传接口本身不碰 setting
+    expect(calls.some((c) => /REPLACE INTO bbs_kv/.test(c.sql))).toBe(false);
+  });
+
+  it('PUT nav-icon：非图片 data URL → VALIDATION_ERROR', async () => {
+    const { db } = fakeD1Sql(rules());
+    const env = { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: fakeR2() };
+    const res = await app.request(
+      '/api/admin/setting/nav-icon',
+      {
+        method: 'PUT',
+        headers: { cookie: `admin_at=${await token()}; csrf=t`, 'content-type': 'application/json', 'x-csrf-token': 't' },
+        body: JSON.stringify({ data: 'https://example.com/icon.png' }),
+      },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
   });
 
   it('PUT：runlevel 越界 → VALIDATION_ERROR', async () => {

@@ -359,6 +359,12 @@ export interface NavItem {
    * 空/缺省 = 不显示图标（外部链接仍显示外链小图标）。
    */
   icon?: string;
+  /**
+   * 自定义图标直链（可选）：后台「导航栏设置」上传图片后由服务端落 R2（`site/nav/{随机段}.{ext}`），
+   * 本字段只保存这条站内直链（服务端白名单校验，不收外部 URL）。
+   * 前台优先渲染这张图，其次才回退 `icon` 内置图标；空/缺省 = 不显示图标。
+   */
+  iconUrl?: string;
   /** 链接目标：站内路径（/forum/{fid}、/thread/{tid}、/new 等）或完整 URL */
   url: string;
   /** 排序（小在前） */
