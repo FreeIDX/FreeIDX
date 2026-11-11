@@ -166,9 +166,12 @@ function parseNavItems(raw: unknown): NavItem[] | undefined {
     if (!label || !url) continue;
     /* 名称多语言（与版块名同结构）：只保留受支持语言与非空值；空映射不落字段 */
     const labels = normNameI18n(o.labels);
+    /* 图标名（可选）：只在非空时落字段；是否可用由前台按图标集白名单判定 */
+    const icon = String(o.icon ?? '').trim();
     out.push({
       label,
       ...(Object.keys(labels).length ? { labels } : {}),
+      ...(icon ? { icon } : {}),
       url,
       sort: Number(o.sort ?? 0) || 0,
       on: o.on === 0 || o.on === '0' ? 0 : 1,

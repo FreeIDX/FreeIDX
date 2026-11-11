@@ -3,6 +3,7 @@
  * 数据存 kv setting 的 nav 键（PUT /api/admin/setting 白名单内，提交 NavItem[] 的 JSON 字符串），
  * 前台 bootstrap → useAuth().setting.nav 读取；清空保存 = 恢复默认导航（首页 + 版块列表）。
  * 每项可链接：版块（/forum/{fid}，下拉选）/ 文章（/thread/{tid}，填主题 ID）/ 自定义地址（站内路径或完整 URL）。
+ * 每项可配内置图标（从 components/icons.tsx 的白名单里挑，前台渲染同一套 SVG，见 IconPickerModal）。
  * 未配置时预填前台顶栏当前实际显示的默认版块项（与 Layout.tsx 版块回落同口径），
  * 使「首页顶栏里看到的项目」在后台直接可见可改，无需先空白新建。
  */
@@ -27,12 +28,16 @@ import {
   cx,
 } from '../ui';
 import { NameI18nModal } from '../NameI18nModal';
+import { IconPickerModal } from '../IconPickerModal';
+import { Icon, isIconName } from '../../components/icons';
 
 /** 行编辑态：type 只为录入辅助，保存时折算成 url */
 interface NavRow {
   label: string;
   /** 名称多语言：locale → 名称；空 = 未配置，前台回退 label */
   labels: Record<string, string>;
+  /** 内置图标名（空 = 不显示图标；只在图标集白名单内的名字才会被前台渲染） */
+  icon: string;
   type: 'forum' | 'thread' | 'custom';
   fid: string;
   tid: string;
@@ -48,6 +53,7 @@ function toRow(it: NavItem): NavRow {
   return {
     label: String(it.label ?? ''),
     labels: it.labels ?? {},
+    icon: String(it.icon ?? ''),
     type: fm ? 'forum' : tm ? 'thread' : 'custom',
     fid: fm ? fm[1]! : '',
     tid: tm ? tm[1]! : '',
@@ -64,10 +70,11 @@ function toItem(r: NavRow, i: number): NavItem {
       : r.type === 'thread' && r.tid
         ? `/thread/${r.tid}`
         : r.url.trim();
-  /* labels 为空时不落字段（与「未配置」同义，避免把空对象写进 kv） */
+  /* labels 为空时不落字段（与「未配置」同义，避免把空对象写进 kv）；图标同理：未选不落字段 */
   return {
     label: r.label.trim(),
     ...(Object.keys(r.labels).length ? { labels: r.labels } : {}),
+    ...(r.icon ? { icon: r.icon } : {}),
     url,
     sort: i,
     on: r.on ? 1 : 0,
@@ -88,6 +95,8 @@ export function NavBarSettingPage() {
     name: string;
     value: Record<string, string>;
   } | null>(null);
+  /** 图标选择弹窗：记录正在编辑的行号（null = 关闭） */
+  const [iconEdit, setIconEdit] = useState<number | null>(null);
 
   useEffect(() => {
     if (!q.data || rows) return;
@@ -147,7 +156,7 @@ export function NavBarSettingPage() {
   const add = () =>
     setRows((rs) => [
       ...(rs ?? []),
-      { label: '', labels: {}, type: 'custom', fid: '', tid: '', url: '', on: true },
+      { label: '', labels: {}, icon: '', type: 'custom', fid: '', tid: '', url: '', on: true },
     ]);
 
   /* 未预填（= 已保存过自定义导航）且有条目 → 显示已配置计数；预填态提示「未配置」 */
@@ -160,7 +169,7 @@ export function NavBarSettingPage() {
         title={t('nav_setting_title', '前台顶部导航栏')}
         footer={t(
           'nav_setting_hint',
-          '导航项可链接到版块、文章或自定义地址；一条都不保留（清空保存）时前台恢复默认导航（首页 + 版块列表）。链接类型选「版块」从下拉选择，选「文章」填主题 ID，选「自定义」填站内路径或完整网址。',
+          '导航项可链接到版块、文章或自定义地址，并可配一个内置图标（显示在名称左侧）；一条都不保留（清空保存）时前台恢复默认导航（首页 + 版块列表）。链接类型选「版块」从下拉选择，选「文章」填主题 ID，选「自定义」填站内路径或完整网址。',
         )}
       >
         {save.flash && <Alert tone={save.flash.tone}>{save.flash.text}</Alert>}
@@ -186,7 +195,7 @@ export function NavBarSettingPage() {
             const i18nCount = Object.keys(r.labels ?? {}).length;
             return (
               <div key={i} className="rounded-[6px] border border-line-soft p-2.5">
-                {/* 单行排布：名称 → 语言 → 链接类型 → 目标 → 右侧开关/排序/删除。
+                {/* 单行排布：名称 → 图标 → 语言 → 链接类型 → 目标 → 右侧开关/排序/删除。
                     控件基础样式自带 w-full（Tailwind v4 中 .w-full 排在 .w-[..] 之后，覆盖行内定宽），
                     故宽度一律由定宽包裹层锁定，与 CardAdminPage 同口径。 */}
                 <div className="flex flex-wrap items-center gap-2">
@@ -199,6 +208,20 @@ export function NavBarSettingPage() {
                       onChange={(e) => set(i, { label: e.target.value })}
                     />
                   </div>
+                  {/* 图标：只显示图形（已选=该图标，未选=占位），名称与提示走 title/aria */}
+                  <Button
+                    variant="default"
+                    className="w-10"
+                    aria-label={t('nav_item_icon_title', '导航项图标')}
+                    title={isIconName(r.icon) ? r.icon : t('nav_item_icon_none', '无图标')}
+                    onClick={() => setIconEdit(i)}
+                  >
+                    {isIconName(r.icon) ? (
+                      <Icon name={r.icon} className="size-4" />
+                    ) : (
+                      <Icon name="image" className="size-4 opacity-50" />
+                    )}
+                  </Button>
                   {/* 名称多语言：前台按站点语言取词，未填写的语言回退默认名称 */}
                   <Button
                     variant="default"
@@ -331,6 +354,16 @@ export function NavBarSettingPage() {
           setI18nEdit(null);
         }}
         onClose={() => setI18nEdit(null)}
+      />
+
+      <IconPickerModal
+        open={iconEdit !== null}
+        value={iconEdit === null ? '' : (rows[iconEdit]?.icon ?? '')}
+        onPick={(name) => {
+          if (iconEdit !== null) set(iconEdit, { icon: name });
+          setIconEdit(null);
+        }}
+        onClose={() => setIconEdit(null)}
       />
     </div>
   );

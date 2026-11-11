@@ -175,6 +175,14 @@ const P = {
 
 export type IconName = keyof typeof P;
 
+/** 全部图标名（后台图标选择器用；顺序沿用上方定义顺序，便于按语义浏览） */
+export const ICON_NAMES = Object.keys(P) as IconName[];
+
+/** 运行时白名单校验：来自后台配置/接口的图标名不可信，未知名称一律按「无图标」处理 */
+export function isIconName(v: unknown): v is IconName {
+  return typeof v === 'string' && v !== '' && Object.prototype.hasOwnProperty.call(P, v);
+}
+
 export function Icon({ name, className = 'size-4', title, ...rest }: { name: IconName; title?: string } & SVGProps<SVGSVGElement>) {
   return (
     <svg

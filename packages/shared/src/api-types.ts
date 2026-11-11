@@ -353,6 +353,12 @@ export interface NavItem {
   label: string;
   /** 名称多语言：locale → 名称（与版块名 name_i18n 同一结构，前台按当前界面语言取词） */
   labels?: Record<string, string>;
+  /**
+   * 图标名（可选）：取自前台图标集 `components/icons.tsx` 的语义名（如 `flame`、`tag`）。
+   * 前台渲染前会做白名单校验，未知名称静默忽略（只显示名称），不会白屏；
+   * 空/缺省 = 不显示图标（外部链接仍显示外链小图标）。
+   */
+  icon?: string;
   /** 链接目标：站内路径（/forum/{fid}、/thread/{tid}、/new 等）或完整 URL */
   url: string;
   /** 排序（小在前） */
