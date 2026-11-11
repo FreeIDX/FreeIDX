@@ -16,6 +16,7 @@ const SETTING = JSON.stringify({
   runlevel: 5, sitename: 'FreeIDX', brief: 'b', url: 'http://localhost', kw: '', desc: '',
   user_create_on: 1, user_create_email_on: 0, user_resetpw_on: 1,
   forum_orderby: 0, update_views_on: 1, upload_max_size: 1048576, lang: 'zh-cn',
+  favicon_url: '/files/site/favicon.png?v=1',
 });
 const GUEST_GROUP = {
   gid: 0, name: '游客组', creditsfrom: 0, creditsto: 0,
@@ -143,14 +144,27 @@ describe('边缘缓存：游客只读接口', () => {
     expect(edge.entries.size).toBe(0);
   });
 
-  it('首访（尚无 csrf Cookie）穿透并签发 Cookie，第二次请求起才参与缓存', async () => {
-    const first = await hit('/api/threads', { cookie: '_ga=1' });
-    expect(first.res.headers.get('x-edge-cache')).toBeNull();
-    expect(first.res.headers.get('set-cookie')).toContain('csrf=');
-    expect(edge.entries.size).toBe(0); // 带 Set-Cookie 的响应不入边缘缓存
+  it('首访（尚无 csrf Cookie）：冷缓存穿透签发 Cookie；缓存就位后 HIT 并补签，不重复签发', async () => {
+    // 冷缓存 + 无 csrf：参与读取但 MISS，穿透整条链路由 csrf 中间件签发；带 Set-Cookie 的响应不入缓存
+    const cold = await hit('/api/threads', { cookie: '_ga=1' });
+    expect(cold.res.headers.get('x-edge-cache')).toBeNull();
+    expect(cold.res.headers.get('set-cookie')).toContain('csrf=');
+    expect(edge.entries.size).toBe(0);
 
+    // 缓存就位（由持 csrf 的请求回填）
     await hit('/api/threads');
     expect(edge.entries.size).toBe(1);
+
+    // 真首访（无 csrf Cookie）：HIT 且在响应上补签 csrf（与 csrf 中间件 GET 分支同口径），不再冷穿透 D1
+    const firstVisit = await hit('/api/threads', { cookie: '_ga=1' }, envFor());
+    expect(firstVisit.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(firstVisit.res.headers.get('set-cookie')).toContain('csrf=');
+    expect(firstVisit.source.calls.length).toBe(0);
+
+    // 已持 csrf 的请求不重复签发
+    const again = await hit('/api/threads', {}, envFor());
+    expect(again.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(again.res.headers.get('set-cookie')).toBeNull();
   });
 
   it('路由抛错（主题不存在）不落缓存', async () => {
@@ -345,11 +359,14 @@ describe('边缘缓存：SPA 壳 HTML（人类页面导航）', () => {
     expect(Array.from(edge.entries.keys()).filter((k) => k.endsWith('/__fi/spa-shell'))).toHaveLength(1);
   });
 
-  it('HIT 仍要求浏览器回源校验（不下发缓存副本的 max-age=60）', async () => {
+  it('浏览器短缓存：HIT 与 MISS 同口径（max-age=60，对齐 SHELL_TTL 陈旧窗口）', async () => {
     const s = countingEnv();
-    await hit('/', {}, s as never);
-    const res = await hit('/', {}, s as never);
-    expect(res.res.headers.get('cache-control')).toContain('max-age=0');
+    const first = await hit('/', {}, s as never);
+    expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(first.res.headers.get('cache-control')).toBe('public, max-age=60');
+    const second = await hit('/', {}, s as never);
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(second.res.headers.get('cache-control')).toBe('public, max-age=60');
   });
 
   it('站长轨（admin_at）跳过读缓存：改完设置/切完主题当场可见', async () => {
@@ -387,6 +404,11 @@ describe('边缘缓存：SPA 壳 HTML（人类页面导航）', () => {
     const html = await (await hit('/', {}, s as never)).res.text();
     expect(html).toContain('as="fetch" href="/api/bootstrap" crossorigin="use-credentials"');
     expect(html).toContain('rel="modulepreload" crossorigin href="/assets/i18n-bbs-zh-cn-AAA.js"');
+  });
+
+  it('壳页注入站点 favicon link（后台已配置时）：浏览器不再盲请求 /favicon.ico', async () => {
+    const html = await (await hit('/', {}, envFor() as never)).res.text();
+    expect(html).toContain('<link rel="icon" href="/files/site/favicon.png?v=1">');
   });
 
   it('预载清单缺失（本地 dev / 旧产物）：壳页仍带 bootstrap 预载，功能不受影响', async () => {

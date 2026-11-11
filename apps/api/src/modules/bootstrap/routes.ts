@@ -151,24 +151,27 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
 
     /**
      * 首页公告条与在线人数：原本各是一个独立请求（GET /api/announcements、GET /api/online?summary=1）。
-     * 游客**首访**时这些请求都还没拿到 csrf Cookie（它在首个 API 响应里才签发），边缘缓存一律 miss
-     * → 每个请求都要真打 D1。并入 bootstrap 后：少 2 次 Worker 调用，且冷启动少 2 条 D1 查询。
+     * 并入 bootstrap 后：少 2 次 Worker 调用，且冷启动少 2 条 D1 查询。
+     * 公告走 60s 读穿缓存（登录用户每个 bootstrap 都真打一次 D1，公告变更低频）；
+     * 在线数刻意保持实时（COUNT 便宜且语义就是"当前在线"）。
      * fail-soft：一条公告和一个数字不值得让整份首屏数据失败（配额耗尽/表缺失时按空处理）。
      */
     const [announcements, online] = await Promise.all([
-      db
-        .prepare<{ aid: number; message: string; create_date: number }>(
-          'SELECT aid, message, create_date FROM bbs_announcement WHERE isshow = 1 ORDER BY aid DESC LIMIT 10',
-        )
-        .all()
-        .then((r) =>
-          r.results.map((x) => ({
-            aid: Number(x.aid),
-            message: unescapeHtmlEntities(String(x.message ?? '')),
-            createDate: Number(x.create_date ?? 0),
-          })),
-        )
-        .catch(() => []),
+      remember(cache, 'announcements', async () =>
+        db
+          .prepare<{ aid: number; message: string; create_date: number }>(
+            'SELECT aid, message, create_date FROM bbs_announcement WHERE isshow = 1 ORDER BY aid DESC LIMIT 10',
+          )
+          .all()
+          .then((r) =>
+            r.results.map((x) => ({
+              aid: Number(x.aid),
+              message: unescapeHtmlEntities(String(x.message ?? '')),
+              createDate: Number(x.create_date ?? 0),
+            })),
+          )
+          .catch(() => []),
+      ),
       db
         .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session')
         .first<{ c: number }>()

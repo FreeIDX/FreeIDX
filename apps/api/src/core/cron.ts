@@ -155,7 +155,9 @@ export async function cronDaily(deps: CronDeps): Promise<CronDailyResult> {
       next.posts = calibrated.posts;
     }
     await setRuntime({ db, cache }, next);
-    await db.prepare('UPDATE bbs_forum SET todayposts = 0, todaythreads = 0').run();
+    /* 只写仍有今日计数的行：SQLite 对「值未变」的行照样计 rows_written（D1 免费层按行计费），
+       无条件全表 UPDATE 会在大库上每天白写掉整个 forum 表的行数；加 WHERE 后写行数 = 当日有活动的版块数。 */
+    await db.prepare('UPDATE bbs_forum SET todayposts = 0, todaythreads = 0 WHERE todayposts > 0 OR todaythreads > 0').run();
     await cache.del('forumlist');
     res.forumReset = true;
   } catch (err) {

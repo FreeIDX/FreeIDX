@@ -14,13 +14,17 @@
  * 覆盖范围：匿名只读 API（API_TTL）+ `/files/*` 公共直链（FILES_PUBLIC 前缀白名单）+ 爬虫预渲染 HTML。
  *
  * 安全性前提：只缓存"游客可判定"的响应——带 Authorization 或登录轨 Cookie（sid/at/admin_at）的请求
- * 一律绕开，未持有 csrf Cookie 的首访请求也绕开。写入门槛为 200 + 无 Set-Cookie + 未声明 no-store：
+ * 一律绕开。首访（尚无 csrf Cookie）同样参与读取：游客副本的响应体不含任何 token/个人数据，
+ * 命中时在 HIT 响应上补发随机 csrf Cookie（与 csrf 中间件 GET 分支同口径），首访不再冷穿透整条 D1 链路。
+ * 写入门槛为 200 + 无 Set-Cookie + 未声明 no-store：
  * Hono 会把路由抛出的 AppError 在链路内转成响应（实测中间件 post-next 仍能拿到），因此错误信封的
  * 不可缓存性由 envelope.ts 统一打 `Cache-Control: no-store` 来保证，而不是靠异常传播。
  */
 import { createMiddleware } from 'hono/factory';
+import { setCookie } from 'hono/cookie';
 import { AVAILABLE_LOCALES, RunLevel } from '@freeidx/shared';
 import { acceptLangOf } from '../i18n';
+import { isHttpsRequest } from '../site';
 import type { Env } from '../../types/env';
 import type { D1b } from '../db';
 import type { Cache } from './index';
@@ -164,15 +168,28 @@ export function maybeCtx(c: unknown): Waiter | undefined {
 }
 
 /**
- * 参与资格判定：无 Authorization、无登录轨 Cookie（sid/at/admin_at），且已持有 csrf Cookie。
- * 要求 csrf Cookie 是刻意的——它等价于"该访客已完成过一次首访"：
- * 首访响应带 Set-Cookie，按下面的写入门槛必然穿透并签发 csrf Cookie；
- * 此后第二次请求才可能吃到 HIT，于是边缘缓存永远不会吞掉 csrf Cookie 的签发（写链路不受影响）。
+ * 参与资格判定：无 Authorization、无登录轨 Cookie（sid/at/admin_at）即可。
+ * 旧口径额外要求「已持有 csrf Cookie」，等价于把所有真首访挡在边缘缓存之外——每个新访客的
+ * /api/bootstrap 都要冷穿透整条 D1 链路（实测首访 TTFB 2~3s 的主要来源）。csrf 门禁的存在意义
+ * 只是保证 Set-Cookie 签发不被缓存吞掉，现改为 HIT 分支主动补签（见 edgeCache 内注释），
+ * 该前提不再需要。
  */
 function isCacheEligible(req: { headers: Headers }): boolean {
   if (req.headers.has('authorization')) return false;
-  const cookie = req.headers.get('cookie') ?? '';
-  return !PERSONAL_COOKIE.test(cookie) && /(?:^|;\s*)csrf=/.test(cookie);
+  return !PERSONAL_COOKIE.test(req.headers.get('cookie') ?? '');
+}
+
+/** csrf Cookie 名（与 middleware/csrf.ts 同口径） */
+const CSRF_COOKIE = /(?:^|;\s*)csrf=/;
+
+/**
+ * 随机 csrf token（16 字节 hex）：镜像 middleware/csrf.ts 的 randomToken。
+ * 不直接反向 import middleware（core 层不依赖 middleware），两处改动需同步。
+ */
+function randomToken(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -213,7 +230,17 @@ export function edgeCache() {
         /* 缓存副本上的 max-age 只为让 Cloudflare 判定可缓存与 Edge TTL，不能随 HIT 下发给浏览器：
          * HTTP 缓存键不含 Cookie，游客在 30s 窗口内登录后重新拉 /api/bootstrap 会被浏览器喂回
          * 「游客版」（登录成功但顶栏仍是游客）。/files/* 例外——avatar 直链的 immutable 语义必须保留。 */
-        if (!filePrefix) out.headers.delete('cache-control');
+        if (!filePrefix) {
+          out.headers.delete('cache-control');
+          /* 首访补签 csrf Cookie（镜像 csrf 中间件的 GET 分支：随机 32 hex + SameSite=Lax + Secure 跟随协议）。
+           * 游客副本的响应体不含任何 token 或个人数据，补签只影响 Set-Cookie 头；不补的话，
+           * 真首访就永远吃不到边缘缓存——每个新访客都得冷穿透整条 D1 链路。 */
+          if (!CSRF_COOKIE.test(raw.headers.get('cookie') ?? '')) {
+            c.res = out;
+            setCookie(c, 'csrf', randomToken(), { path: '/', sameSite: 'Lax', secure: isHttpsRequest(c), httpOnly: false });
+            return;
+          }
+        }
         c.res = out;
         return;
       }
@@ -237,7 +264,8 @@ export function edgeCache() {
  * 因此整个站点只占**一条**缓存条目、所有深链共用（见 shellKeyRequest），
  * 命中率不随长尾 URL 摊薄 —— 这是 HTML 缓存最容易做砸的地方。
  *
- * 代价：后台改设置 / 切主题后最长 60s 的陈旧窗口。站长轨（admin_at）跳过读缓存，自查即时。
+ * 代价：后台改设置 / 切主题后最长 60s（边缘）+ 60s（浏览器，见下方 max-age 注释）的陈旧窗口。
+ * 站长轨（admin_at）跳过读缓存；硬刷新可同时绕过浏览器缓存，自查即时。
  */
 export const SHELL_TTL = 60;
 
@@ -289,9 +317,11 @@ export function shellCache() {
         const cached = await b.match(key);
         if (cached) {
           const out = withState(cached, 'HIT');
-          /* 浏览器侧必须每次回源校验：发版后旧壳会指向已被删除的 asset hash，
-             吃浏览器缓存就是白屏（前端的 chunk 自愈重载是兜底，不该变成常规路径）。 */
-          out.headers.set('cache-control', 'public, max-age=0, must-revalidate');
+          /* 浏览器侧短缓存与 SHELL_TTL 同值：壳内容全站同值（标题/语言/主题/预载清单），站点已接受
+           * 60s 边缘陈旧窗口，浏览器再吃 60s 即可把 F5/回访的整次回源 RTT（跨境 ~0.5s+）直接省掉。
+           * 发版后旧壳引用已删除 asset hash 的白屏由前端 chunk 自愈重载兜底（与边缘副本同一路径），
+           * 最坏窗口 60s(边缘) + 60s(浏览器)；站长硬刷新（Ctrl/Cmd+R）不受 max-age 影响，仍即时可见。 */
+          out.headers.set('cache-control', `public, max-age=${SHELL_TTL}`);
           c.res = out;
           return;
         }
@@ -302,6 +332,9 @@ export function shellCache() {
       if (res.status !== 200) return;
       if (res.headers.has('set-cookie')) return;
       if (!(res.headers.get('content-type') ?? '').includes('text/html')) return;
+      /* 浏览器缓存 HIT/MISS 同口径：MISS 也下发 max-age，否则首次访问不缓存、60s 内刷新又变回回源，
+       * 与 HIT 行为不对称（浏览器在两次导航间无法区分边缘是否命中）。 */
+      res.headers.set('cache-control', `public, max-age=${SHELL_TTL}`);
       const copy = cachedCopy(res.clone(), SHELL_TTL);
       c.res = withState(res, 'MISS');
       wait(b.put(key, copy), maybeCtx(c));

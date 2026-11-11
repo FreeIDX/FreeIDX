@@ -20,6 +20,14 @@
  * 三个旋钮：`SLICES`（片数）、`GAP`（合并相邻码点空洞，压住 unicode-range 条目数）、
  * `TIER0_MIN`（第 0 片最少字形数）。
  *
+ * ## 多字体（v3 起支持 FONTS 数组）
+ *
+ * 同一套字表/语料/分片算法驱动两套正文（可选）字体，各自独立生成 CSS 与产物：
+ *   - HarmonyOS_Sans_SC_Medium（--font-app 基座，font-faces.generated.css）；
+ *   - smileySans 得意黑（后台「正文样式=2」的全站覆盖，font-faces-smiley.generated.css）。
+ *     此前它是 951 KiB 的单文件：无论用作全站正文还是只在标题用到，浏览器都要整包下载；
+ *     分片后与 HarmonyOS 同口径——按页面真实渲染到的字符取片。
+ *
  * ## 字表与排序语料（全部仓库内置，离线可复现）
  *
  *   - `scripts/data/hanzi-3500.txt`：《现代汉语常用字表》3500 字，**拼音序**；
@@ -45,38 +53,58 @@ const subsetFont = require('subset-font');
 const fontkit = require('fontkit');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = join(ROOT, 'apps/web/fonts-src/HarmonyOS_Sans_SC_Medium.subset.woff2');
+const SRC_DIR = join(ROOT, 'apps/web/fonts-src');
 const OUT_DIR = join(ROOT, 'apps/web/public/fonts');
-const CSS_OUT = join(ROOT, 'apps/web/src/styles/font-faces.generated.css');
+const STYLES_DIR = join(ROOT, 'apps/web/src/styles');
 const LIST = join(ROOT, 'scripts/data/hanzi-3500.txt');
 const I18N = join(ROOT, 'packages/shared/src/i18n');
 const DOCS = join(ROOT, 'docs');
 
-const FAMILY = 'HarmonyOS_Sans_SC_Medium';
-const VERSION = 'v2';
+/**
+ * 分片字体清单。src：fonts-src 下的源文件（再生成的事实源，不随部署下发）；
+ * family：产物文件名前缀（旧版本清理依据）；cssFamily/cssStyle：@font-face 声明；
+ * cssOut：生成的 CSS 路径（globals.css 必须同名 @import，check-fonts 校验接线）。
+ * 闸门 maxTotal/maxFirst 独立配置（得意黑字形笔画复杂，同等字数体积更大）。
+ */
+const FONTS = [
+  {
+    src: 'HarmonyOS_Sans_SC_Medium.subset.woff2',
+    family: 'HarmonyOS_Sans_SC_Medium',
+    cssFamily: 'HarmonyOS_Sans_SC_Medium',
+    cssStyle: 'normal',
+    version: 'v2',
+    cssOut: 'font-faces.generated.css',
+    maxTotal: 560 * 1024,
+    maxFirst: 180 * 1024,
+  },
+  {
+    src: 'SmileySans-Oblique.woff2',
+    family: 'SmileySans',
+    cssFamily: 'smileySans',
+    cssStyle: 'oblique',
+    version: 'v1',
+    cssOut: 'font-faces-smiley.generated.css',
+    maxTotal: 700 * 1024,
+    maxFirst: 200 * 1024,
+  },
+];
+
 /** 分片数：12 片时「UI 片 + 1~2 个正文档」≈ 150~260 KiB；再细分收益 <10% 而请求数翻倍 */
 const SLICES = 12;
 /** 合并相邻码点空洞的上限：空洞内的码点会被并入本片，用于把 unicode-range 条目数压到可控 */
 const GAP = 12;
 /** 第 0 片最少收录的字形数（UI 用字之外再补最常用字，让正文页也尽量不再追加片） */
 const TIER0_MIN = 900;
-/** 体积闸门（合计含分片头部开销与「吞空洞」补进来的相邻字形，比 v1 单文件高约 10%） */
-const MAX_TOTAL = 560 * 1024;
-const MAX_FIRST = 180 * 1024;
 
 const CJK = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
 const kb = (n) => `${(n / 1024).toFixed(1)} KiB`;
 
-if (!existsSync(SRC)) {
-  console.error(`✗ 缺少源字体：${SRC}\n  该文件是再生成的唯一来源（已从 public 移出，不随部署下发）。`);
-  process.exit(1);
-}
 if (!existsSync(OUT_DIR)) {
   console.error(`✗ 缺少输出目录：${OUT_DIR}`);
   process.exit(1);
 }
 
-/* ---------- 1. 字表基座 ---------- */
+/* ---------- 1. 字表基座（字体无关，只算一次） ---------- */
 const listChars = [
   ...new Set(
     readFileSync(LIST, 'utf8')
@@ -134,170 +162,192 @@ if (existsSync(DOCS)) {
   }
 }
 
-/* ---------- 3. 源字体码点 ---------- */
-const srcBuffer = readFileSync(SRC);
-const srcFont = fontkit.openSync(SRC);
-const srcCps = new Set(srcFont.characterSet);
-const nonCjkCps = [...srcCps].filter((cp) => !CJK.test(String.fromCodePoint(cp)));
+const problems = [];
 
-/* ---------- 4. 全量字形（与 v1 完全一致：常用 3500 ∪ 词条用字 ∪ 非 CJK） ---------- */
-const wanted = new Map(); // cp -> char
-for (const ch of listChars) if (srcCps.has(ch.codePointAt(0))) wanted.set(ch.codePointAt(0), ch);
-for (const ch of uiChars) if (srcCps.has(ch.codePointAt(0))) wanted.set(ch.codePointAt(0), ch);
-for (const cp of nonCjkCps) wanted.set(cp, String.fromCodePoint(cp));
-const droppedUi = [...uiChars].filter((ch) => !srcCps.has(ch.codePointAt(0)));
+/* ---------- 3. 逐字体：码点 → 分片 → 产物 ---------- */
+async function buildFont(cfg) {
+  const SRC = join(SRC_DIR, cfg.src);
+  if (!existsSync(SRC)) {
+    problems.push(`缺少源字体：${SRC}（该文件是再生成的唯一来源，已从 public 移出，不随部署下发）`);
+    return;
+  }
 
-/* ---------- 5. 排序：UI 用字固定在最前，其余按词频降序（拼音序兜底） ---------- */
-/* 非 CJK 码点不需要排序（全部落在第 0 片），这里只排 CJK 字 */
-const ranked = [...wanted.keys()]
-  .filter((cp) => CJK.test(String.fromCodePoint(cp)))
-  .sort((a, b) => {
-    const fa = freq.get(String.fromCodePoint(a)) ?? 0;
-    const fb = freq.get(String.fromCodePoint(b)) ?? 0;
-    if (fa !== fb) return fb - fa;
-    return (listOrder.get(String.fromCodePoint(a)) ?? 1e9) - (listOrder.get(String.fromCodePoint(b)) ?? 1e9);
-  });
+  const srcBuffer = readFileSync(SRC);
+  const srcFont = fontkit.openSync(SRC);
+  const srcCps = new Set(srcFont.characterSet);
+  const nonCjkCps = [...srcCps].filter((cp) => !CJK.test(String.fromCodePoint(cp)));
 
-/* 第 0 片：非 CJK 全收（英文/数字/标点必用）+ UI 用字全收 + 高频字补到 TIER0_MIN */
-const tier0 = new Set(nonCjkCps);
-for (const ch of uiChars) if (srcCps.has(ch.codePointAt(0))) tier0.add(ch.codePointAt(0));
-for (const cp of ranked) {
-  if (tier0.size >= TIER0_MIN) break;
-  tier0.add(cp);
-}
+  /* 全量字形（与 v1 完全一致：常用 3500 ∪ 词条用字 ∪ 非 CJK） */
+  const wanted = new Map(); // cp -> char
+  for (const ch of listChars) if (srcCps.has(ch.codePointAt(0))) wanted.set(ch.codePointAt(0), ch);
+  for (const ch of uiChars) if (srcCps.has(ch.codePointAt(0))) wanted.set(ch.codePointAt(0), ch);
+  for (const cp of nonCjkCps) wanted.set(cp, String.fromCodePoint(cp));
+  const droppedUi = [...uiChars].filter((ch) => !srcCps.has(ch.codePointAt(0)));
 
-/* 其余按词频顺序等分。
- * 试过「前细后粗」的递增尺寸（正文用字集中在词频靠前的区间，理论上更省），实测反而更差：
- * 片一细，一页正文就会横跨十几个片，请求数翻倍而字节数只降几个百分点。等分是请求数与
- * 字节数的均衡点（实测 12 片等分：首页 2 片 156 KiB，帖子页 5 片 259 KiB）。 */
-const rest = ranked.filter((cp) => !tier0.has(cp));
-const tailCount = Math.max(1, SLICES - 1);
-const per = Math.ceil(rest.length / tailCount);
-const slices = [tier0];
-for (let i = 0; i < tailCount; i++) {
-  const chunk = rest.slice(i * per, (i + 1) * per);
-  if (chunk.length) slices.push(new Set(chunk));
-}
+  /* 排序：UI 用字固定在最前，其余按词频降序（拼音序兜底）；非 CJK 码点不需要排序（全部落在第 0 片） */
+  const ranked = [...wanted.keys()]
+    .filter((cp) => CJK.test(String.fromCodePoint(cp)))
+    .sort((a, b) => {
+      const fa = freq.get(String.fromCodePoint(a)) ?? 0;
+      const fb = freq.get(String.fromCodePoint(b)) ?? 0;
+      if (fa !== fb) return fb - fa;
+      return (listOrder.get(String.fromCodePoint(a)) ?? 1e9) - (listOrder.get(String.fromCodePoint(b)) ?? 1e9);
+    });
 
-/* ---------- 6. unicode-range 归并 ----------
- * 同一片内的码点未必连续，逐个列出会让 CSS 膨胀到几十 KB。做法：按码点升序扫描，
- * 空洞 ≤ GAP 且空洞内的码点（a）存在于源字体、（b）还没被前面的片占用，就一并吞进来。
- * 吞噬必须同时加入字体字形集，否则 unicode-range 声明了文件里没有的字形 → 该字静默回退。
- */
-const taken = new Set();
-const finalSlices = [];
-for (const slice of slices) {
-  const own = [...slice].filter((cp) => !taken.has(cp) && srcCps.has(cp)).sort((a, b) => a - b);
-  if (!own.length) continue;
-  const glyphs = new Set();
-  const ranges = [];
-  let start = own[0];
-  let prev = own[0];
-  glyphs.add(prev);
-  taken.add(prev);
-  for (let i = 1; i < own.length; i++) {
-    const cp = own[i];
-    let mergeable = cp - prev <= GAP + 1;
-    if (mergeable) {
-      for (let x = prev + 1; x < cp; x++) {
-        if (taken.has(x) || !srcCps.has(x)) {
-          mergeable = false;
-          break;
+  /* 第 0 片：非 CJK 全收（英文/数字/标点必用）+ UI 用字全收 + 高频字补到 TIER0_MIN */
+  const tier0 = new Set(nonCjkCps);
+  for (const ch of uiChars) if (srcCps.has(ch.codePointAt(0))) tier0.add(ch.codePointAt(0));
+  for (const cp of ranked) {
+    if (tier0.size >= TIER0_MIN) break;
+    tier0.add(cp);
+  }
+
+  /* 其余按词频顺序等分。
+   * 试过「前细后粗」的递增尺寸（正文用字集中在词频靠前的区间，理论上更省），实测反而更差：
+   * 片一细，一页正文就会横跨十几个片，请求数翻倍而字节数只降几个百分点。等分是请求数与
+   * 字节数的均衡点（实测 12 片等分：首页 2 片 156 KiB，帖子页 5 片 259 KiB）。 */
+  const rest = ranked.filter((cp) => !tier0.has(cp));
+  const tailCount = Math.max(1, SLICES - 1);
+  const per = Math.ceil(rest.length / tailCount);
+  const slices = [tier0];
+  for (let i = 0; i < tailCount; i++) {
+    const chunk = rest.slice(i * per, (i + 1) * per);
+    if (chunk.length) slices.push(new Set(chunk));
+  }
+
+  /* unicode-range 归并：
+   * 同一片内的码点未必连续，逐个列出会让 CSS 膨胀到几十 KB。做法：按码点升序扫描，
+   * 空洞 ≤ GAP 且空洞内的码点（a）存在于源字体、（b）还没被前面的片占用，就一并吞进来。
+   * 吞噬必须同时加入字体字形集，否则 unicode-range 声明了文件里没有的字形 → 该字静默回退。 */
+  const taken = new Set();
+  const finalSlices = [];
+  for (const slice of slices) {
+    const own = [...slice].filter((cp) => !taken.has(cp) && srcCps.has(cp)).sort((a, b) => a - b);
+    if (!own.length) continue;
+    const glyphs = new Set();
+    const ranges = [];
+    let start = own[0];
+    let prev = own[0];
+    glyphs.add(prev);
+    taken.add(prev);
+    for (let i = 1; i < own.length; i++) {
+      const cp = own[i];
+      let mergeable = cp - prev <= GAP + 1;
+      if (mergeable) {
+        for (let x = prev + 1; x < cp; x++) {
+          if (taken.has(x) || !srcCps.has(x)) {
+            mergeable = false;
+            break;
+          }
         }
       }
-    }
-    if (mergeable) {
-      for (let x = prev + 1; x <= cp; x++) {
-        glyphs.add(x);
-        taken.add(x);
+      if (mergeable) {
+        for (let x = prev + 1; x <= cp; x++) {
+          glyphs.add(x);
+          taken.add(x);
+        }
+        prev = cp;
+        continue;
       }
+      ranges.push([start, prev]);
+      start = cp;
       prev = cp;
-      continue;
+      glyphs.add(cp);
+      taken.add(cp);
     }
     ranges.push([start, prev]);
-    start = cp;
-    prev = cp;
-    glyphs.add(cp);
-    taken.add(cp);
+    finalSlices.push({ glyphs, ranges });
   }
-  ranges.push([start, prev]);
-  finalSlices.push({ glyphs, ranges });
-}
 
-/* ---------- 7. 逐片生成 woff2 ---------- */
-const files = [];
-for (let i = 0; i < finalSlices.length; i++) {
-  const { glyphs } = finalSlices[i];
-  const text = [...glyphs].map((cp) => String.fromCodePoint(cp)).join('');
-  const buf = await subsetFont(srcBuffer, text, { targetFormat: 'woff2' });
-  const name = `${FAMILY}.subset.${VERSION}-${String(i).padStart(2, '0')}.woff2`;
-  writeFileSync(join(OUT_DIR, name), buf);
-  files.push({ name, bytes: buf.length, glyphs: glyphs.size, ranges: finalSlices[i].ranges });
-}
+  /* 逐片生成 woff2 */
+  const files = [];
+  for (let i = 0; i < finalSlices.length; i++) {
+    const { glyphs } = finalSlices[i];
+    const text = [...glyphs].map((cp) => String.fromCodePoint(cp)).join('');
+    const buf = await subsetFont(srcBuffer, text, { targetFormat: 'woff2' });
+    const name = `${cfg.family}.subset.${cfg.version}-${String(i).padStart(2, '0')}.woff2`;
+    writeFileSync(join(OUT_DIR, name), buf);
+    files.push({ name, bytes: buf.length, glyphs: glyphs.size, ranges: finalSlices[i].ranges });
+  }
 
-/* 旧版本产物清理：/fonts/* 是 immutable，文件名不升版老访客永远不会重取（见 styles/globals.css） */
-let removed = [];
-for (const f of readdirSync(OUT_DIR)) {
-  if (f.startsWith(FAMILY) && f.endsWith('.woff2') && !files.some((x) => x.name === f)) {
-    unlinkSync(join(OUT_DIR, f));
-    removed.push(f);
+  /* 旧版本产物清理：/fonts/* 是 immutable，文件名不升版老访客永远不会重取（见 styles/globals.css） */
+  const removed = [];
+  for (const f of readdirSync(OUT_DIR)) {
+    if (f.startsWith(cfg.family) && f.endsWith('.woff2') && !files.some((x) => x.name === f)) {
+      unlinkSync(join(OUT_DIR, f));
+      removed.push(f);
+    }
+  }
+
+  /* 生成 CSS（unicode-range 交给浏览器按需取片） */
+  const rangeText = (ranges) =>
+    ranges
+      .map(([a, b]) =>
+        a === b ? `U+${a.toString(16).toUpperCase()}` : `U+${a.toString(16).toUpperCase()}-${b.toString(16).toUpperCase()}`,
+      )
+      .join(',');
+
+  const cssLines = [
+    '/*',
+    ' * 由 `pnpm fonts:build`（scripts/gen-font-subset.mjs）生成，请勿手改。',
+    ` * ${cfg.cssFamily}：${files.length} 片按字频排序（第 00 片 = UI 文案 + 最常用汉字，任何页面必然命中），`,
+    ' * 其余片由浏览器按 unicode-range 在真实渲染到片内字符时按需下载。',
+    ' * 校验：pnpm fonts:check。改分片参数后需重跑生成并提交产物。',
+    ' */',
+  ];
+  for (const f of files) {
+    cssLines.push(
+      `@font-face{font-family:'${cfg.cssFamily}';font-style:${cfg.cssStyle};font-display:swap;` +
+        `src:url('/fonts/${f.name}') format('woff2');unicode-range:${rangeText(f.ranges)};}`,
+    );
+  }
+  const css = cssLines.join('\n') + '\n';
+  const CSS_OUT = join(STYLES_DIR, cfg.cssOut);
+  writeFileSync(CSS_OUT, css);
+
+  /* 报告 */
+  const total = files.reduce((a, f) => a + f.bytes, 0);
+  const rangeCount = files.reduce((a, f) => a + f.ranges.length, 0);
+  console.log(`\n=== ${cfg.cssFamily}（${cfg.src}）===`);
+  console.log('源字体    :', kb(srcBuffer.length), `(${srcCps.size} 码点)`);
+  console.log('词条用字  :', uiCharCount, '字（源字体缺', droppedUi.length, '字，无法保留：', droppedUi.join('') || '无', '）');
+  console.log('非 CJK    :', nonCjkCps.length, '码点（全部并入第 00 片）');
+  console.log('字形合计  :', wanted.size);
+  console.log('分片明细：');
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    console.log(
+      `  ${String(i).padStart(2, '0')}  ${kb(f.bytes).padStart(10)}  ${String(f.glyphs).padStart(4)} 字形  ` +
+        `${String(f.ranges.length).padStart(4)} 段  ${f.name}`,
+    );
+  }
+  console.log('合计      :', kb(total), '| 分片数', files.length, '| unicode-range 段数', rangeCount);
+  console.log('CSS       :', kb(Buffer.byteLength(css)), '→', CSS_OUT);
+  if (removed.length) console.log('已清理旧产物:', removed.join(', '));
+
+  /* 闸门 */
+  if (total > cfg.maxTotal) {
+    problems.push(`${cfg.cssFamily} 字形合计 ${kb(total)} 超过上限 ${kb(cfg.maxTotal)}（字表可能被误改）`);
+  }
+  if (files[0].bytes > cfg.maxFirst) {
+    problems.push(`${cfg.cssFamily} 第 00 片 ${kb(files[0].bytes)} 超过上限 ${kb(cfg.maxFirst)}（UI 片是必下载项）`);
+  }
+  /* 分片并集只允许多、不允许少：多出来的是「吞空洞」补进来的相邻字形（无害，反而少一个片） */
+  const missing = [...wanted.keys()].filter((cp) => !taken.has(cp));
+  if (missing.length) {
+    problems.push(
+      `${cfg.cssFamily} 有 ${missing.length} 个字形未被任何分片收录：` +
+        missing.slice(0, 20).map((c) => 'U+' + c.toString(16).toUpperCase()).join(' '),
+    );
   }
 }
 
-/* ---------- 8. 生成 CSS ---------- */
-const rangeText = (ranges) =>
-  ranges.map(([a, b]) => (a === b ? `U+${a.toString(16).toUpperCase()}` : `U+${a.toString(16).toUpperCase()}-${b.toString(16).toUpperCase()}`)).join(',');
-
-const cssLines = [
-  '/*',
-  ' * 由 `pnpm fonts:build`（scripts/gen-font-subset.mjs）生成，请勿手改。',
-  ` * ${files.length} 片按字频排序：第 00 片 = UI 文案 + 最常用汉字（任何页面必然命中），`,
-  ' * 其余片由浏览器按 unicode-range 在真实渲染到片内字符时按需下载。',
-  ' * 校验：pnpm fonts:check。改分片参数后需重跑生成并提交产物。',
-  ' */',
-];
-for (const f of files) {
-  cssLines.push(
-    `@font-face{font-family:'${FAMILY}';font-style:normal;font-display:swap;` +
-      `src:url('/fonts/${f.name}') format('woff2');unicode-range:${rangeText(f.ranges)};}`,
-  );
-}
-const css = cssLines.join('\n') + '\n';
-writeFileSync(CSS_OUT, css);
-
-/* ---------- 9. 报告 ---------- */
-const total = files.reduce((a, f) => a + f.bytes, 0);
-const rangeCount = files.reduce((a, f) => a + f.ranges.length, 0);
-console.log('源字体    :', kb(srcBuffer.length), `(${srcCps.size} 码点)`);
 console.log('常用字表  :', listChars.length, '字');
-console.log('词条用字  :', uiCharCount, '字（源字体缺', droppedUi.length, '字，无法保留：', droppedUi.join('') || '无', '）');
-console.log('非 CJK    :', nonCjkCps.length, '码点（全部并入第 00 片）');
+console.log('词条用字  :', uiCharCount, '字');
 console.log('正文语料  :', docFiles, '个 md /', docChars, '个汉字（仅用于定词频序）');
-console.log('字形合计  :', wanted.size, '（与 v1 单文件完全一致）');
-console.log('');
-console.log('分片明细：');
-for (let i = 0; i < files.length; i++) {
-  const f = files[i];
-  console.log(
-    `  ${String(i).padStart(2, '0')}  ${kb(f.bytes).padStart(10)}  ${String(f.glyphs).padStart(4)} 字形  ` +
-      `${String(f.ranges.length).padStart(4)} 段  ${f.name}`,
-  );
-}
-console.log('');
-console.log('合计      :', kb(total), '| 分片数', files.length, '| unicode-range 段数', rangeCount);
-console.log('CSS       :', kb(Buffer.byteLength(css)), '→', CSS_OUT);
-if (removed.length) console.log('已清理旧产物:', removed.join(', '));
-console.log('v1 单文件 :', kb(454 * 1024), '→ 首页（仅 UI 片 ~', kb(files[0].bytes), '）');
 
-/* ---------- 10. 闸门 ---------- */
-const problems = [];
-if (total > MAX_TOTAL) problems.push(`字形合计 ${kb(total)} 超过上限 ${kb(MAX_TOTAL)}（字表可能被误改）`);
-if (files[0].bytes > MAX_FIRST) problems.push(`第 00 片 ${kb(files[0].bytes)} 超过上限 ${kb(MAX_FIRST)}（UI 片是必下载项）`);
-/* 分片并集只允许多、不允许少：多出来的是「吞空洞」补进来的相邻字形（无害，反而少一个片） */
-const missing = [...wanted.keys()].filter((cp) => !taken.has(cp));
-if (missing.length) {
-  problems.push(`有 ${missing.length} 个字形未被任何分片收录：${missing.slice(0, 20).map((c) => 'U+' + c.toString(16).toUpperCase()).join(' ')}`);
-}
+for (const cfg of FONTS) await buildFont(cfg);
+
 if (problems.length) {
   console.error('\n✗ 生成结果不合规：');
   for (const p of problems) console.error('  -', p);

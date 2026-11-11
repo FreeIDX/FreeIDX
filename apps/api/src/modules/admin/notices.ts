@@ -59,7 +59,8 @@ export function adminNoticeRoutes(): Hono<ReadEnv> {
     const fromUid = await adminUidOf(c);
     const nid = await noticeSend(db, { fromuid: fromUid, recvuid, message, type: NoticeType.SYSTEM });
     if (!nid) throw new AppError(Code.SYSTEM_ERROR, t('admin.sendFailed'));
-    /* 公告开关（本项目新增）：勾选时同步落首页公告（bbs_announcement），isshow=1 立即显示 */
+    /* 公告开关（本项目新增）：勾选时同步落首页公告（bbs_announcement），isshow=1 立即显示。
+       bootstrap 的公告条走 60s 读穿缓存（key=announcements），写入侧同步失效保证"立即"语义。 */
     let aid = 0;
     if (Number(b.announcement) === 1 || b.announcement === true) {
       const r = await db
@@ -67,6 +68,7 @@ export function adminNoticeRoutes(): Hono<ReadEnv> {
         .bind(nid, message, Math.floor(Date.now() / 1000))
         .first<{ aid: number }>();
       aid = Number(r?.aid ?? 0);
+      await core(c).cache.del('announcements');
     }
     return ok(c, t('admin.sendDone'), { data: { nid, aid } });
   });
@@ -84,6 +86,7 @@ export function adminNoticeRoutes(): Hono<ReadEnv> {
       .first<{ aid: number }>();
     if (!ann) throw new AppError(Code.NOT_FOUND, t('admin.noAnnouncement'));
     await db.prepare('UPDATE bbs_announcement SET isshow = ? WHERE aid = ?').bind(isshow, ann.aid).run();
+    await core(c).cache.del('announcements'); // bootstrap 公告条 60s 读穿缓存，切换开关当场生效
     return ok(c, isshow ? t('admin.showOn') : t('admin.showOff'), { data: { nid, isshow } });
   });
 
@@ -99,6 +102,7 @@ export function adminNoticeRoutes(): Hono<ReadEnv> {
       db.prepare('DELETE FROM bbs_notice WHERE nid = ?').bind(nid) as unknown as Stmt,
       db.prepare('DELETE FROM bbs_announcement WHERE nid = ?').bind(nid) as unknown as Stmt,
     ]);
+    await core(c).cache.del('announcements'); // bootstrap 公告条 60s 读穿缓存，删除当场生效
     return ok(c, t('notice.deleted'), { data: { nid } });
   });
 

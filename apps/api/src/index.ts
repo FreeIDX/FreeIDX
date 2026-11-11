@@ -300,7 +300,7 @@ async function injectShell(
   res: Response,
   themeId: string,
   siteLang: string,
-  site: { title: string; description: string } | null = null,
+  site: { title: string; description: string; favicon?: string } | null = null,
   preloadHtml = '',
 ): Promise<Response> {
   try {
@@ -333,6 +333,10 @@ async function injectShell(
      */
     const metaHtml = site
       ? [
+          /* 站点图标前置注入（后台 favicon_url，R2 site/ 直链）：浏览器解析到 link[rel=icon] 后
+           * 不会再盲请求 /favicon.ico（那会白付一次 Worker 全链路再 404）；图标随 HTML 即时出现，
+           * 不必等 JS 启动后由 App.tsx 再设。爬虫侧 prerender 早已注入同一字段（seo/core.ts）。 */
+          site.favicon ? `<link rel="icon" href="${escAttr(site.favicon)}">` : '',
           site.description ? `<meta name="description" content="${escAttr(site.description)}">` : '',
           `<meta property="og:type" content="website">`,
           `<meta property="og:title" content="${escAttr(site.title)}">`,
@@ -425,7 +429,14 @@ app.notFound(async (c) => {
     res,
     themeId,
     siteLang,
-    site ? { title: siteTitleOf(site), description: siteDescriptionOf(site) } : null,
+    site
+      ? {
+          title: siteTitleOf(site),
+          description: siteDescriptionOf(site),
+          /* localizedSetting 原样透传非文本字段，favicon_url 可直接取 */
+          favicon: site.favicon_url ? String(site.favicon_url) : '',
+        }
+      : null,
     preloadHtml,
   );
 });

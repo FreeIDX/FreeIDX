@@ -20,7 +20,7 @@ export function isThemeId(v: unknown): v is string {
   return typeof v === 'string' && THEME_ID_RE.test(v);
 }
 
-/** 读取启用主题 id（kv `theme`，经 L0+L1 读穿；缺省/非法 → DEFAULT_THEME_ID） */
+/** 读取启用主题 id（kv `theme`，默认键策略 L0+L2/60s 读穿——冷 isolate 落 D1；写路径 saveThemeId 主动失效） */
 export async function loadThemeId(cache: Cache, db: D1b): Promise<string> {
   return remember(cache, 'theme', async () => {
     const row = await db.prepare<{ v: string }>('SELECT v FROM bbs_kv WHERE k = ?').bind('theme').first<{ v: string }>();

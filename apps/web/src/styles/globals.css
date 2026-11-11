@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 /* 中文字体分片（unicode-range）：生成文件，见同目录注释与 scripts/gen-font-subset.mjs */
 @import './font-faces.generated.css';
+/* 得意黑分片（后台「正文样式=2」时全站覆盖）：与基座同一套字表/分片算法，按需取片 */
+@import './font-faces-smiley.generated.css';
 
 /*
  * Tailwind 4 CSS-first 主题：设计令牌的单一事实源。
@@ -271,14 +273,8 @@ html[lang^='zh'] {
 .theme-zh.font-smiley {
   font-family: 'smileySans', var(--font-app);
 }
-
-@font-face {
-  font-family: 'smileySans';
-  font-style: oblique;
-  font-display: swap;
-  /* 同 glyph 无损容器替换：TTF 2073KB → WOFF2 929KB（省 55%），渲染结果完全一致 */
-  src: url('/fonts/SmileySans-Oblique.woff2') format('woff2');
-}
+/* smileySans 的分片 @font-face 见 ./font-faces-smiley.generated.css（pnpm fonts:build 生成）：
+ * 单文件时代此处曾手写 929KB 的全量 woff2 引用，分片后任何页面只按需下载真实渲染到的片。 */
 
 /* ============ 简蓝主题暗色 ============
  * 挂 <html class="dark">：令牌整体切换，工具类随动。 */
