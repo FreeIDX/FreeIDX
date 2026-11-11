@@ -1,7 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { CONTENT_LANG_NATIVE_NAMES, CONTENT_LANGS, detectContentLang, type ContentLang } from '@freeidx/shared';
+import {
+  CONTENT_LANG_NATIVE_NAMES,
+  CONTENT_LANGS,
+  detectContentLang,
+  type ContentLang,
+  type ForumNode,
+} from '@freeidx/shared';
 import { BanScope, effectiveBanScope } from '@freeidx/shared';
 import { createThread, fmtDate } from '../../../lib/api';
 import { nonNegInt } from '../../../lib/params';
@@ -14,9 +20,38 @@ import { useLight } from '../../../store/theme';
 import { useAuthModal } from '../../../store/authModal';
 import { useForumName, useLocalizedSetting, useT } from '../../../lib/i18n';
 
+/**
+ * 分类弹窗单选项（一级 / 二级版块共用）：图标 + 名称；drill = 该版块下还有二级版块，显示下钻箭头。
+ * 选中态用品牌色描边 + 淡底，未选中为浅灰底，hover 加深（与弹窗内并排卡片一致）。
+ */
+function ForumPickCard({ f, on, drill, onClick }: { f: ForumNode; on: boolean; drill?: boolean; onClick: () => void }) {
+  const fname = useForumName();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cx(
+        'flex min-w-0 items-center gap-1.5 rounded-[8px] border px-2.5 py-2 text-left transition-colors',
+        on ? 'border-brand bg-[rgba(41,151,247,0.08)]' : 'border-zh-line bg-lt-soft hover:bg-zh-row-hover',
+      )}
+    >
+      {f.iconUrl ? (
+        <img src={f.iconUrl} alt="" className="size-6 shrink-0 rounded-full object-contain" />
+      ) : (
+        <Icon name="folder" className="size-4 shrink-0 text-zh-grey" />
+      )}
+      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{fname(f)}</span>
+      {drill && <Icon name="chevron_right" className="size-4 shrink-0 text-zh-grey" />}
+    </button>
+  );
+}
+
 /** 发帖页（§4.4，/new 或 /forum/:fid/new）：
  *  两栏 —— 左主表单卡（8/12 栅格：版块/标题 + Composer + 标签选择 + 收费设置）、
- *  右功能卡（4/12 栅格，tabs 功能/附件，sticky）。提交仍走 Composer 内按钮 → POST /api/threads（doctype=0）。 */
+ *  右功能卡（4/12 栅格，tabs 功能/附件，sticky）。提交仍走 Composer 内按钮 → POST /api/threads（doctype=0）。
+ *  版块两级（0018）：一级 + 二级分开选 —— 先在一级列表里选父版块，有二级版块时再进二级列表选目标版块；
+ *  一级版块本身没有二级版块则一步到位，提交时 fid 才确定。 */
 export function ComposePage() {
   const t = useT();
   /* 版块名多语言（0027）：按当前界面语言取词 */
@@ -40,8 +75,26 @@ export function ComposePage() {
 
   // 冷加载 /new 时 forumlist 尚未就绪，useState 初值会永远停在 0 ⇒ 目标版块改为派生，用户手选才覆盖
   const [pickedFid, setPickedFid] = useState(0);
-  const fid = pickedFid || nonNegInt(routeParams.fid ?? search.get('fid'), forumlist[0]?.fid ?? 0);
-  /* 当前选中版块（分类弹窗与触发器共用） */
+  /* 二级版块（0018，仅两级）：一级 = 父版块不可见的孤儿也算一级（与侧栏/后台口径一致，避免入口丢失） */
+  const topForums = useMemo(() => {
+    const fids = new Set(forumlist.map((f) => f.fid));
+    return forumlist.filter((f) => !f.parentFid || !fids.has(f.parentFid));
+  }, [forumlist]);
+  const kidsOf = (topFid: number) => forumlist.filter((f) => f.parentFid === topFid);
+  /* 期望版块：用户手选 > 路由/查询参数 > 版块列表首个（bootstrap 到位后才有值） */
+  const wantedFid = pickedFid || nonNegInt(routeParams.fid ?? search.get('fid'), forumlist[0]?.fid ?? 0);
+  /* 期望版块所属的一级版块：选中的是子版块则取其父，否则自身 */
+  const currentTop = useMemo(() => {
+    const f = forumlist.find((x) => x.fid === wantedFid);
+    if (!f) return undefined;
+    return f.parentFid ? (topForums.find((p) => p.fid === f.parentFid) ?? f) : f;
+  }, [forumlist, topForums, wantedFid]);
+  /* 当前一级版块下的二级版块；为空 = 单级版块，一步即可选定 */
+  const currentKids = currentTop ? kidsOf(currentTop.fid) : [];
+  /* 目标版块：一级版块有二级版块时必须落到某个二级版块才算选定（先一级、再二级，两级分开选） */
+  const currentKid = currentKids.find((k) => k.fid === wantedFid);
+  const fid = currentTop && (currentKids.length === 0 || currentKid) ? wantedFid : 0;
+  /* 当前选中版块（收费/语言等按最终 fid 取） */
   const currentForum = forumlist.find((f) => f.fid === fid);
   /* 版块生效内容语言（0024，自身绑定或继承父版块）：非空时发帖语言锁定为该语言，服务端同样强制 */
   const boundLang = (currentForum?.lang ?? '') as ContentLang | '';
@@ -59,8 +112,28 @@ export function ComposePage() {
   const [langSel, setLangSel] = useState('');
   const detected = detectContentLang(`${subject} ${body}`);
   const [tab, setTab] = useState<'fn' | 'file'>('fn');
-  /* 分类弹窗（#staticBackdrop：版块卡横向滚动列表 + 单选） */
+  /* 分类弹窗（#staticBackdrop：一级 → 二级两步单选） */
   const [fidDlg, setFidDlg] = useState(false);
+  /** 弹窗层级：0 = 一级版块列表；>0 = 该一级版块下的二级版块列表 */
+  const [dlgTop, setDlgTop] = useState(0);
+  /** 弹窗当前正在浏览的一级版块（二级列表标题用） */
+  const dlgTopForum = forumlist.find((f) => f.fid === dlgTop);
+  /** 打开分类弹窗（topFid > 0 时直接进该一级版块的二级列表，供二级触发器复用） */
+  const openFidDlg = (topFid = 0) => {
+    setDlgTop(topFid);
+    setFidDlg(true);
+  };
+  /** 选定版块（一级无子版块 / 二级都是终点）：选中即关窗回到表单 */
+  const pickForum = (f: ForumNode) => {
+    setPickedFid(f.fid);
+    setDlgTop(0);
+    setFidDlg(false);
+  };
+  /** 弹窗内点一级版块：有二级版块则下钻到二级列表，否则直接选定 */
+  const pickTop = (f: ForumNode) => {
+    if (kidsOf(f.fid).length) setDlgTop(f.fid);
+    else pickForum(f);
+  };
 
   const create = useMutation({
     mutationFn: (change: ComposerSubmit) =>
@@ -126,7 +199,8 @@ export function ComposePage() {
 
   const submit = async (change: ComposerSubmit) => {
     if (!fid) {
-      setErr(t('please_select_forum'));
+      /* 已选一级版块、缺二级版块时给出更具体的提示（两级分开选，缺哪级说哪级） */
+      setErr(currentKids.length > 0 ? t('please_select_sub_forum') : t('please_select_forum'));
       return;
     }
     if (!subject.trim()) {
@@ -159,22 +233,43 @@ export function ComposePage() {
             </>
           }
         >
-          {/* 第一行：版块（分类弹窗触发器）+ 标题 */}
+          {/* 第一行：版块（一级 + 二级分开选，分类弹窗触发器）+ 标题 */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <button
               type="button"
               className={cx(selectCls, 'flex w-auto items-center gap-1.5 text-left')}
-              onClick={() => setFidDlg(true)}
-              aria-label={t('select_category')}
+              onClick={() => openFidDlg()}
+              aria-label={t('forum_top_label')}
+              title={t('forum_top_label')}
             >
-              {currentForum?.iconUrl ? (
-                <img src={currentForum.iconUrl} alt="" className="size-5 shrink-0 rounded-full object-contain" />
+              {currentTop?.iconUrl ? (
+                <img src={currentTop.iconUrl} alt="" className="size-5 shrink-0 rounded-full object-contain" />
               ) : (
                 <Icon name="folder" className="size-4 shrink-0 text-zh-grey" />
               )}
-              <span className="max-w-[10rem] truncate">{currentForum ? fname(currentForum) : t('select_category')}</span>
+              <span className="max-w-[10rem] truncate">{currentTop ? fname(currentTop) : t('select_category')}</span>
               <Icon name="chevron_down" className="size-4 shrink-0 text-zh-grey" />
             </button>
+            {/* 二级版块：选中的一级版块下有子版块时才出现（先一级、再二级） */}
+            {currentKids.length > 0 && (
+              <button
+                type="button"
+                className={cx(selectCls, 'flex w-auto items-center gap-1.5 text-left')}
+                onClick={() => openFidDlg(currentTop?.fid ?? 0)}
+                aria-label={t('forum_sub_label')}
+                title={t('forum_sub_label')}
+              >
+                {currentKid?.iconUrl ? (
+                  <img src={currentKid.iconUrl} alt="" className="size-5 shrink-0 rounded-full object-contain" />
+                ) : (
+                  <Icon name="folder" className="size-4 shrink-0 text-zh-grey" />
+                )}
+                <span className={cx('max-w-[10rem] truncate', !currentKid && 'text-lt-grey')}>
+                  {currentKid ? fname(currentKid) : t('forum_sub_label')}
+                </span>
+                <Icon name="chevron_down" className="size-4 shrink-0 text-zh-grey" />
+              </button>
+            )}
             <input
               className={cx(inputCls, 'min-w-0 flex-1')}
               placeholder={t('subject')}
@@ -354,11 +449,12 @@ export function ComposePage() {
         </Card>
       </aside>
 
-      {/* 分类弹窗（#staticBackdrop：版块卡横向滚动列表 + 单选 + 关闭） */}
+      {/* 分类弹窗（#staticBackdrop）：一级版块 →（有子版块时下钻）二级版块，两步分开单选 */}
       {fidDlg && (
         <Modal
           title={t('select_category')}
           onClose={() => setFidDlg(false)}
+          width="max-w-[600px]"
           footer={
             <div className="flex justify-end">
               <Button variant="secondary" size="sm" onClick={() => setFidDlg(false)}>
@@ -367,30 +463,47 @@ export function ComposePage() {
             </div>
           }
         >
-          <div className="flex overflow-x-auto pb-1">
-            {forumlist.map((f) => (
-              <label
-                key={f.fid}
-                className="mr-2.5 flex shrink-0 cursor-pointer flex-col items-center rounded-[10px] bg-lt-soft p-5 text-center transition-colors hover:bg-zh-row-hover"
+          {dlgTop === 0 ? (
+            <>
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-card-header-ink">
+                <Icon name="folder" className="size-4 text-brand" />
+                {t('forum_top_label')}
+              </p>
+              <div className="grid max-h-[60vh] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+                {topForums.map((f) => (
+                  <ForumPickCard
+                    key={f.fid}
+                    f={f}
+                    on={f.fid === currentTop?.fid}
+                    drill={kidsOf(f.fid).length > 0}
+                    onClick={() => pickTop(f)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 返回一级列表：二级版块按所属一级版块展示，避免平铺后分不清归属 */}
+              <button
+                type="button"
+                className="mb-2 flex items-center gap-1 text-sm text-ink-soft transition-colors hover:text-brand"
+                onClick={() => setDlgTop(0)}
               >
-                <input
-                  type="radio"
-                  name="compose-fid"
-                  className="cursor-pointer accent-brand"
-                  checked={f.fid === fid}
-                  onChange={() => setPickedFid(f.fid)}
-                />
-                {f.iconUrl ? (
-                  <img src={f.iconUrl} alt="" className="mt-1 size-10 rounded-full object-contain" />
-                ) : (
-                  <span className="mt-1 grid size-10 place-items-center rounded-full bg-card">
-                    <Icon name="folder" className="size-5 text-zh-grey" />
-                  </span>
-                )}
-                <span className="mt-1.5 whitespace-nowrap text-sm text-foreground">{fname(f)}</span>
-              </label>
-            ))}
-          </div>
+                <Icon name="chevron_left" className="size-4" />
+                {t('forum_top_label')}
+              </button>
+              <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-card-header-ink">
+                <Icon name="folder" className="size-4 text-brand" />
+                {t('forum_sub_label')}
+                <span className="truncate font-normal text-lt-grey">· {dlgTopForum ? fname(dlgTopForum) : ''}</span>
+              </p>
+              <div className="grid max-h-[60vh] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+                {kidsOf(dlgTop).map((f) => (
+                  <ForumPickCard key={f.fid} f={f} on={f.fid === currentKid?.fid} onClick={() => pickForum(f)} />
+                ))}
+              </div>
+            </>
+          )}
         </Modal>
       )}
     </div>
