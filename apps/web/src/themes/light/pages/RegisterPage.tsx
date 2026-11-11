@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router';
 import { RegisterForm, AuthAnnouncement } from '../../../components/AuthForms';
 import { useLocalizedSetting, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
+import { SiteLogo } from '../../../components/SiteLogo';
 
 /**
  * §4.6 注册页：认证版式——
@@ -47,17 +48,7 @@ export function RegisterPage() {
                 className="mb-6 flex items-center gap-2"
                 aria-label={setting?.sitename || 'FreeIDX'}
               >
-                {setting?.logo_url ? (
-                  <img
-                    src={String(setting.logo_url)}
-                    alt={setting.sitename}
-                    className="h-9 w-auto max-w-none"
-                  />
-                ) : (
-                  <span className="text-lg font-bold text-brand">
-                    {setting?.sitename || 'FreeIDX'}
-                  </span>
-                )}
+                <SiteLogo setting={setting} className="h-9 w-auto max-w-none" />
               </Link>
               <p className="text-sm text-lt-grey">{t('user_create')}</p>
               <h2 className="mt-2 text-xl font-bold text-foreground">

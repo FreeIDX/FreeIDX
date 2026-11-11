@@ -9,6 +9,7 @@ import { IconInput } from '../../../components/ui';
 import { Icon } from '../../../components/icons';
 import { useLocalizedSetting, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
+import { SiteLogo } from '../../../components/SiteLogo';
 
 /**
  * 找回密码（§4.7，两步 token 流）：
@@ -113,17 +114,7 @@ export function ResetPwPage() {
                 className="mb-6 flex items-center gap-2"
                 aria-label={setting?.sitename || 'FreeIDX'}
               >
-                {setting?.logo_url ? (
-                  <img
-                    src={String(setting.logo_url)}
-                    alt={setting.sitename}
-                    className="h-9 w-auto max-w-none"
-                  />
-                ) : (
-                  <span className="text-lg font-bold text-brand">
-                    {setting?.sitename || 'FreeIDX'}
-                  </span>
-                )}
+                <SiteLogo setting={setting} className="h-9 w-auto max-w-none" />
               </Link>
               <p className="text-sm text-lt-grey">{t('resetpw')}</p>
               <AuthAnnouncement />

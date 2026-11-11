@@ -29,6 +29,7 @@ import { InsertCode, useInsertCodes } from '../../components/InsertCode';
 import { Button, cx } from '../../components/ui';
 import { useApplyTheme, useLight, useThemeMode } from '../../store/theme';
 import { ThemeSlot } from '../../lib/theme/slots';
+import { SiteLogo } from '../../components/SiteLogo';
 
 /** 导航项（.navbar-nav>.nav-item>.nav-link：px-4 常规 #6c757d，激活主色） */
 function NavItem({
@@ -545,16 +546,8 @@ export function Layout({ children }: { children?: ReactNode }) {
                 className="flex shrink-0 items-center"
                 aria-label={setting?.sitename || 'FreeIDX'}
               >
-                {setting?.logo_url ? (
-                  <img
-                    src={String(setting.logo_url)}
-                    alt={setting.sitename}
-                    className="h-[42px] w-auto max-w-none"
-                  />
-                ) : (
-                  /* 站名即 logo：前面不再加宫格图标（图标语义与「版块导航」重复，且挤占顶栏左缘） */
-                  <span className="text-xl font-bold tracking-tight text-brand">{setting?.sitename || 'FreeIDX'}</span>
-                )}
+                {/* 后台未上传 logo 时用内置默认 logo 图兜底，不再回退文字站名 */}
+                <SiteLogo setting={setting} className="h-[42px] w-auto max-w-none" />
               </Link>
               <nav
                 className="ml-4 flex h-full min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -898,18 +891,9 @@ export function Layout({ children }: { children?: ReactNode }) {
             <InsertCode html={insertCodes.footer_start_htm} />
             <div className="flex flex-wrap items-start justify-between gap-4 max-sm:flex-col max-sm:items-center max-sm:text-center">
               <div className="min-w-0">
-                {light.footerIconShow &&
-                  (setting?.logo_url ? (
-                    <img
-                      src={String(setting.logo_url)}
-                      alt={setting.sitename}
-                      className="mb-2 block h-9 w-auto"
-                    />
-                  ) : (
-                    <span className="mb-2 block text-base font-bold text-brand">
-                      {setting?.sitename || 'FreeIDX'}
-                    </span>
-                  ))}
+                {light.footerIconShow && (
+                  <SiteLogo setting={setting} className="mb-2 block h-9 w-auto" />
+                )}
                 <p className="text-sm leading-[26px] text-foreground">
                   {setting?.brief || t('no_brief_yet')}
                 </p>

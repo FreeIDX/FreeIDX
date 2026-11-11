@@ -17,7 +17,7 @@ import { useAdminDictReady, useAdminT, type AdminT } from './t';
 import { Card, ErrorState, cx } from './ui';
 import { AdminLoginModal } from './AdminLoginModal';
 import { PageLoading } from '../components/PageLoading';
-import admWordmark from '../assets/admin/adm-wordmark.svg';
+import brandWordmark from '../assets/brand-wordmark.svg';
 
 /** 菜单文案：字典键 + 未命中回退（字典原文），或字面量（改过名的菜单用） */
 type MenuLabel = { textKey: AdminKey; fallback: string } | { text: string };
@@ -185,7 +185,7 @@ export function AdminLayout() {
           {setting?.logo_url ? (
             <img src={String(setting.logo_url)} alt={setting.sitename} className="h-[36px] rounded-full" />
           ) : (
-            <img src={admWordmark} alt={setting?.sitename || 'FreeIDX'} className="h-[30px] w-auto" />
+            <img src={brandWordmark} alt={setting?.sitename || 'FreeIDX'} className="h-[30px] w-auto" />
           )}
         </div>
         <div className="adm-sidebar min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2">

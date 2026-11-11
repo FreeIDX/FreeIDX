@@ -331,7 +331,7 @@ export interface SiteSetting {
   devicePhoneOn: boolean;
   deviceTabletOn: boolean;
   deviceTvOn: boolean;
-  /** 前台 Logo 直链（后台基础设置上传，/files/site/logo.*；空 = 用自绘字标） */
+  /** 前台 Logo 直链（后台基础设置上传，/files/site/logo.*；空 = 前台用内置默认 logo 图 assets/theme/logo-default.svg） */
   logo_url?: string;
   /** 站点图标 Favicon 直链（后台基础设置上传，/files/site/favicon.*；空 = 无自定义图标） */
   favicon_url?: string;
