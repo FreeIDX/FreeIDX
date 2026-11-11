@@ -70,13 +70,14 @@ export function normalizeCardCode(code: string): string {
 async function redeem(order: PayOrder, code: string, ctx: RedeemContext): Promise<RedeemResult> {
   const norm = normalizeCardCode(code);
   if (!norm) return { ok: false, reason: 'card.codeRequired' };
-  // 原子认领：仅未使用、未过期、且计划与订单一致的卡才置为已用；changes=1 才算抢到（防并发重复兑换）
+  // 原子认领：仅未使用、未过期、且计划与订单一致的卡才置为已用；changes=1 才算抢到（防并发重复兑换）。
+  // 同时记录订单号：后续 markPaid 失败时订单会停在 pending，对账 cron 依此补发（卡密无 provider 侧可查）。
   const r = await ctx.db
     .prepare(
-      `UPDATE bbs_card SET status = 1, redeemed_uid = ?, redeemed_date = ?
+      `UPDATE bbs_card SET status = 1, redeemed_uid = ?, redeemed_date = ?, redeemed_order_no = ?
        WHERE code = ? AND status = 0 AND plan_id = ? AND (expire_date = 0 OR expire_date > ?)`,
     )
-    .bind(order.uid, ctx.ts, norm, order.planId, ctx.ts)
+    .bind(order.uid, ctx.ts, order.orderNo, norm, order.planId, ctx.ts)
     .run();
   const claimed = Number(r.meta?.changes ?? 0);
   if (claimed !== 1) return { ok: false, reason: 'card.codeInvalid' };

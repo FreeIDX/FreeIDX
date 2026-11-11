@@ -229,6 +229,42 @@ export async function reconcilePending(
 }
 
 /**
+ * 卡密悬挂单补发（每小时，与其他对账同档）：
+ * redeem 流程在「卡已核销」与「订单 markPaid」之间没有事务；markPaid 失败时订单停在 pending、
+ * provider_ref 保留 claim: 占位，而卡密无 provider 侧可查，reconcilePending 覆盖不到。
+ * 这里按卡表记录的订单号反查补发；卡未核销（redeem 抛错后已释放占位）不会命中。
+ */
+export async function reconcileCardOrders(
+  core: { db: D1b; cache: Cache },
+  now: number,
+  limit = 50,
+): Promise<{ scanned: number; recovered: number; failed: number }> {
+  const res = await core.db
+    .prepare<{ order_no: string; code: string }>(
+      `SELECT o.order_no AS order_no, c.code AS code
+       FROM bbs_card c INNER JOIN bbs_order o ON o.order_no = c.redeemed_order_no
+       WHERE o.status = ? AND o.provider = 'card' AND o.provider_ref LIKE 'claim:%'
+       ORDER BY o.id ASC LIMIT ?`,
+    )
+    .bind(OrderStatus.PENDING, limit)
+    .all();
+  const rows = res.results ?? [];
+  const report = { scanned: rows.length, recovered: 0, failed: 0 };
+  for (const row of rows) {
+    try {
+      const after = await markPaid(core.db, row.order_no, `card:${row.code}`, now);
+      if (after.status !== OrderStatus.PAID && after.status !== OrderStatus.FULFILLED) continue;
+      await fulfillOrder(core, row.order_no, now);
+      report.recovered++;
+    } catch (e) {
+      console.error(`[payment] card-reconcile failed order=${row.order_no}:`, e instanceof Error ? e.message : e);
+      report.failed++;
+    }
+  }
+  return report;
+}
+
+/**
  * 超期关单（C5，cron 每小时，listStalePending 供单）：
  * 创建超 72h（覆盖 PayPal 订单最长有效期）且仍 pending 的外部单逐单 queryOrder 复核——
  * 已付则补 markPaid+fulfillOrder（与掉单对账同路径）；确认未付则 closeOrder 终结，

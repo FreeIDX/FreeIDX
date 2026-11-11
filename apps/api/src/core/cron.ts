@@ -12,7 +12,7 @@ import { Cache } from './cache';
 import { CRON_5MIN, CRON_DAILY, CRON_HOURLY } from './cron-schedule';
 import { queueGc } from './queue';
 import { getExtensions } from './extensions';
-import { reconcilePending, sweepStaleOrders } from './payment/orchestrator';
+import { reconcileCardOrders, reconcilePending, sweepStaleOrders } from './payment/orchestrator';
 import { demoteExpiredVip } from './order';
 import { liftExpiredBans } from './ban';
 import { seoRebuildRenamed } from '../modules/seo/generate';
@@ -302,6 +302,13 @@ export async function handleScheduled(
         console.log(`[cron:reconcile] scanned=${r.scanned} recovered=${r.recovered} failed=${r.failed}`);
       } catch (err) {
         console.warn('[cron:reconcile] failed:', err instanceof Error ? err.message : err);
+      }
+      // 卡密悬挂单：卡已核销但 markPaid 失败（订单仍 pending + claim 占位），按卡表订单号补发。
+      try {
+        const r = await reconcileCardOrders({ db, cache }, deps.now);
+        if (r.scanned) console.log(`[cron:card-reconcile] scanned=${r.scanned} recovered=${r.recovered} failed=${r.failed}`);
+      } catch (err) {
+        console.warn('[cron:card-reconcile] failed:', err instanceof Error ? err.message : err);
       }
       // 超期关单（C5）：>72h 仍 pending 的外部单逐单复核，已付补单、未付关单，
       // 兜住对账 24h 窗口之外的悬挂单（PayPal 会话有效期长于对账窗口）。

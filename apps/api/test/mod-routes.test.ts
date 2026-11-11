@@ -167,7 +167,7 @@ describe('版务批量接口（T3-1 DoD）', () => {
     });
     const r = makeEnv(rules);
     expect((await jsonOf(await post(r, { tids: [9], action: 'digest', value: 0 }))).code).toBe(Code.OK);
-    const upd = r.calls.find((c) => /SET credits = credits \+ \?/.test(c.sql));
+    const upd = r.calls.find((c) => /SET credits = MAX\(0, credits \+ \?\)/.test(c.sql));
     expect(upd && Number(upd.params[0])).toBe(-5);
   });
 

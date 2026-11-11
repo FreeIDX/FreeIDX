@@ -11,7 +11,7 @@
  * 两道硬闸：① 上传不足 24h 的对象一律跳过（防「刚上传尚未关联」被误删）；
  * ② 删除前必须有一次跑到末尾且命中>0 的扫描报告，并二次确认。前缀白名单之外的对象永不触碰。
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AdminKey } from '@freeidx/shared';
 import { getMaintR2Status, resetMaintR2, startMaintR2, stepMaintR2 } from '../api';
 import type { MaintR2State, MaintR2Status } from '../types';
@@ -37,17 +37,27 @@ export function R2MaintenancePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ prefix: string; hits: number } | null>(null);
 
-  const load = async (): Promise<void> => {
+  // 卸载后停止推进：advance() 单次最多 20 个请求，离开页面后不应继续打接口/setState
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const load = useCallback(async (): Promise<void> => {
     try {
-      setStatus(await getMaintR2Status());
+      const s = await getMaintR2Status();
+      if (mountedRef.current) setStatus(s);
     } catch (e) {
-      setFlash({ tone: 'warn', text: apiErrorMessage(e) });
+      if (mountedRef.current) setFlash({ tone: 'warn', text: apiErrorMessage(e) });
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const stateOf = (prefix: string): MaintR2State | null => {
     const i = status?.prefixes.indexOf(prefix) ?? -1;
@@ -69,7 +79,9 @@ export function R2MaintenancePage() {
   const advance = async (prefix: string, maxSteps: number): Promise<MaintR2State | null> => {
     let last: MaintR2State | null = null;
     for (let i = 0; i < maxSteps; i++) {
+      if (!mountedRef.current) break;
       const r = await stepMaintR2(prefix, 5);
+      if (!mountedRef.current) break;
       last = r.state;
       applyState(r.state);
       const drained = r.state.done && r.state.pending.length === 0;

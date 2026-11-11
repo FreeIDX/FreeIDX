@@ -39,7 +39,8 @@ describe('卡密归一 + 原子认领', () => {
     expect(r).toEqual({ ok: true, providerRef: 'card:ABCD' });
     // 认领语句同时约束 status=0 + plan_id + 未过期
     expect(calls[0]!.sql).toMatch(/status = 0 AND plan_id = \? AND \(expire_date = 0 OR expire_date > \?\)/);
-    expect(calls[0]!.params).toEqual([7, 1700000000, 'ABCD', 3, 1700000000]);
+    // 参数含核销订单号（悬挂单对账依据）：uid, redeemed_date, orderNo, code, plan_id, now
+    expect(calls[0]!.params).toEqual([7, 1700000000, 'FI1', 'ABCD', 3, 1700000000]);
   });
 
   it('重复/错配卡：changes=0 → 拒绝（不消费）', async () => {

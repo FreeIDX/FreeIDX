@@ -78,7 +78,8 @@ const UPDATE_ORDER = { test: /UPDATE bbs_order SET/, rows: [], changes: 1 } as S
 const INSERT_ORDER = { test: /INSERT INTO bbs_order/, rows: [] } as SqlRule;
 const FIND_PLAN = { test: /FROM bbs_vip_plan WHERE id = \?/, first: PLAN } as SqlRule;
 const UPDATE_VIP = { test: /UPDATE bbs_user SET vip_expire_at/, rows: [] } as SqlRule;
-const UPDATE_CREDITS = { test: /UPDATE bbs_user SET credits = credits \+ \?/, rows: [] } as SqlRule;
+// 正增量仍是 credits + ?，负增量变为 MAX(0, credits + ?)：统一用前缀匹配两条路径
+const UPDATE_CREDITS = { test: /UPDATE bbs_user SET credits =/, rows: [] } as SqlRule;
 const UPDATE_GID_BACK = { test: /UPDATE bbs_user SET gid = vip_from_gid/, rows: [] } as SqlRule;
 const INSERT_LOG = { test: /INSERT INTO bbs_point_log/, rows: [] } as SqlRule;
 /** 履约后 user:{uid} 缓存失效（core/order.fulfillOrder 的 cache.del） */

@@ -5,8 +5,10 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
-import { getThreadPaylist } from '../../../lib/api';
-import { posInt } from '../../../lib/params';
+import { ApiError, getThreadPaylist } from '../../../lib/api';
+import { Code } from '@freeidx/shared';
+import { NotFoundPage } from './NotFoundPage';
+import { idParam, posInt } from '../../../lib/params';
 import { Avatar } from '../../../components/Avatar';
 import { Pagination } from '../../../components/Pagination';
 import { Breadcrumb, Card, Pill, cx } from '../../../components/ui';
@@ -17,7 +19,8 @@ export function PaylistPage() {
   const t = useT();
   const params = useParams();
   const me = useAuth((s) => s.me);
-  const tid = posInt(params.tid);
+  // 非法 tid 归 0（后端 NOT_FOUND），不得回落 1 而展示 1 号帖的购买记录
+  const tid = idParam(params.tid) ?? 0;
   const page = posInt(params.page);
   const q = useQuery({ queryKey: ['thread-paylist', tid, page], queryFn: () => getThreadPaylist(tid, page) });
   const d = q.data;
@@ -25,6 +28,9 @@ export function PaylistPage() {
   const amount = d
     ? `${isRmb ? d.contentBuy / 100 : d.contentBuy} ${d.contentBuyType === 1 ? t('credits_experience') : d.contentBuyType === 2 ? t('credits_gold') : t('credits_rmb')}`
     : '';
+
+  // 主题不存在（含非法 tid 归 0）→ 整页 404
+  if (q.isError && q.error instanceof ApiError && q.error.code === Code.NOT_FOUND) return <NotFoundPage />;
 
   return (
     <div className="mx-auto w-full lg:w-[83.333%]">

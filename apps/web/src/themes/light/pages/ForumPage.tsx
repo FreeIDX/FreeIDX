@@ -5,7 +5,7 @@ import { CONTENT_LANG_NATIVE_NAMES, Code, GroupId, type ContentLang } from '@fre
 import { useAuth } from '../../../store/auth';
 import { useLight } from '../../../store/theme';
 import { ApiError, apiGet, modThreads } from '../../../lib/api';
-import { posInt } from '../../../lib/params';
+import { idParam, posInt } from '../../../lib/params';
 import { useForumName, useLocalizedName, useT } from '../../../lib/i18n';
 import { NotFoundPage } from './NotFoundPage';
 import { Pagination } from '../../../components/Pagination';
@@ -59,7 +59,8 @@ const tagChip = 'inline-flex shrink-0 items-center rounded-full border border-zh
 export function ForumPage() {
   const params = useParams();
   const [search] = useSearchParams();
-  const fid = posInt(params.fid);
+  // 非法 fid 归 0（后端 forumNotFound → 页面 404），不得回落 1 而展示另一个版块
+  const fid = idParam(params.fid) ?? 0;
   const page = posInt(search.get('page'));
   const digest = search.get('digest') === '1' ? 1 : 0;
   const orderby = search.get('orderby') === 'lastpid' ? 'lastpid' : 'tid';

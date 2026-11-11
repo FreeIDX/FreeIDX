@@ -13,3 +13,17 @@ export function posInt(v: string | number | null | undefined, fallback = 1, min 
 export function nonNegInt(v: string | number | null | undefined, fallback = 0): number {
   return posInt(v, fallback, 0);
 }
+
+/**
+ * 资源 id 严格解析（/thread/:tid、/forum/:fid、/user/:uid…）：
+ * 只接受纯数字且 >=1，非法返回 null。**不要**对 id 用 posInt 的 fallback=1 ——
+ * 那会把 /thread/abc 变成 1 号帖，向用户展示「有效但错误」的内容，且 404 分支永远不命中。
+ * 调用方约定：`const tid = idParam(params.tid) ?? 0`，让后端返回 NOT_FOUND（页面已有 404 态）。
+ */
+export function idParam(v: string | number | null | undefined): number | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!/^\d+$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}

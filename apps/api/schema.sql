@@ -11,7 +11,7 @@
 --   pnpm --filter @freeidx/api db:apply && pnpm --filter @freeidx/api db:schema:dump
 -- 并把 migrations/ 与 schema.sql 一起提交。
 --
--- 对象统计：36 表 / 78 索引
+-- 对象统计：36 表 / 79 索引
 
 -- ===== 表（36）=====
 CREATE TABLE bbs_ad_slot (
@@ -70,7 +70,8 @@ CREATE TABLE bbs_card (
   create_date INTEGER NOT NULL DEFAULT 0,
   redeemed_uid INTEGER NOT NULL DEFAULT 0,
   redeemed_date INTEGER NOT NULL DEFAULT 0,
-  expire_date INTEGER NOT NULL DEFAULT 0
+  expire_date INTEGER NOT NULL DEFAULT 0,
+  redeemed_order_no TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE bbs_checkin (
@@ -465,7 +466,7 @@ CREATE TABLE bbs_vip_plan (
   gid INTEGER NOT NULL DEFAULT 0
 );
 
--- ===== 索引（78）=====
+-- ===== 索引（79）=====
 CREATE INDEX bbs_ad_slot_position ON bbs_ad_slot (position, enabled, sort);
 
 CREATE INDEX bbs_announcement_isshow ON bbs_announcement (isshow, aid);
@@ -621,3 +622,5 @@ CREATE UNIQUE INDEX bbs_user_username ON bbs_user (username);
 CREATE INDEX bbs_v_apply_nonce ON bbs_v_apply (uid, nonce);
 
 CREATE INDEX bbs_v_apply_status ON bbs_v_apply (status, create_time);
+
+CREATE INDEX idx_card_redeemed_order ON bbs_card(redeemed_order_no);

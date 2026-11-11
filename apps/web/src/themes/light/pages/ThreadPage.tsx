@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { Code, PageSize, type FavoriterItem, type FrontKey, type HotPostsData, type PostItem, type ThreadDetail } from '@freeidx/shared';
 import { ApiError, apiGet, checkAudit, createReply, deletePost, fetchPostReplies, fetchQuickReplyMessage, fmtDate, getThreadPaylist, modThreads, payThread, recycleThread, toggleFavorite, toggleLike, togglePostLike, updatePost } from '../../../lib/api';
 import { apiErrorMessage } from '../../../lib/errors';
-import { posInt } from '../../../lib/params';
+import { idParam, posInt } from '../../../lib/params';
 import { AttachRows } from '../../../components/AttachRows';
 import { Avatar } from '../../../components/Avatar';
 import type { ComposerSubmit, QuotedSummary } from '../../../components/Composer';
@@ -186,7 +186,8 @@ export function ThreadPage() {
   const navigate = useNavigate();
   const openAuth = useAuthModal((s) => s.openAuth);
   const qc = useQueryClient();
-  const tid = posInt(params.tid);
+  // 非法 tid 归 0（后端 NOT_FOUND → 页面 404），不得回落 1 而展示另一篇帖子
+  const tid = idParam(params.tid) ?? 0;
   const page = posInt(params.page);
   const [quoted, setQuoted] = useState<QuotedSummary | null>(null);
   const composerRef = useRef<HTMLDivElement>(null);

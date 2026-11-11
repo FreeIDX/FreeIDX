@@ -90,13 +90,16 @@ export function creditDeltaStmts(core: { db: D1b }, p: CreditDelta): Stmt[] {
   const col = creditTypeCol(p.creditType);
   if (!col) throw new Error(t0('credit.unsupportedType', { type: p.creditType }));
   if (p.change === 0) return [];
+  // 负向变动夹到 0：回扣（删帖/退款/精华回退）在余额不足时不得把余额写成负数。
+  // 少扣的部分不追偿 —— 比「负余额」更符合余额语义，也避免后续再加余额时先填坑。
+  const deltaExpr = p.change < 0 ? `MAX(0, ${col} + ?)` : `${col} + ?`;
   if (col !== 'credits') {
     return [
-      core.db.prepare(`UPDATE bbs_user SET ${col} = ${col} + ? WHERE uid = ?`).bind(p.change, p.uid) as unknown as Stmt,
+      core.db.prepare(`UPDATE bbs_user SET ${col} = ${deltaExpr} WHERE uid = ?`).bind(p.change, p.uid) as unknown as Stmt,
     ];
   }
   return [
-    core.db.prepare('UPDATE bbs_user SET credits = credits + ? WHERE uid = ?').bind(p.change, p.uid) as unknown as Stmt,
+    core.db.prepare(`UPDATE bbs_user SET credits = ${deltaExpr} WHERE uid = ?`).bind(p.change, p.uid) as unknown as Stmt,
     core.db
       .prepare(
         `INSERT INTO bbs_point_log (uid, change, balance, reason, biz_key, create_date)

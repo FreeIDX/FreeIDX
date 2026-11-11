@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
-import { apiGet, fmtDate, toggleFollow } from '../../../lib/api';
+import { ApiError, apiGet, fmtDate, toggleFollow } from '../../../lib/api';
+import { Code } from '@freeidx/shared';
+import { NotFoundPage } from './NotFoundPage';
 import { apiErrorMessage } from '../../../lib/errors';
-import { posInt } from '../../../lib/params';
+import { idParam } from '../../../lib/params';
 import { useT, useGroupName } from '../../../lib/i18n';
 import { Avatar } from '../../../components/Avatar';
 import { FollowUserList } from '../../../components/FollowUserList';
@@ -54,7 +56,8 @@ export function UserPage() {
   const params = useParams();
   const openAuth = useAuthModal((s) => s.openAuth);
   const [search] = useSearchParams();
-  const uid = posInt(params.uid);
+  // 非法 uid 归 0（后端 NOT_FOUND），不得回落 1 而展示 1 号用户
+  const uid = idParam(params.uid) ?? 0;
   const section = search.get('s') === 'threads' ? 'threads' : search.get('s') === 'replies' ? 'replies' : search.get('s') === 'following' ? 'following' : search.get('s') === 'followers' ? 'followers' : 'profile';
   const me = useAuth((s) => s.me);
   const t = useT();
@@ -104,6 +107,9 @@ export function UserPage() {
     }
     follow.mutate();
   };
+
+  // 用户不存在（含非法 uid 归 0）→ 整页 404，而不是在资料区显示一行错误文本
+  if (profile.isError && profile.error instanceof ApiError && profile.error.code === Code.NOT_FOUND) return <NotFoundPage />;
 
   return (
     <div className="my-[10px] flex flex-col gap-4 lg:flex-row">

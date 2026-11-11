@@ -6,7 +6,7 @@
  * 提交仍走列表那条 PUT /api/admin/groups（列表/编辑共用一个 upsert 语义），
  * 只是这里只带单组；服务端 §D.8#5 对 gid∉[1,5] 静默丢弃版务位，故非管理组整块不渲染而非禁用。
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 import type { AdminKey } from '@freeidx/shared';
@@ -16,7 +16,7 @@ import { useAdminT } from '../t';
 import { useAdminAction } from '../use-action';
 import { USER_TABS } from '../tabs';
 import { MOD_PERMS, USER_PERMS, isModGid, toItem, type GroupNumericKey } from './group-perms';
-import { Alert, Button, Card, Checkbox, ErrorState, Field, Input, LinkButton, PageTitle, SubmitRow, TabBar } from '../ui';
+import { Alert, Button, Card, Checkbox, ErrorState, Field, Input, LinkButton, PageTitle, SubmitRow, TabBar, useHydrateOnce } from '../ui';
 
 /** 用户权限两行表：thead 缺席，首行是居中文字表头，次行是居中复选框 */
 function PermRow({
@@ -60,9 +60,8 @@ export function GroupEditPage() {
   const found = useMemo(() => (q.data?.groups ?? []).find((g) => Number(g.gid) === gid), [q.data, gid]);
 
   const [form, setForm] = useState<GroupFullRow | null>(null);
-  useEffect(() => {
-    if (found) setForm(found);
-  }, [found]);
+  // 只灌一次：保存后 invalidate 重取会生成新的 found 引用，不得覆盖正在编辑的权限矩阵
+  useHydrateOnce(found, (f) => setForm(f), gid);
 
   const save = useAdminAction(() => putGroups([toItem(form ?? found!)]), {
     ok: t('save_successfully'),
