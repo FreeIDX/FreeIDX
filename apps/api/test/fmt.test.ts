@@ -2,7 +2,7 @@
  * T2-5 写时定稿测试：发帖/回帖内容的写时定稿与 HTML 化。
  */
 import { describe, expect, it } from 'vitest';
-import { htmlSpecialChars, MESSAGE_MAX_CHARS, postMessageFmt, xnTxtToHtml } from '../src/core/fmt';
+import { decorateImages, htmlSpecialChars, MESSAGE_MAX_CHARS, postMessageFmt, xnTxtToHtml } from '../src/core/fmt';
 
 describe('htmlSpecialChars（htmlspecialchars ENT_QUOTES 等价）', () => {
   it('五字符转义，& 优先', () => {
@@ -45,5 +45,51 @@ describe('截断与引用前置', () => {
       '<div class="quote">QUOTE</div>body',
     );
     expect(postMessageFmt({ message: 'body', doctype: 1, quotepid: 0 }, 10, q).message_fmt).toBe('body');
+  });
+});
+
+/* 性能项 16-a：正文图片统一补 loading="lazy" decoding="async"（读路径不二次过滤，只能写时定稿） */
+describe('decorateImages（正文图片降级）', () => {
+  const PLACEHOLDER = ' loading="lazy" decoding="async"';
+
+  it('普通 img 补两个属性，正文其它部分不动', () => {
+    expect(decorateImages('<p>文字</p><img src="/a.png" alt="x">')).toBe(
+      `<p>文字</p><img src="/a.png" alt="x"${PLACEHOLDER}>`,
+    );
+  });
+
+  it('幂等：已带 loading/decoding 不重复插入', () => {
+    const once = decorateImages('<img src="/a.png">');
+    expect(decorateImages(once)).toBe(once);
+    expect(decorateImages('<img src="/a.png" loading="eager" decoding="sync">')).toBe(
+      '<img src="/a.png" loading="eager" decoding="sync">',
+    );
+  });
+
+  it('属性值里的 `>` 不会被当成标签结束（sanitize 只转义双引号，`>` 会原样留下）', () => {
+    expect(decorateImages('<img src="/a.png" title="a>b">')).toBe(
+      `<img src="/a.png" title="a>b"${PLACEHOLDER}>`,
+    );
+  });
+
+  it('自闭合写法保留自闭合', () => {
+    expect(decorateImages('<img src="/a.png" />')).toBe(`<img src="/a.png"${PLACEHOLDER} />`);
+  });
+
+  it('非 img 标签与文本原样返回（含 <imgx 这种前缀干扰）', () => {
+    expect(decorateImages('<p>plain</p>')).toBe('<p>plain</p>');
+    expect(decorateImages('<imgx>')).toBe('<imgx>');
+    expect(decorateImages('&lt;img src="x"&gt;')).toBe('&lt;img src="x"&gt;');
+  });
+
+  it('写时定稿：普通用户与管理员通道都补属性，message 原文不受影响', () => {
+    const src = '<p><img src="/a.png"></p>';
+    /* sanitize 输出单标签用自闭合写法（`<img ... />`），这里对两种写法都容忍 */
+    const EXPECT = /<img src="\/a\.png" loading="lazy" decoding="async"\s*\/?>/;
+    const user = postMessageFmt({ message: src, doctype: 0 }, 10);
+    expect(user.message_fmt).toMatch(EXPECT);
+    expect(user.message).toBe(src); // 编辑用原文不带属性
+    const admin = postMessageFmt({ message: src, doctype: 0 }, 1);
+    expect(admin.message_fmt).toMatch(EXPECT);
   });
 });
