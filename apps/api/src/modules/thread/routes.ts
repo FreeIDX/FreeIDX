@@ -250,7 +250,9 @@ async function queryThreadPage(
 }
 
 /**
- * 置顶合并（§D.2）：首页并全局置顶 top=3；版块页并版块置顶 top∈1..2；语言筛选时置顶帖同样受语言约束。
+ * 置顶合并（§D.2）：首页并全站置顶（top=3）与各版块置顶（top∈1..2）；版块页并本版块全部置顶（含 top=3）。
+ * 口径与前端置顶徽章一致——徽章对 top∈{1,2,3} 一律显示「置顶」，列表排序必须同样前置，
+ * 否则本版置顶在「最新」页只有徽章、顺序不变（用户视角=置顶无效）。
  * 排序：级别优先（3 在 1/2 之前）→ 同级按置顶时间倒序（0034 的 top_at，后置顶的靠前）
  * → 存量行 top_at=0 时回落到 tid DESC，与升级前一致。
  */
@@ -262,13 +264,14 @@ async function queryTopThreads(
   viewerUid: number,
   seeCheck: boolean,
 ): Promise<ThreadRow[]> {
-  const cond = fid === 0 ? 'tt.top = 3' : 'tt.fid = ? AND tt.top BETWEEN 1 AND 2';
+  const cond = fid === 0 ? 'tt.top >= 1' : 'tt.fid = ? AND tt.top >= 1';
   const params: Array<number | string> = fid === 0 ? [] : [fid];
-  const langCond = lang ? ' AND t.lang = ?' : '';
-  if (lang) params.push(lang);
-  // 置顶同样受审核可见性约束（待审/回收站置顶不得出现在列表里）
+  /* 参数次序必须与 SQL 占位符次序（cond → okCond → langCond）严格一致，
+     否则语言筛选下 t.uid 会绑到语言串、t.lang 会绑到 uid，置顶块直接查空 */
   const okCond = seeCheck ? ' AND t.ok <> -2' : ' AND (t.ok = 1 OR (t.uid = ? AND t.ok <> -2))';
   if (!seeCheck) params.push(viewerUid);
+  const langCond = lang ? ' AND t.lang = ?' : '';
+  if (lang) params.push(lang);
   const r = await db
     .prepare<ThreadRow>(
       `SELECT ${THREAD_LIST_COLS_T} FROM bbs_thread_top tt JOIN ${T} t ON t.tid = tt.tid

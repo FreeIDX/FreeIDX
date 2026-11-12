@@ -107,6 +107,24 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(top.sql).toMatch(/ORDER BY tt\.top DESC, tt\.top_at DESC, t\.tid DESC/);
   });
 
+  it('置顶合并：首页并入全部置顶级别（本版置顶 1/2 也前置，不只 top=3）', async () => {
+    const { env, calls } = envFor(baseRules());
+    expect((await json(await app.request('/api/threads', {}, env as never))).code).toBe(Code.OK);
+    const top = calls.find((c) => /bbs_thread_top/.test(c.sql))!;
+    expect(top.sql).toMatch(/tt\.top >= 1/);
+    expect(top.sql).not.toMatch(/tt\.top = 3|tt\.top BETWEEN/);
+  });
+
+  it('置顶合并：语言筛选时参数次序与占位符一致（cond → ok → lang）', async () => {
+    const { env, calls } = envFor(baseRules());
+    expect((await json(await app.request('/api/threads?lang=zh', {}, env as never))).code).toBe(Code.OK);
+    const top = calls.find((c) => /bbs_thread_top/.test(c.sql))!;
+    // SQL 里 okCond（t.uid = ?）在 langCond（t.lang = ?）之前，绑定次序必须一致，
+    // 否则游客 uid=0 会与语言串错位，置顶块静默查空（只有徽章、不前置）。
+    expect(top.sql).toMatch(/t\.uid = \?[\s\S]*t\.lang = \?/);
+    expect(top.params).toEqual([0, 'zh']);
+  });
+
   it('digest=1 时不并置顶表', async () => {
     const { env, calls } = envFor(baseRules());
     const res = await app.request('/api/threads?digest=1', {}, env as never);
