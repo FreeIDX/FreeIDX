@@ -118,6 +118,9 @@ beforeEach(() => {
   edge = fakeCaches();
   edge.install();
 });
+
+/** SWR 白名单接口会额外写一份 `fi-sw=stale` 副本：统计「新鲜副本」时必须把它排除 */
+const freshEntries = () => [...edge.entries.keys()].filter((k) => !/[?&]fi-sw=stale/.test(k));
 afterEach(() => {
   delete (globalThis as { caches?: unknown }).caches;
 });
@@ -140,7 +143,7 @@ describe('边缘缓存：游客只读接口', () => {
     const first = await hit('/api/threads');
     expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
     const body1 = await first.res.json();
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
 
     const second = await hit('/api/threads', {}, envFor());
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
@@ -168,21 +171,21 @@ describe('边缘缓存：游客只读接口', () => {
   it('查询串参与缓存键（分页/筛选各自成条目）', async () => {
     await hit('/api/threads?page=1');
     await hit('/api/threads?page=2');
-    expect(edge.entries.size).toBe(2);
+    expect(freshEntries().length).toBe(2);
     expect(Array.from(edge.entries.keys()).every((k) => k.includes('fi-ua=human'))).toBe(true);
   });
 
   it('登录轨 Cookie（sid/at/admin_at）绕开缓存：既不读也不写', async () => {
     const { res, source } = await hit('/api/threads', { cookie: 'csrf=token1; sid=abcdef' });
     expect(res.headers.get('x-edge-cache')).toBeNull();
-    expect(edge.entries.size).toBe(0);
+    expect(freshEntries().length).toBe(0);
     expect(((await res.json()) as { code: number }).code).toBe(0); // 登录链路完整走通，非错误信封
     expect(source.calls.length).toBeGreaterThan(0); // 走完整链路
   });
 
   it('Authorization 头绕开缓存', async () => {
     await hit('/api/threads', { authorization: 'Bearer x' });
-    expect(edge.entries.size).toBe(0);
+    expect(freshEntries().length).toBe(0);
   });
 
   /* 右栏排行对登录用户放开边缘缓存（PUBLIC_READONLY）：响应体里没有任何按 uid/gid 定制的字段，
@@ -192,7 +195,7 @@ describe('边缘缓存：游客只读接口', () => {
     const first = await hit('/api/rank/users?type=new&limit=16');
     expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
     const body = await first.res.json();
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
 
     const second = await hit('/api/rank/users?type=new&limit=16', login, envFor());
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
@@ -202,7 +205,7 @@ describe('边缘缓存：游客只读接口', () => {
     // 反向保证：同一登录轨访问按访问者定制的列表接口仍然完全不参与缓存
     const list = await hit('/api/threads', login);
     expect(list.res.headers.get('x-edge-cache')).toBeNull();
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
   });
 
   it('首访（尚无 csrf Cookie）：MISS 也回填（副本剥掉 csrf 头），第二个人起直接 HIT 并补签', async () => {
@@ -212,7 +215,7 @@ describe('边缘缓存：游客只读接口', () => {
     expect(cold.res.headers.get('x-edge-cache')).toBe('MISS');
     expect(cold.res.headers.get('set-cookie')).toContain('csrf='); // 下发给本次请求方的响应仍带签发
 
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
     const stored = Array.from(edge.entries.values())[0]!;
     // 副本里不得残留 Set-Cookie：同一份副本会发给所有游客，csrftoken 必须由 HIT 分支现场补签
     expect(stored.headers.some(([k]) => k.toLowerCase() === 'set-cookie')).toBe(false);
@@ -239,12 +242,12 @@ describe('边缘缓存：游客只读接口', () => {
     expect(((await res.json()) as { code: number }).code).toBeLessThan(0);
     expect(res.headers.get('cache-control')).toBe('no-store'); // envelope 显式声明，写入门槛据此拒绝
     expect(res.headers.get('x-edge-cache')).toBeNull();
-    expect(edge.entries.size).toBe(0);
+    expect(freshEntries().length).toBe(0);
   });
 
   it('非白名单接口（/api/me）不参与缓存', async () => {
     await hit('/api/me');
-    expect(edge.entries.size).toBe(0);
+    expect(freshEntries().length).toBe(0);
   });
 
   /* 右栏/聚合类端点在 §7 扩容前完全没有边缘缓存：游客每次 PV 都真打 Worker + D1。
@@ -283,7 +286,7 @@ describe('边缘缓存：游客只读接口', () => {
     const first = await hit('/api/insert-codes');
     expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
     expect(first.source.calls.some((c) => /FROM bbs_kv/.test(c.sql))).toBe(true);
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
 
     const second = await hit('/api/insert-codes', {}, envFor());
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
@@ -294,7 +297,7 @@ describe('边缘缓存：游客只读接口', () => {
   it('版块简介（发现页按需拉）命中边缘后不再查库', async () => {
     const first = await hit('/api/forums/briefs');
     expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
 
     const second = await hit('/api/forums/briefs', {}, envFor());
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
@@ -318,7 +321,7 @@ describe('边缘缓存：公共图片（附件预览）', () => {
     expect(a.res.headers.get('x-edge-cache')).toBe('MISS');
     expect(a.res.headers.get('cache-control')).toBe('public, max-age=86400');
 
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
     const [key, stored] = Array.from(edge.entries.entries())[0]!;
     // 二进制与语言/UA 无关：不编 fi-lang，人类与爬虫共用一份
     expect(key).toContain('fi-ua=human');
@@ -338,7 +341,45 @@ describe('边缘缓存：公共图片（附件预览）', () => {
     const res = await hit('/api/attachments/42/preview', {}, gated as never);
     expect(res.res.headers.get('cache-control')).toBe('no-store');
     expect(res.res.headers.get('x-edge-cache')).toBeNull();
-    expect(edge.entries.size).toBe(0);
+    expect(freshEntries().length).toBe(0);
+  });
+});
+
+describe('边缘缓存：手动 SWR（双副本 + 内部重放）', () => {
+  const isStaleKey = (k: string) => /[?&]fi-sw=stale/.test(k);
+  /** 模拟 fresh 副本到期：fakeCaches 不解析 max-age，直接删掉新鲜副本，只留 stale */
+  const expireFresh = () => {
+    for (const k of freshEntries()) edge.entries.delete(k);
+  };
+
+  it('fresh 过期后先返 stale 副本，并在后台把 fresh 重建出来', async () => {
+    const first = await hit('/api/threads');
+    const body = await first.res.json();
+    expect([...edge.entries.keys()].filter(isStaleKey)).toHaveLength(1);
+
+    expireFresh();
+    const staleHit = await hit('/api/threads', {}, envFor());
+    expect(staleHit.res.headers.get('x-edge-cache')).toBe('HIT-STALE');
+    // 陈旧副本同样不得把边缘 max-age 下发给浏览器
+    expect(staleHit.res.headers.get('cache-control')).toBeNull();
+    expect(await staleHit.res.json()).toEqual(body);
+
+    // 后台重放（waitUntil 内的进程内派发）应把 fresh 副本写回来
+    for (let i = 0; i < 60 && freshEntries().length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(freshEntries().length).toBe(1);
+  });
+
+  it('内层重放请求（x-fi-revalidate）不读 stale：杜绝「陈旧 → 重放 → 又读陈旧」自激', async () => {
+    await hit('/api/threads');
+    expireFresh();
+    const res = await hit('/api/threads', { 'x-fi-revalidate': '1' }, envFor());
+    expect(res.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(res.source.calls.length).toBeGreaterThan(0); // 真回源，而不是又给一份陈旧副本
+  });
+
+  it('白名单外的接口不写 stale 副本（避免无谓的缓存写放大）', async () => {
+    await hit('/api/rank/users?type=new&limit=16');
+    expect([...edge.entries.keys()].filter(isStaleKey)).toHaveLength(0);
   });
 });
 
@@ -384,7 +425,7 @@ describe('边缘缓存：sitemap.xml', () => {
     expect(first.source.calls.some((c) => /FROM bbs_thread WHERE ok = 1/.test(c.sql))).toBe(true);
 
     // 缓存副本与响应头口径一致：application/xml（非默认 HTML）+ max-age=3600
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
     const stored = Array.from(edge.entries.values())[0]!;
     const storedHeaders = new Headers(stored.headers);
     expect(storedHeaders.get('content-type')).toContain('application/xml');
@@ -402,7 +443,7 @@ describe('边缘缓存：sitemap.xml', () => {
     await hit('/sitemap.xml');
     const bot = await hit('/sitemap.xml', BOT, envFor());
     expect(bot.res.headers.get('x-edge-cache')).toBe('HIT');
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
   });
 });
 
@@ -411,7 +452,7 @@ describe('边缘缓存：爬虫预渲染前置', () => {
     const first = await hit('/thread/2', BOT);
     expect(await first.res.text()).toContain('你好世界');
     expect(first.source.calls.some((c) => /FROM bbs_thread/.test(c.sql))).toBe(true);
-    expect(edge.entries.size).toBe(1);
+    expect(freshEntries().length).toBe(1);
 
     const second = await hit('/thread/2', BOT, envFor());
     expect(await second.res.text()).toContain('你好世界');

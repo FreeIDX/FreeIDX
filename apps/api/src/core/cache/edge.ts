@@ -152,11 +152,13 @@ function keyUrl(url: string, ua: UaClass, lang?: string): string {
   return u.toString();
 }
 
-function keyRequest(url: string, ua: UaClass, lang?: string): Request {
-  return new Request(keyUrl(url, ua, lang), { method: 'GET' });
+function keyRequest(url: string, ua: UaClass, lang?: string, variant?: 'stale'): Request {
+  const u = new URL(keyUrl(url, ua, lang));
+  if (variant) u.searchParams.set('fi-sw', variant);
+  return new Request(u.toString(), { method: 'GET' });
 }
 
-function withState(res: Response, state: 'HIT' | 'MISS'): Response {
+function withState(res: Response, state: 'HIT' | 'MISS' | 'HIT-STALE'): Response {
   const headers = new Headers(res.headers);
   headers.set('x-edge-cache', state);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
@@ -273,6 +275,71 @@ function isFileCacheEligible(req: { headers: Headers }): boolean {
   return !PERSONAL_COOKIE.test(req.headers.get('cookie') ?? '');
 }
 
+/* ==================== 手动 stale-while-revalidate（双副本 + 内部重放） ==================== */
+
+/**
+ * 陈旧窗口（秒）：fresh 副本过期后，这份副本还能被「先返回、后刷新」沿用多久。
+ *
+ * 为什么需要：Cache API **不支持** `stale-while-revalidate` / `stale-if-error` 指令
+ * （官方文档：`cache.put`/`cache.match` 不解析这两个指令，只有 fetch 路径才认）。
+ * 而列表/详情/首屏接口的冷路径实测 0.3–0.8s（详情约 8 轮 D1 往返），一个副本过期后
+ * 「恰好第一个访问的人」就要完整付这笔钱。这里用双副本 + 内部重放实现同等语义：
+ *  - fresh 副本：TTL 同 API_TTL，命中即返回；
+ *  - stale 副本：TTL = fresh + 本窗口，只在 fresh 缺失时兜底，命中即返回旧值并在 waitUntil 里重放一次；
+ *    重放会**同时刷新两份副本**，因此活跃时段服务出去的内容年龄 ≈ fresh TTL（不是 TTL+窗口）；
+ *  - 只有首屏三类接口 + 版块简介开 SWR，长尾聚合接口不参与（写放大没有必要）。
+ *
+ * 代价（必须接受再开）：连续无人访问的静默期之后，第一个访客可能拿到「上一份全量 MISS 时的内容」，
+ * 最坏陈旧 = fresh TTL + 本窗口（首屏 90s / 列表 180s / 详情 240s）。
+ * 登录用户不吃缓存（响应含 me/点赞态），作者与版主看到的始终是实时数据；游客侧与既有 TTL 语义同类。
+ */
+export const SWR_STALE: ReadonlyArray<readonly [RegExp, number]> = [
+  [/^\/api\/bootstrap$/, 60],
+  [/^\/api\/threads$/, 120],
+  [/^\/api\/forums\/\d+\/threads$/, 120],
+  [/^\/api\/threads\/\d+$/, 120],
+  [/^\/api\/forums\/briefs$/, 120],
+];
+
+/**
+ * 内部重放用的派发器：index.ts 在路由装配完成后注入 `app.fetch`。
+ * core 层不反向 import Hono 应用（避免循环依赖），也避免把 SWR 变成网络子请求
+ * （自己 fetch 自己还要处理 zone/缓存键，且多一次真实往返）。
+ */
+type Dispatcher = (request: Request, env: Env, ctx: Waiter | undefined) => Promise<Response>;
+let dispatcher: Dispatcher | null = null;
+export function setSwrDispatcher(fn: Dispatcher): void {
+  dispatcher = fn;
+}
+
+/** 单飞：同一键在同一 isolate 内只跑一次后台刷新，避免并发请求各刷一遍（惊群） */
+const revalidating = new Set<string>();
+
+/**
+ * 后台重放：用**同一套请求头**（语言/Cookie/UA 决定缓存键与内容）再走一遍应用，
+ * 结果由正常 MISS 路径写回 fresh 副本；本函数不消费响应体以外的任何东西。
+ *
+ * `x-fi-revalidate` 是递归闸门：内层请求看到它就不再**读** stale 副本（否则「陈旧 → 重放 →
+ * 又读陈旧」自激），但仍把两份副本一起写回，让 stale 的内容跟着一起变新。
+ * 必须消费响应体，否则连接悬挂到 waitUntil 超时。
+ */
+function revalidate(c: { env: Env }, raw: Request, id: string): void {
+  if (!dispatcher || revalidating.has(id)) return;
+  revalidating.add(id);
+  const headers = new Headers();
+  for (const name of ['cookie', 'accept-language', 'user-agent']) {
+    const v = raw.headers.get(name);
+    if (v) headers.set(name, v);
+  }
+  headers.set('x-fi-revalidate', '1');
+  const ctx = maybeCtx(c);
+  const job = dispatcher(new Request(raw.url, { method: 'GET', headers }), c.env, ctx)
+    .then((res) => res.text().then(() => undefined))
+    .catch(() => undefined)
+    .finally(() => revalidating.delete(id));
+  wait(job, ctx);
+}
+
 export function edgeCache() {
   return createMiddleware<{ Bindings: Env; Variables: { db: D1b; cache: Cache; runlevel: number } }>(
     async (c, next) => {
@@ -296,6 +363,12 @@ export function edgeCache() {
       const lang = binary
         ? undefined
         : reqLangOf(raw.headers.get('cookie'), raw.headers.get('accept-language'));
+      /* 本请求是否参与手动 SWR：只有首屏三类接口 + 版块简介。
+         内层重放请求（x-fi-revalidate）**只禁读、不禁写**：读 stale 会自激（陈旧→重放→又读陈旧），
+         而写回 stale 正是我们要的——否则 stale 副本会一直是上次全量 MISS 时的旧内容，
+         在「fresh 反复过期 + 重放」的稳定态里越拖越旧。 */
+      const isRevalidate = c.req.header('x-fi-revalidate') === '1';
+      const swrWindow = binary ? undefined : SWR_STALE.find(([re]) => re.test(c.req.path))?.[1];
       const key = keyRequest(raw.url, ua, lang);
       const hit = await b.match(key);
       if (hit) {
@@ -318,10 +391,33 @@ export function edgeCache() {
         c.res = out;
         return;
       }
+
+      /* fresh 副本已过期/不存在：看能不能先给一份 stale 副本（内容最多旧 swrWindow 秒）。
+         命中即返回，真正的刷新丢进 waitUntil —— 用户不再为「副本刚过期」这件事付一次回源时间。 */
+      if (swrWindow !== undefined && !isRevalidate) {
+        const staleHit = await b.match(keyRequest(raw.url, ua, lang, 'stale'));
+        if (staleHit) {
+          const out = withState(staleHit, 'HIT-STALE');
+          out.headers.delete('cache-control');
+          revalidate(c, raw, keyUrl(raw.url, ua, lang));
+          if (!CSRF_COOKIE.test(raw.headers.get('cookie') ?? '')) {
+            c.res = out;
+            setCookie(c, 'csrf', randomToken(), { path: '/', sameSite: 'Lax', secure: isHttpsRequest(c), httpOnly: false });
+            return;
+          }
+          c.res = out;
+          return;
+        }
+      }
+
       await next();
       const res = c.res;
       if (!storeEligible(res)) return;
       const copy = cachedCopy(res.clone(), ttl, binary);
+      /* 同时写一份 TTL = fresh + 陈旧窗口 的副本：它只在 fresh 过期后兜底，
+         且只在 SWR 白名单接口上写，避免给长尾接口平白多一次缓存写。 */
+      if (swrWindow !== undefined && ttl !== undefined)
+        wait(b.put(keyRequest(raw.url, ua, lang, 'stale'), cachedCopy(res.clone(), ttl + swrWindow)), maybeCtx(c));
       c.res = withState(res, 'MISS');
       wait(b.put(key, copy), maybeCtx(c));
     },

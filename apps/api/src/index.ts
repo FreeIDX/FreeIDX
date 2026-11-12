@@ -8,7 +8,7 @@ import { AVAILABLE_LOCALES, DEFAULT_LOCALE, localizedSetting, siteDescriptionOf,
 import type { Env } from './types/env';
 import { D1b } from './core/db';
 import { Cache } from './core/cache';
-import { edgeCache, shellCache } from './core/cache/edge';
+import { edgeCache, setSwrDispatcher, shellCache } from './core/cache/edge';
 import { ok, handleError, handleNotFound } from './middleware/envelope';
 import { runlevel } from './middleware/runlevel';
 import { csrf } from './middleware/csrf';
@@ -273,6 +273,13 @@ app.route('/', adminMcpRoutes());
 // SEO 核心保底（robots.txt 装配引擎，§16.4 不可停用）
 app.route('/', seoCoreRoutes());
 // 后续模块逐个挂载（forum/post/my/mod/attach/admin/kv）
+
+/**
+ * 手动 SWR 的内部重放派发器（见 core/cache/edge.ts 的 SWR_STALE）：
+ * 陈旧副本命中后，用同一套请求头在 waitUntil 里再走一遍应用，让正常 MISS 路径把 fresh 副本写回。
+ * 走进程内派发而不是 fetch 自己：少一次真实往返，也不用处理 same-zone 与缓存键的坑。
+ */
+setSwrDispatcher(async (request, env, ctx) => app.fetch(request, env, ctx as unknown as ExecutionContext));
 
 app.onError(handleError);
 
