@@ -556,10 +556,36 @@ export function threadRoutes(): Hono<ReadEnv> {
     ]);
     const ctx = makeAccessCtx(viewer, forumlist, grouplist);
 
-    const thread = await db
-      .prepare<ThreadDetailRow>(`SELECT ${THREAD_DETAIL_COLS} FROM ${T} WHERE tid = ?`)
-      .bind(tid)
-      .first<ThreadDetailRow>();
+    /**
+     * 读路径批量化（§6.4「聚合接口一律 DB.batch」）：原实现是 8 轮**串行** D1 往返
+     * （thread → like/fav → posts → post_like → 首帖正文 → paylist → attach → quoted → users → 上下篇），
+     * 冷路径实测 0.6–0.8s（每轮约 50–80ms）。改成 3~4 批：
+     *   ① 主题本体 + 点赞/收藏计数（互不依赖）
+     *   ② 楼层（pids 是后续批次与 IN 列表的输入，无法再合并）
+     *   ③ 楼层点赞 + 附件 + 引用 + 上下篇 + 本页作者 + 首帖正文（能合并的都进来）
+     *   ④ 仅当引用作者不在本页作者里、或付费帖需要查购买记录时才发
+     * 权限口径、ok 下推、付费墙判定与改动前逐条一致（见各处注释）。
+     * `D1b.batch()` 计 1 次子请求（`test/db.budget.test.ts` 有断言），因此子请求数从 ~8 降到 ~4。
+     */
+    const rowsAt = (rs: { results?: unknown[] }[], i: number): Array<Record<string, unknown>> =>
+      (rs[i]?.results ?? []) as Array<Record<string, unknown>>;
+    const rowAt = (rs: { results?: unknown[] }[], i: number): Record<string, unknown> | null =>
+      ((rs[i]?.results ?? [])[0] as Record<string, unknown> | undefined) ?? null;
+
+    /* 批 ①：主题本体 + 点赞/收藏计数（A4/A5：bbs_like/bbs_favorite 实时 COUNT，按 tid 走索引） */
+    const aStmts: Stmt[] = [
+      db.prepare(`SELECT ${THREAD_DETAIL_COLS} FROM ${T} WHERE tid = ?`).bind(tid) as unknown as Stmt,
+      db.prepare('SELECT COUNT(*) AS c FROM bbs_like WHERE tid = ?').bind(tid) as unknown as Stmt,
+      db.prepare('SELECT COUNT(*) AS c FROM bbs_favorite WHERE tid = ?').bind(tid) as unknown as Stmt,
+    ];
+    if (viewer.uid > 0) {
+      aStmts.push(db.prepare('SELECT 1 AS x FROM bbs_like WHERE uid = ? AND tid = ?').bind(viewer.uid, tid) as unknown as Stmt);
+      aStmts.push(
+        db.prepare('SELECT 1 AS x FROM bbs_favorite WHERE uid = ? AND tid = ?').bind(viewer.uid, tid) as unknown as Stmt,
+      );
+    }
+    const aRes = await db.batch(aStmts);
+    const thread = rowAt(aRes, 0) as ThreadDetailRow | null;
     if (!thread) throw new AppError(Code.NOT_FOUND, t('common.threadNotFoundOrDeleted'));
     const forum = forumlist[thread.fid];
     if (!forum || !forumAccessUser(ctx, thread.fid, 'allowread'))
@@ -577,17 +603,11 @@ export function threadRoutes(): Hono<ReadEnv> {
       );
     }
 
-    // 点赞/收藏计数 + 当前访问者态（A4/A5，bbs_like/bbs_favorite 实时 COUNT）
-    const [likeCnt, favCnt, likedRow, favRow] = await Promise.all([
-      db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_like WHERE tid = ?').bind(tid).first<{ c: number }>(),
-      db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_favorite WHERE tid = ?').bind(tid).first<{ c: number }>(),
-      viewer.uid > 0
-        ? db.prepare<{ x: number }>('SELECT 1 AS x FROM bbs_like WHERE uid = ? AND tid = ?').bind(viewer.uid, tid).first<{ x: number }>()
-        : Promise.resolve(null),
-      viewer.uid > 0
-        ? db.prepare<{ x: number }>('SELECT 1 AS x FROM bbs_favorite WHERE uid = ? AND tid = ?').bind(viewer.uid, tid).first<{ x: number }>()
-        : Promise.resolve(null),
-    ]);
+    // 点赞/收藏计数 + 当前访问者态（批 ① 的第 2~5 条，见上方批量化说明）
+    const likeCnt = rowAt(aRes, 1);
+    const favCnt = rowAt(aRes, 2);
+    const likedRow = viewer.uid > 0 ? rowAt(aRes, 3) : null;
+    const favRow = viewer.uid > 0 ? rowAt(aRes, 4) : null;
 
     const off = shallowOffset(page, size);
     // ok 可见性下推：OFFSET 分页若先取后滤会错位漏楼层（本页少几条、下一页跳过被滤行）；
@@ -604,66 +624,89 @@ export function threadRoutes(): Hono<ReadEnv> {
     );
     const pids = posts.map((p) => p.pid);
 
-    // 楼层点赞：一次 IN 批量取「各 pid 计数」+「当前访问者已赞集合」（§7 禁 N+1）
-    const postLikeCount = new Map<number, number>();
-    const postLikedSet = new Set<number>();
+    /* 批 ③：楼层点赞 + 附件 + 引用 + 首帖正文 + 上下篇 + 本页作者。
+       全部只依赖 pids / quotePids / tid / fid，一次往返取完（原来这里是 5 轮串行）。
+       口径与改动前逐条一致：点赞按 pid 批量、附件按 pid 批量、引用只取 ok=1、上下篇 ok=1 下推。 */
+    const quotePids = [...new Set(posts.map((p) => p.quotepid).filter((q) => q > 0))];
+    const pageUids = [...new Set([Number(thread.uid), ...posts.map((p) => Number(p.uid))])];
+    /* 付费主题从第 2 页起 posts 不含首帖，必须补查首帖正文判断有没有 [ttPay] 段；
+       否则 hasPayBlocks 恒为 false → purchased 误报 true（详情页第 2 页丢失购买入口）。 */
+    const needFirstFmt =
+      !posts.some((p) => p.isfirst === 1 && p.message_fmt) && page > 1 && Number(thread.content_buy) > 0;
+    const inList = pids.map(() => '?').join(',');
+    const cStmts: Stmt[] = [];
+    const cKind: string[] = [];
+    const pushC = (kind: string, stmt: unknown): void => {
+      cKind.push(kind);
+      cStmts.push(stmt as Stmt);
+    };
     if (pids.length) {
-      const inList = pids.map(() => '?').join(',');
-      const [cntR, mineR] = await Promise.all([
+      pushC(
+        'likeCnt',
+        db.prepare(`SELECT pid, COUNT(*) AS c FROM bbs_post_like WHERE pid IN (${inList}) GROUP BY pid`).bind(...pids),
+      );
+      if (viewer.uid > 0)
+        pushC(
+          'likeMine',
+          db.prepare(`SELECT pid FROM bbs_post_like WHERE uid = ? AND pid IN (${inList})`).bind(viewer.uid, ...pids),
+        );
+      pushC(
+        'attach',
+        // 刻意不取 filename（R2 key）：详情不下发对象 key，防 `/files/attach/*` 匿名直取绕过付费/权限校验
         db
-          .prepare<{ pid: number; c: number }>(`SELECT pid, COUNT(*) AS c FROM bbs_post_like WHERE pid IN (${inList}) GROUP BY pid`)
-          .bind(...pids)
-          .all(),
-        viewer.uid > 0
-          ? db
-              .prepare<{ pid: number }>(`SELECT pid FROM bbs_post_like WHERE uid = ? AND pid IN (${inList})`)
-              .bind(viewer.uid, ...pids)
-              .all()
-          : Promise.resolve(null),
-      ]);
-      for (const r of cntR.results) postLikeCount.set(Number(r.pid), Number(r.c));
-      for (const r of mineR?.results ?? []) postLikedSet.add(Number(r.pid));
-    }
-
-    // 付费主题可见性：
-    // purchased 默认 '1'（content_buy=0 或首帖无 [ttPay] 付费段时视为无需购买）；
-    // content_buy>0 且存在付费段时，仅作者本人 / paylist type=1 已购者可见。
-    // 未购时服务端清空段内正文（仅保留空标记供前台渲染价格/购买按钮），防止直连 API 绕过付费墙。
-    // 付费主题可见性：翻到第 2 页起 posts 不含首帖，必须补查首帖正文判断是否存在 [ttPay] 付费段，
-    // 否则 hasPayBlocks 恒为 false → purchased 误报 true（详情页第 2 页丢失购买入口）。
-    let firstFmt = posts.find((p) => p.isfirst === 1)?.message_fmt ?? '';
-    if (!firstFmt && page > 1 && Number(thread.content_buy) > 0) {
-      const first = await db
-        .prepare<{ message_fmt: string }>(`SELECT message_fmt FROM ${P} WHERE tid = ? AND isfirst = 1`)
-        .bind(tid)
-        .first<{ message_fmt: string }>();
-      firstFmt = String(first?.message_fmt ?? '');
-    }
-    const hasPayBlocks = /\[ttPay\][\s\S]*?\[\/ttPay\]/i.test(firstFmt);
-    let purchased = true;
-    if (Number(thread.content_buy) > 0 && hasPayBlocks) {
-      const paid =
-        viewer.uid > 0
-          ? await db
-              .prepare<{ x: number }>('SELECT 1 AS x FROM bbs_paylist WHERE tid = ? AND uid = ? AND type = 1')
-              .bind(tid, viewer.uid)
-              .first<{ x: number }>()
-          : null;
-      purchased = Boolean(paid) || (viewer.uid > 0 && Number(thread.uid) === viewer.uid);
-    }
-
-    // 附件一次 IN；回帖作者 + 引用作者一次 IN（§7 禁 N+1）
-    const attachR = pids.length
-      ? await db
-          .prepare<AttachRow>(
-            // 刻意不取 filename（R2 key）：详情不下发对象 key，防 `/files/attach/*` 匿名直取绕过付费/权限校验
-            `SELECT aid,pid,orgfilename,filesize,isimage,width,height,downloads,create_date,credits FROM bbs_attach WHERE pid IN (${pids.map(() => '?').join(',')}) ORDER BY aid ASC`,
+          .prepare(
+            `SELECT aid,pid,orgfilename,filesize,isimage,width,height,downloads,create_date,credits FROM bbs_attach WHERE pid IN (${inList}) ORDER BY aid ASC`,
           )
-          .bind(...pids)
-          .all()
-      : null;
+          .bind(...pids),
+      );
+    }
+    if (pageUids.length)
+      pushC(
+        'users',
+        // 主题作者（th 头部头像用）+ 本页回帖作者一次 IN，同查询带出 V 头衔与预设头像（§7 禁 N+1）
+        db
+          .prepare(
+            `SELECT uid,username,avatar,v,avatar_auto FROM bbs_user WHERE uid IN (${pageUids.map(() => '?').join(',')})`,
+          )
+          .bind(...pageUids),
+      );
+    if (quotePids.length)
+      pushC(
+        'quoted',
+        // 引用摘要同样受审核态与付费墙约束：不取未过审楼层正文，摘要剥掉 [ttPay] 付费段，
+        // 防止通过 quotepid 引用把待审/付费内容写进摘要下发给无权用户。
+        db
+          .prepare(
+            `SELECT pid,uid,message_fmt FROM ${P} WHERE ok = 1 AND pid IN (${quotePids.map(() => '?').join(',')})`,
+          )
+          .bind(...quotePids),
+      );
+    pushC(
+      'neighbors',
+      // ok=1 必须下推：否则软删（-2）/待审（0）主题的 tid+subject 会作为「上一篇/下一篇」下发给任意访问者
+      db
+        .prepare(
+          `SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND ok = 1 AND tid < ? ORDER BY tid DESC LIMIT 1)
+           UNION ALL
+           SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND ok = 1 AND tid > ? ORDER BY tid ASC LIMIT 1)`,
+        )
+        .bind(thread.fid, tid, thread.fid, tid),
+    );
+    if (needFirstFmt)
+      pushC('firstFmt', db.prepare(`SELECT message_fmt FROM ${P} WHERE tid = ? AND isfirst = 1`).bind(tid));
+    const cRes = await db.batch(cStmts);
+    const takeC = (kind: string): Array<Record<string, unknown>> => {
+      const i = cKind.indexOf(kind);
+      return i < 0 ? [] : rowsAt(cRes, i);
+    };
+
+    const postLikeCount = new Map<number, number>();
+    for (const r of takeC('likeCnt')) postLikeCount.set(Number(r.pid), Number(r.c));
+    const postLikedSet = new Set<number>();
+    for (const r of takeC('likeMine')) postLikedSet.add(Number(r.pid));
+
     const attachesByPid = new Map<number, AttachItem[]>();
-    for (const a of attachR?.results ?? []) {
+    for (const a of takeC('attach') as unknown as AttachRow[]) {
       const item: AttachItem = {
         aid: a.aid,
         tid: thread.tid,
@@ -682,42 +725,72 @@ export function threadRoutes(): Hono<ReadEnv> {
       attachesByPid.set(a.pid, list);
     }
 
-    const quotePids = [...new Set(posts.map((p) => p.quotepid).filter((q) => q > 0))];
-    const quotedR = quotePids.length
-      ? await db
-          .prepare<{ pid: number; uid: number; message_fmt: string }>(
-            // 引用摘要同样受审核态与付费墙约束：不取未过审楼层正文，摘要剥掉 [ttPay] 付费段，
-            // 防止通过 quotepid 引用把待审/付费内容写进摘要下发给无权用户。
-            `SELECT pid,uid,message_fmt FROM ${P} WHERE ok = 1 AND pid IN (${quotePids.map(() => '?').join(',')})`,
-          )
-          .bind(...quotePids)
-          .all()
-      : null;
+    const quotedRows = takeC('quoted') as unknown as Array<{ pid: number; uid: number; message_fmt: string }>;
+    const neighborRows = takeC('neighbors') as unknown as Array<{ tid: number; subject: string }>;
 
-    // 回帖作者 + 引用作者 + 主题作者（th 头部头像用）一次 IN（§7 禁 N+1）；同查询带出 V 头衔与预设头像
-    const uids = [...new Set([Number(thread.uid), ...posts.map((p) => p.uid), ...(quotedR?.results ?? []).map((q) => q.uid)])];
+    const hasPayBlocks = /\[ttPay\][\s\S]*?\[\/ttPay\]/i.test(
+      needFirstFmt
+        ? String(takeC('firstFmt')[0]?.message_fmt ?? '')
+        : (posts.find((p) => p.isfirst === 1)?.message_fmt ?? ''),
+    );
+
+    /* 批 ④：付费帖购买记录 + 引用作者补齐（只在这两种情况下才发；常见情况这一批完全不存在） */
     const usersMap = new Map<number, { username: string; avatar: number; uv: string; avatarAuto: string }>();
-    if (uids.length) {
-      const users = await db
-        .prepare<{ uid: number; username: string; avatar: number; v: string; avatar_auto: string }>(
-          `SELECT uid,username,avatar,v,avatar_auto FROM bbs_user WHERE uid IN (${uids.map(() => '?').join(',')})`,
-        )
-        .bind(...uids)
-        .all();
-      for (const u of users.results) {
-        usersMap.set(u.uid, {
-          username: u.username,
-          avatar: u.avatar,
+    const addUsers = (rows: Array<Record<string, unknown>>): void => {
+      for (const u of rows) {
+        usersMap.set(Number(u.uid), {
+          username: String(u.username ?? ''),
+          avatar: Number(u.avatar ?? 0),
           uv: String(u.v ?? '0'),
-          avatarAuto: avatarAutoOf(Number(u.avatar), u.avatar_auto),
+          avatarAuto: avatarAutoOf(Number(u.avatar), u.avatar_auto as string | null | undefined),
         });
       }
+    };
+    addUsers(takeC('users'));
+
+    const dStmts: Stmt[] = [];
+    const dKind: string[] = [];
+    const pushD = (kind: string, stmt: unknown): void => {
+      dKind.push(kind);
+      dStmts.push(stmt as Stmt);
+    };
+    /* purchased 默认 true（content_buy=0 或首帖无付费段 = 无需购买）；
+       只有 content_buy>0 且确实存在 [ttPay] 段才去查购买记录（游客不查，直接 false）。 */
+    const needPaid = Number(thread.content_buy) > 0 && hasPayBlocks;
+    if (needPaid && viewer.uid > 0)
+      pushD(
+        'paid',
+        db.prepare('SELECT 1 AS x FROM bbs_paylist WHERE tid = ? AND uid = ? AND type = 1').bind(tid, viewer.uid),
+      );
+    /* 引用作者可能不在本页（引用的是别人的楼层）：只补查缺的那几个 */
+    const missingQuoteUids = [...new Set(quotedRows.map((q) => Number(q.uid)))].filter(
+      (u) => u > 0 && !usersMap.has(u),
+    );
+    if (missingQuoteUids.length)
+      pushD(
+        'users',
+        db
+          .prepare(
+            `SELECT uid,username,avatar,v,avatar_auto FROM bbs_user WHERE uid IN (${missingQuoteUids.map(() => '?').join(',')})`,
+          )
+          .bind(...missingQuoteUids),
+      );
+    let paidRow: Record<string, unknown> | null = null;
+    if (dStmts.length) {
+      const dRes = await db.batch(dStmts);
+      dKind.forEach((kind, i) => {
+        if (kind === 'paid') paidRow = rowAt(dRes, i);
+        else if (kind === 'users') addUsers(rowsAt(dRes, i));
+      });
     }
+
+    let purchased = true;
+    if (needPaid) purchased = Boolean(paidRow) || (viewer.uid > 0 && Number(thread.uid) === viewer.uid);
 
     const allowViewIp = !!grouplist[viewer.gid]?.allowviewip;
     const postsOut = posts.map((p) => {
       const author = usersMap.get(p.uid);
-      const quote = quotedR?.results.find((q) => q.pid === p.quotepid);
+      const quote = quotedRows.find((q) => q.pid === p.quotepid);
       const canUpd = canUpdatePost(ctx, thread.fid, p.uid);
       return {
         pid: p.pid,
@@ -760,20 +833,10 @@ export function threadRoutes(): Hono<ReadEnv> {
       };
     });
 
-    // 「上一篇/下一篇」（thread_postlist_before 位）：同版块按 tid 邻接各取一条
-    // （UNION ALL 单语句取两条，省一次 D1 往返；
-    //   是否渲染由前台按 light.preNextThread 开关决定）
-    const neighborsR = await db
-      .prepare<{ tid: number; subject: string }>(
-        // ok=1 必须下推：否则软删（-2）/待审（0）主题的 tid+subject 会作为「上一篇/下一篇」下发给任意访问者
-        `SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND ok = 1 AND tid < ? ORDER BY tid DESC LIMIT 1)
-         UNION ALL
-         SELECT tid,subject FROM (SELECT tid,subject FROM ${T} WHERE fid = ? AND ok = 1 AND tid > ? ORDER BY tid ASC LIMIT 1)`,
-      )
-      .bind(thread.fid, tid, thread.fid, tid)
-      .all();
-    const prevRow = neighborsR.results.find((r) => r.tid < tid) ?? null;
-    const nextRow = neighborsR.results.find((r) => r.tid > tid) ?? null;
+    /* 「上一篇/下一篇」（thread_postlist_before 位）：同版块按 tid 邻接各取一条，
+       已在批 ③ 里用 UNION ALL 单语句取回（是否渲染由前台按 light.preNextThread 开关决定） */
+    const prevRow = neighborRows.find((r) => Number(r.tid) < tid) ?? null;
+    const nextRow = neighborRows.find((r) => Number(r.tid) > tid) ?? null;
 
     // 浏览量异步自增（waitUntil 不占响应路径；受 update_views_on 开关控制）
     if (page === 1 && setting.updateViewsOn) {

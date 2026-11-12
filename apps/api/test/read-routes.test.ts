@@ -171,6 +171,55 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(calls.some((c) => /UPDATE bbs_thread SET views/.test(c.sql))).toBe(true);
   });
 
+  it('GET /api/threads/2：读路径按批发出（主题+计数 / 楼层 / 聚合），不再是 8 轮串行', async () => {
+    const { db } = fakeD1Sql(baseRules());
+    let batches = 0;
+    const wrapped = {
+      ...db,
+      batch: async (stmts: never) => {
+        batches += 1;
+        return db.batch(stmts as never);
+      },
+    };
+    const env = { DB: wrapped, CACHE: fakeKv(), FILES: {}, SITE_URL: 'http://localhost' };
+    const res = await app.request('/api/threads/2', {}, env as never, {
+      waitUntil: () => {},
+    } as never);
+    expect((await json(res)).code).toBe(Code.OK);
+    // 批 ①（主题 + 点赞/收藏）与批 ③（点赞/附件/引用/上下篇/本页作者）固定各 1 次；
+    // 批 ④ 只在「引用作者不在本页 / 付费帖查购买记录」时才发（本用例不会触发）。
+    expect(batches).toBeGreaterThanOrEqual(2);
+    expect(batches).toBeLessThanOrEqual(3);
+  });
+
+  it('GET /api/threads/2?page=2 付费帖：补查首帖判断付费段，游客 purchased=false', async () => {
+    /* 第 2 页起 posts 不含首帖：必须靠批 ③ 里的 firstFmt 补查判断有没有 [ttPay] 段，
+       否则 purchased 会误判为 true（购买入口消失）。这里锁住批量化后的这条路径。 */
+    const { env, calls } = envFor([
+      // 顺序敏感：先于「posts by tid」规则，避免被它抢走
+      { test: /message_fmt FROM bbs_post/, rows: [{ message_fmt: '<p>[ttPay]付费内容[/ttPay]</p>' }] },
+      { test: /FROM bbs_thread WHERE tid = \?/, first: { ...DETAIL, content_buy: 100, content_buy_type: 1 } },
+      {
+        test: /FROM bbs_post WHERE tid = \?/,
+        rows: [
+          {
+            pid: 9, tid: 2, uid: 2, isfirst: 0, ok: 1, create_date: 1700000009, userip: 16 << 24,
+            images: 0, files: 0, doctype: 0, quotepid: 0, message: '回复', message_fmt: '<p>回复</p>',
+          },
+        ],
+      },
+      ...baseRules(),
+    ]);
+    const res = await app.request('/api/threads/2?page=2', {}, env as never, { waitUntil: () => {} } as never);
+    const body = await json(res);
+    expect(body.code).toBe(Code.OK);
+    expect((body.data as { purchased: boolean }).purchased).toBe(false);
+    // 首帖正文确实被补查过一次（付费段判定依赖它）
+    expect(calls.some((c) => /message_fmt FROM bbs_post WHERE tid = \? AND isfirst = 1/.test(c.sql))).toBe(true);
+    // 游客不查购买记录（viewer.uid=0），批 ④ 不产生
+    expect(calls.some((c) => /FROM bbs_paylist WHERE tid = \? AND uid = \? AND type = 1/.test(c.sql))).toBe(false);
+  });
+
   it('GET /api/threads/2/hot-posts：未购游客 includeFirst=1 也不得读到付费段正文', async () => {
     const rules: SqlRule[] = [
       { test: /SELECT fid,ok,uid,content_buy FROM bbs_thread WHERE tid = \?/, first: { fid: 1, ok: 1, uid: 1, content_buy: 10 } },

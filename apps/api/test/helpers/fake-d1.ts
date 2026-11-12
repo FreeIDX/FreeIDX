@@ -78,12 +78,19 @@ export function fakeD1Sql(rules: SqlRule[]) {
       all: async () => {
         const rl = resolve(sql, params);
         maybeThrow(rl);
-        const r = rl.rows;
+        /* 读路径批量化后，原本用 first() 的单行查询会进 db.batch()（batch 只暴露 results 数组）。
+           规则里只写了 first 的用例在此按「单行结果集」处理，与真实 D1 的 batch 语义一致。 */
+        const r =
+          rl.rows ??
+          (rl.first === undefined
+            ? undefined
+            : (typeof rl.first === 'function' ? rl.first(params) : rl.first));
         const changes = typeof rl.changes === 'function' ? rl.changes(params) : rl.changes;
+        const rows = typeof r === 'function' ? r(params) : r;
         return {
           success: true,
           meta: changes !== undefined ? { changes } : {},
-          results: (typeof r === 'function' ? r(params) : (r ?? [])) as never,
+          results: (rows == null ? [] : Array.isArray(rows) ? rows : [rows]) as never,
         };
       },
       raw: async () => {
