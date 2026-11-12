@@ -85,13 +85,14 @@ const alertBtn =
   'inline-flex h-8 items-center rounded-[4px] border border-[#868e96] px-3 text-xs text-[#868e96] transition-colors hover:bg-[#868e96] hover:text-white disabled:opacity-50';
 /** 左侧悬浮工具栏圆钮：白底圆形，hover/激活主色，48px */
 const barBtn =
-  'flex size-12 items-center justify-center rounded-full border border-zh-line bg-card text-lt-grey transition-colors hover:text-brand disabled:opacity-50';
+  'flex size-12 cursor-pointer select-none items-center justify-center rounded-full border border-zh-line bg-card text-lt-grey transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-50';
 /** 版务小圆钮（保持原尺寸，仅管理员可见） */
 const barBtnSm =
-  'flex size-10 items-center justify-center rounded-full border border-zh-line bg-card text-lt-grey transition-colors hover:text-brand disabled:opacity-50';
-/** 左侧悬浮工具栏计数徽标（圆钮下方，胶囊形灰蓝底白字） */
+  'flex size-10 cursor-pointer select-none items-center justify-center rounded-full border border-zh-line bg-card text-lt-grey transition-colors hover:text-brand disabled:cursor-not-allowed disabled:opacity-50';
+/** 左侧悬浮工具栏计数徽标（圆钮下方，胶囊形灰蓝底白字）
+ * 纯展示：不可选中、不接收鼠标事件——否则点击数字会出现文本插入光标 / 选中数字 */
 const barBadge =
-  'inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#8a94a6] px-1.5 py-0.5 text-[12px] leading-none font-semibold text-white tabular-nums';
+  'pointer-events-none inline-flex min-w-[20px] cursor-default select-none items-center justify-center rounded-full bg-[#8a94a6] px-1.5 py-0.5 text-[12px] leading-none font-semibold text-white tabular-nums';
 
 /** 标题样式（h4 级：text-base font-medium；关闭话题置灰） */
 function getTitleCls(th: { digest: number; closed: number }): string {
@@ -707,7 +708,7 @@ export function ThreadPage() {
         {/* ============ 左侧悬浮工具栏（thread_left_switch：仅 lg+）============ */}
         {th && d && light.threadLeftSwitch && (
           <div className="hidden w-14 shrink-0 lg:block">
-            <div className="sticky top-[88px] z-10 flex flex-col items-center gap-3">
+            <div className="sticky top-[88px] z-10 flex select-none flex-col items-center gap-3">
               <div className="flex flex-col items-center gap-1.5">
                 <button type="button" className={barBtn} title={t('reply_label')} aria-label={t('reply_label')} onClick={() => focusReply()}>
                   <Icon name="chat_bubbles" className="size-[25px]" />
