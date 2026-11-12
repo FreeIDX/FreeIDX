@@ -173,7 +173,8 @@ export function modRoutes(): Hono<ReadEnv> {
         if (top === Number(thread.top)) continue; // thread_top_change：值未变不动
         stmts.push(
           db.prepare('UPDATE bbs_thread SET top = ? WHERE tid = ?').bind(top, tid) as unknown as Stmt,
-          db.prepare('INSERT OR REPLACE INTO bbs_thread_top (tid,fid,top) VALUES (?,?,?)').bind(tid, fid, top) as unknown as Stmt,
+          /* top_at 记录本次置顶时间：同级多帖置顶时列表按它倒序（新置顶在前，见 0034） */
+          db.prepare('INSERT OR REPLACE INTO bbs_thread_top (tid,fid,top,top_at) VALUES (?,?,?,?)').bind(tid, fid, top, ts) as unknown as Stmt,
         );
 
         modlogs.push(logRow(v.uid, thread, 'top', ts));
@@ -186,7 +187,7 @@ export function modRoutes(): Hono<ReadEnv> {
         if (Number(thread.top) === 0) continue;
         stmts.push(
           db.prepare('UPDATE bbs_thread SET top = 0 WHERE tid = ?').bind(tid) as unknown as Stmt,
-          db.prepare('INSERT OR REPLACE INTO bbs_thread_top (tid,fid,top) VALUES (?,?,?)').bind(tid, fid, 0) as unknown as Stmt,
+          db.prepare('INSERT OR REPLACE INTO bbs_thread_top (tid,fid,top,top_at) VALUES (?,?,?,?)').bind(tid, fid, 0, 0) as unknown as Stmt,
         );
 
         modlogs.push(logRow(v.uid, thread, 'top', ts));

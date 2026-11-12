@@ -31,6 +31,16 @@ import { useApplyTheme, useLight, useThemeMode } from '../../store/theme';
 import { ThemeSlot } from '../../lib/theme/slots';
 import { SiteLogo } from '../../components/SiteLogo';
 
+/**
+ * 顶栏固定入口的图标配色：图标常驻彩色（不随激活/悬停变灰），与灰色文字形成层次。
+ * 首页=品牌蓝、发现=橙、排行=金；文字颜色仍按原规则（常规 #6c757d / 激活主色）。
+ */
+const NAV_ICON_TINT: Partial<Record<IconName, string>> = {
+  home: 'text-brand',
+  trending_up: 'text-[#ff7a2f]',
+  trophy: 'text-[#e8a020]',
+};
+
 /** 导航项（.navbar-nav>.nav-item>.nav-link：px-4 常规 #6c757d，激活主色） */
 function NavItem({
   to,
@@ -71,7 +81,11 @@ function NavItem({
       ) : icon ? (
         <Icon
           name={icon}
-          className={cx('shrink-0', compact ? 'size-3.5' : 'size-[17px]', active ? 'opacity-100' : 'opacity-80')}
+          className={cx(
+            'shrink-0',
+            compact ? 'size-3.5' : 'size-[17px]',
+            NAV_ICON_TINT[icon] ?? (active ? 'opacity-100' : 'opacity-80'),
+          )}
           aria-hidden="true"
         />
       ) : (

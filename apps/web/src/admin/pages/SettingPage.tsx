@@ -122,7 +122,8 @@ export function SettingPage() {
       device_tv_on: bool01(raw.device_tv_on ?? 1),
       forum_orderby: num(raw.forum_orderby) === 1 ? 1 : 0,
       update_views_on: bool01(raw.update_views_on ?? 1),
-      content_lang: num(raw.content_lang),
+      /* 缺省 1（开启、默认全部语言），与后端 loaders 的归一缺省同口径 */
+      content_lang: num(raw.content_lang, 1),
       upload_max_size: num(raw.upload_max_size, 20 * 1024 * 1024),
       lang: str(raw.lang, 'en-us'),
       admin_lang: str(raw.admin_lang, str(raw.lang, 'en-us')),
@@ -581,7 +582,7 @@ export function SettingPage() {
             onChange={(v) => set('update_views_on', Number(v))}
           />
         </SettingField>
-        {/* 内容语言分区：0=关闭（默认，行为不变） 1=开启默认全部 2=开启默认跟随界面语言 */}
+        {/* 内容语言分区：0=关闭 1=开启默认全部（缺省） 2=开启默认跟随界面语言 */}
         <SettingField
           label={t('setting_content_lang', '内容语言分区')}
           hint={t(
@@ -591,7 +592,7 @@ export function SettingPage() {
         >
           <RadioGroup
             name="content_lang"
-            value={form.content_lang ?? 0}
+            value={form.content_lang ?? 1}
             options={[
               { value: 0, text: t('content_lang_mode_off', '关闭') },
               { value: 1, text: t('content_lang_mode_all', '开启（默认全部语言）') },

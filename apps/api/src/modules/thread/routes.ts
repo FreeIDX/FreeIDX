@@ -249,7 +249,11 @@ async function queryThreadPage(
   return r.results;
 }
 
-/** 置顶合并（§D.2）：首页并全局置顶 top=3；版块页并版块置顶 top∈1..2；语言筛选时置顶帖同样受语言约束 */
+/**
+ * 置顶合并（§D.2）：首页并全局置顶 top=3；版块页并版块置顶 top∈1..2；语言筛选时置顶帖同样受语言约束。
+ * 排序：级别优先（3 在 1/2 之前）→ 同级按置顶时间倒序（0034 的 top_at，后置顶的靠前）
+ * → 存量行 top_at=0 时回落到 tid DESC，与升级前一致。
+ */
 async function queryTopThreads(
   db: D1b,
   fid: number,
@@ -268,7 +272,8 @@ async function queryTopThreads(
   const r = await db
     .prepare<ThreadRow>(
       `SELECT ${THREAD_LIST_COLS_T} FROM bbs_thread_top tt JOIN ${T} t ON t.tid = tt.tid
-       WHERE ${cond}${okCond}${langCond} ORDER BY tt.top DESC, t.tid DESC LIMIT 30`,
+       WHERE ${cond}${okCond}${langCond}
+       ORDER BY tt.top DESC, tt.top_at DESC, t.tid DESC LIMIT 30`,
     )
     .bind(...params)
     .all();

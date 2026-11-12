@@ -230,8 +230,10 @@ export async function loadSetting(cache: Cache, db: D1b): Promise<SiteSetting> {
       /* 顶部导航栏自定义项（后台「导航栏设置」，kv 存 JSON 字符串；解析失败/缺省回落 undefined = 前台默认导航） */
       nav: parseNavItems(raw.nav),
       /* 内容语言分区模式（kv setting.content_lang：0=关闭 1=开启默认全部 2=开启默认跟随界面语言）
-       * 必须显式映射：漏掉这一步会让开关恒为 undefined，语言过滤整体静默失效 */
-      contentLang: Number(raw.content_lang ?? 0) || 0,
+       * 必须显式映射：漏掉这一步会让开关恒为 undefined，语言过滤整体静默失效。
+       * 缺省 1（开启、默认全部语言）：首页首屏即显示语言筛选条且不按语言过滤，
+       * 与「首页默认显示全部语言的帖子」的产品口径一致；显式 0 才关闭。 */
+      contentLang: Number(raw.content_lang ?? 1) || 0,
     } as SiteSetting;
   });
 }

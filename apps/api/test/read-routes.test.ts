@@ -100,6 +100,13 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(calls.filter((c) => /FROM bbs_user/.test(c.sql))).toHaveLength(1); // 作者 V 头衔/预设头像随行批量补查恰 1 次
   });
 
+  it('置顶合并：同级按置顶时间倒序（top_at DESC，存量 0 回落 tid DESC）', async () => {
+    const { env, calls } = envFor(baseRules());
+    expect((await json(await app.request('/api/threads', {}, env as never))).code).toBe(Code.OK);
+    const top = calls.find((c) => /bbs_thread_top/.test(c.sql))!;
+    expect(top.sql).toMatch(/ORDER BY tt\.top DESC, tt\.top_at DESC, t\.tid DESC/);
+  });
+
   it('digest=1 时不并置顶表', async () => {
     const { env, calls } = envFor(baseRules());
     const res = await app.request('/api/threads?digest=1', {}, env as never);

@@ -111,6 +111,11 @@ describe('版务批量接口（T3-1 DoD）', () => {
     const s = sqls(r);
     expect(s).toMatch(/UPDATE bbs_thread SET top = \?/);
     expect(s).toMatch(/INSERT OR REPLACE INTO bbs_thread_top/);
+    /* 0034：置顶时间随行写入（tid,fid,top,top_at），列表据此在同级置顶内排序 */
+    const rep = r.calls.find((c) => /INSERT OR REPLACE INTO bbs_thread_top/.test(c.sql))!;
+    expect(rep.sql).toMatch(/\(tid,fid,top,top_at\)/);
+    expect(rep.params).toHaveLength(4);
+    expect(Number(rep.params[3])).toBeGreaterThan(0);
     expect(modlogActions(r)).toEqual(['top', 'top']);
     const ins = r.calls.find((c) => /INSERT INTO bbs_modlog/.test(c.sql))!;
     expect(ins.params[1]).toBe(9); // tid

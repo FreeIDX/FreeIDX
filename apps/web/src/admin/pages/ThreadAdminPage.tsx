@@ -7,6 +7,8 @@
  * 字段是两列栅格，每格一个 fieldset（mb 1rem，label 独占一行）。
  * 批量按钮 关闭/打开/删除/移动 四个（移动复用前台版务 POST /api/mod/threads 的 action=move）；
  * 单帖行内提供 编辑（标题/正文/版块）、置顶/取消置顶、加精/取消精华（后两者同样复用 /api/mod/threads）。
+ * 后台的「置顶」按全站置顶（top=3）下发：站长在后台勾置顶即期望它出现在首页最顶部，
+ * 而 top=1/2 只是版块内前置（首页列表不合并）。
  * 编辑走本模块直写：GET /api/admin/threads/:tid 回显 → PUT 保存（正文重跑 fmt、fid 变更=移动版块）。
  */
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
@@ -339,7 +341,9 @@ export function ThreadAdminPage() {
               picked={picked.includes(r.tid)}
               onPick={(v) => setPicked((p) => (v ? [...p, r.tid] : p.filter((x) => x !== r.tid)))}
               onEdit={() => setEditTid(r.tid)}
-              onToggleTop={() => void runRow(r.top > 0 ? 'untop' : 'top', r.tid, r.top > 0 ? 0 : 1)}
+              /* 后台「置顶」= 全站置顶（top=3）：首页第 1 页顶部按置顶时间排列；
+                 版块内一级/二级置顶仍走前台版务（/api/mod/threads 的 value 1/2） */
+              onToggleTop={() => void runRow(r.top > 0 ? 'untop' : 'top', r.tid, r.top > 0 ? 0 : 3)}
               onToggleDigest={() => void runRow('digest', r.tid, r.digest > 0 ? 0 : 1)}
             />
           ))}
