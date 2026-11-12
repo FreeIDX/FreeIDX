@@ -11,13 +11,13 @@ export const ATTACH_MAX_BYTES = 20_480_000;
 /** 上传扩展名白名单 */
 const ATTACH_WHITELIST = [
   'av', 'wmv', 'wav', 'wma', 'avi', 'rm', 'rmvb', 'mp4', 'mp3', 'exe', 'bin', 'swf', 'fla', 'as',
-  'gif', 'jpg', 'jpeg', 'png', 'bmp', 'doc', 'xls', 'ppt', 'docx', 'xlsx', 'pptx', 'pdf',
+  'gif', 'jpg', 'jpeg', 'png', 'bmp', 'webp', 'doc', 'xls', 'ppt', 'docx', 'xlsx', 'pptx', 'pdf',
   'c', 'cpp', 'cc', 'txt', 'tar', 'zip', 'gz', 'rar', '7z', 'bz', 'chm', 'bt', 'torrent',
   'ttf', 'font', 'fon',
 ];
 const WHITELIST_SET = new Set(ATTACH_WHITELIST);
 
-const IMAGE_EXTS = ['gif', 'jpg', 'jpeg', 'png', 'bmp'];
+const IMAGE_EXTS = ['gif', 'jpg', 'jpeg', 'png', 'bmp', 'webp'];
 
 /** 附件分类表（attach_type 用），image 集合另用于 MIME */
 const ATTACH_CATEGORIES: Record<string, string[]> = {

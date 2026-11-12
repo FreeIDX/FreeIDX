@@ -62,6 +62,24 @@ interface ComposerProps {
   onCancel?: () => void;
 }
 
+/**
+ * 剪贴板/拖拽里的图片文件（截图、本地文件）：命中即由前端先传到 R2 再插入正文。
+ * 带 text/html 的「网页内容」不拦截——保留默认粘贴（外链图片由服务端写时转存，
+ * 前端硬拦会连正文文字一起吞掉）。
+ */
+function imageFilesOf(dt: DataTransfer | null): File[] {
+  if (!dt || dt.types.includes('text/html')) return [];
+  const out: File[] = [];
+  const push = (f: File | null) => {
+    if (!f || !/^image\//i.test(f.type)) return;
+    if (out.some((x) => x.name === f.name && x.size === f.size)) return;
+    out.push(f);
+  };
+  for (const f of Array.from(dt.files ?? [])) push(f);
+  if (!out.length) for (const it of Array.from(dt.items ?? [])) if (it.kind === 'file') push(it.getAsFile());
+  return out;
+}
+
 function readDims(file: File): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -111,6 +129,9 @@ export function Composer(props: ComposerProps) {
   onChangeRef.current = onChange;
   const fileRef = useRef<HTMLInputElement>(null);
   const rawRef = useRef<HTMLInputElement>(null);
+  /* editorProps 只在实例创建时读取一次，闭包里拿到的会是首帧的 onPickImage（editor 仍为 null）。
+     用 ref 转发每次渲染的最新实现，避免粘贴/拖入落空。 */
+  const pasteImagesRef = useRef<(files: File[]) => void>(() => undefined);
 
   const emit = (editor: Editor | null, list: UploadItem[]) => {
     onChangeRef.current?.({ html: editor ? editor.getHTML() : '', attachAids: list.map((a) => a.aid) });
@@ -133,6 +154,21 @@ export function Composer(props: ComposerProps) {
     editorProps: {
       attributes: {
         class: `${editorHeightClass} px-3 py-2 text-sm leading-6 text-foreground focus:outline-none break-words post-body`,
+      },
+      // 粘贴/拖入图片文件（截图、拷自其它应用）→ 直接上传 R2 并插入站内地址；顺序上传保证图片次序
+      handlePaste: (_view, event) => {
+        const files = imageFilesOf(event.clipboardData);
+        if (!files.length) return false;
+        event.preventDefault();
+        pasteImagesRef.current(files);
+        return true;
+      },
+      handleDrop: (_view, event) => {
+        const files = imageFilesOf(event.dataTransfer);
+        if (!files.length) return false;
+        event.preventDefault();
+        pasteImagesRef.current(files);
+        return true;
       },
     },
     onUpdate: ({ editor: e }) => {
@@ -195,6 +231,12 @@ export function Composer(props: ComposerProps) {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+  // 每次渲染刷新粘贴/拖入的上传实现（editorProps 闭包只持有 ref，见上方说明）
+  pasteImagesRef.current = (files) => {
+    void (async () => {
+      for (const f of files) await onPickImage(f);
+    })();
   };
 
   /** 任意类型附件（§9 白名单由服务端把关，名单外自动改名 `_ext`）：仅入 attachAids，不插正文 */

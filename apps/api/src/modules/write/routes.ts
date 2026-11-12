@@ -23,6 +23,7 @@ import { ipToLong } from '../../core/auth/session';
 import { verifyTurnstile } from '../../core/turnstile';
 import { revokeAffectedUids, revokeForPostDelete, threadRevokeEntries, upgradeGroupsByCredits } from '../../core/points';
 import { associateAttachments } from '../attach/routes';
+import { localizeRemoteImages } from '../attach/remote';
 import { scheduleSeo } from '../seo/generate';
 import { getExecCtx, intParam, patchRuntime, readJson, type ReadEnv } from '../shared';
 import {
@@ -165,10 +166,16 @@ async function updatePost(c: Ctx): Promise<Response> {
   if (!canUpdatePost(ctx, fid, Number(post.uid)) && !modAllow) throw new AppError(Code.NO_PERMISSION, t('common.noEditPerm'));
   if (!modAllow && Number(thread.closed) > 0) throw new AppError(Code.NO_PERMISSION, t('write.threadClosed'));
 
-  const message = (b.message ?? '').toString();
+  let message = (b.message ?? '').toString();
   if (!message.trim()) throw new AppError(Code.VALIDATION_ERROR, t('write.contentRequired'));
   // 编辑上限 2048000（与创建上限 2028000 不一致，按既有行为保留）
   if (codeLen(message) > 2_048_000) throw new AppError(Code.FORM_MESSAGE_TOO_LONG, t('write.contentTooLong'));
+
+  // 外链图片转存：写时定稿前下载到 R2 并把 src 改写为站内地址（失败保留外链，不阻断编辑）
+  const localized = await localizeRemoteImages({ db: core.db, env: c.env }, { uid: viewer.uid, message });
+  message = localized.message;
+  const attachAids = [...(b.attachAids ?? []), ...localized.aids];
+
   const doctype = Number(b.doctype ?? 0);
   const fmt = postMessageFmt({ message, doctype, quotepid: 0 }, viewer.gid);
 
@@ -262,7 +269,7 @@ async function updatePost(c: Ctx): Promise<Response> {
 
   await core.db.batch(batchStmts);
   if (movedForum) await core.cache.del('forumlist');
-  await associateAttachments({ db: core.db, env: c.env, uid: viewer.uid, tid, pid, isfirst, aids: b.attachAids ?? [] });
+  await associateAttachments({ db: core.db, env: c.env, uid: viewer.uid, tid, pid, isfirst, aids: attachAids });
   await emit(core, 'post:updated', { pid, tid, uid: Number(post.uid) });
   await scheduleSeo(core, c, tid, 'gen');
   return ok(c, t('write.editDone'), { data: { pid, tid } });

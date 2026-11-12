@@ -38,6 +38,7 @@ import { grantForPost, postCreditGate, upgradeGroupByCredits } from '../../core/
 import { NoticeType, noticeQuoteHtml, noticeReplyHtml, noticeSend } from '../../core/notice';
 import { banMessage } from '../../core/ban';
 import { associateAttachments } from '../attach/routes';
+import { localizeRemoteImages } from '../attach/remote';
 import { deleteThreadSeoHtml, generateThreadSeoHtml } from '../seo/generate';
 import { patchRuntime, redactPaidBlocks } from '../shared';
 import type { ApiT } from '../../core/i18n';
@@ -312,11 +313,16 @@ export async function createThreadCore(
   const subject = String(draft.subject ?? '');
   if (!subject.trim()) throw new AppError(Code.VALIDATION_ERROR, t('write.subjectRequired'));
   if (codeLen(subject) > 128) throw new AppError(Code.VALIDATION_ERROR, t('write.subjectTooLong'));
-  const message = String(draft.message ?? '');
+  let message = String(draft.message ?? '');
   if (!message.trim()) throw new AppError(Code.VALIDATION_ERROR, t('write.contentRequired'));
   const doctype = Number(draft.doctype ?? 0);
   if (doctype > 10) throw new AppError(Code.VALIDATION_ERROR, t('write.doctypeUnsupported'));
   if (codeLen(message) > MESSAGE_MAX_CHARS) throw new AppError(Code.FORM_MESSAGE_TOO_LONG, t('write.contentTooLong'));
+
+  // 外链图片转存：写时定稿前下载到 R2 并把 src 改写为站内地址（失败保留外链，不阻断发帖）
+  const localized = await localizeRemoteImages({ db: deps.db, env: deps.env }, { uid: viewer.uid, message });
+  message = localized.message;
+  const attachAids = [...(draft.attachAids ?? []), ...localized.aids];
 
   const ts = now();
   const fmt = postMessageFmt({ message, doctype, quotepid: 0 }, viewer.gid);
@@ -382,7 +388,7 @@ export async function createThreadCore(
 
   await patchRuntime(deps, { threads: 1, todaythreads: 1 });
   await deps.cache.del('forumlist');
-  await associateAttachments({ db: deps.db, env: deps.env, uid: viewer.uid, tid, pid, isfirst: true, aids: draft.attachAids });
+  await associateAttachments({ db: deps.db, env: deps.env, uid: viewer.uid, tid, pid, isfirst: true, aids: attachAids });
   await emit(core, 'thread:created', { tid, fid, uid: viewer.uid });
   await emit(core, 'post:created', { pid, tid, uid: viewer.uid, isfirst: 1 });
   const gain = await grantForPost(core, { uid: viewer.uid, isfirst: 1, pid, ts });
@@ -456,10 +462,15 @@ export async function createReplyCore(
     throw new AppError(Code.NO_PERMISSION, t('write.threadClosed'));
   }
 
-  const message = String(draft.message ?? '');
+  let message = String(draft.message ?? '');
   if (!message.trim()) throw new AppError(Code.VALIDATION_ERROR, t('write.contentRequired'));
   const doctype = Number(draft.doctype ?? 0);
   if (codeLen(message) > MESSAGE_MAX_CHARS) throw new AppError(Code.FORM_MESSAGE_TOO_LONG, t('write.contentTooLong'));
+
+  // 外链图片转存：写时定稿前下载到 R2 并把 src 改写为站内地址（失败保留外链，不阻断回帖）
+  const localized = await localizeRemoteImages({ db: deps.db, env: deps.env }, { uid: viewer.uid, message });
+  message = localized.message;
+  const attachAids = [...(draft.attachAids ?? []), ...localized.aids];
 
   // quotepid 校验：必须存在、已过审且同属本主题，否则归零（不得引用待审/回收楼层正文）
   let quotepid = Number(draft.quotepid ?? 0);
@@ -518,7 +529,7 @@ export async function createReplyCore(
   await patchRuntime(deps, { posts: 1, todayposts: 1 });
   await deps.cache.del('forumlist');
   await deps.cache.del(`user:${viewer.uid}`);
-  await associateAttachments({ db: deps.db, env: deps.env, uid: viewer.uid, tid, pid, isfirst: false, aids: draft.attachAids });
+  await associateAttachments({ db: deps.db, env: deps.env, uid: viewer.uid, tid, pid, isfirst: false, aids: attachAids });
   await emit(core, 'post:created', { pid, tid, uid: viewer.uid, isfirst: 0 });
   const gain = await grantForPost(core, { uid: viewer.uid, isfirst: 0, pid, ts });
   await upgradeAfterGrant(core, viewer.uid, ctx.grouplist, viewer.gid);
