@@ -224,6 +224,34 @@ describe('只读接口集成（T1-4 DoD）', () => {
     expect(d.setting.mailOn).toBe(false);
   });
 
+  it('GET /api/bootstrap：不再下发版块简介多语言（briefI18n 迁到 /api/forums/briefs）', async () => {
+    const rules = baseRules({
+      forum: [{ ...FORUM_OPEN, brief_i18n: '{"zh-cn":"中文简介","en-us":"EN brief"}' }],
+    });
+    const { env } = envFor(rules);
+    const body = await json(await app.request('/api/bootstrap', {}, env as never));
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { forumlist: Record<string, unknown>[] };
+    // 单值 brief 仍下发（前端兜底），多语言映射整份移除（占整包 gzip 66%）
+    expect(d.forumlist[0]!.brief).toBe('介绍');
+    expect('briefI18n' in d.forumlist[0]!).toBe(false);
+  });
+
+  it('GET /api/forums/briefs：只返回可见且配了多语言简介的版块', async () => {
+    const rules = baseRules({
+      forum: [
+        { ...FORUM_OPEN, brief_i18n: '{"zh-cn":"中文简介","en-us":"EN brief"}' },
+        { ...FORUM_OPEN, fid: 2, name: '无多语言', brief_i18n: '' },
+        { ...FORUM_OPEN, fid: 3, name: '私密版块', accesson: 1, brief_i18n: '{"zh-cn":"私密简介"}' },
+      ],
+    });
+    const { env } = envFor(rules);
+    const body = await json(await app.request('/api/forums/briefs', {}, env as never));
+    expect(body.code).toBe(Code.OK);
+    const d = body.data as { list: { fid: number; briefI18n: Record<string, string> }[] };
+    expect(d.list).toEqual([{ fid: 1, briefI18n: { 'zh-cn': '中文简介', 'en-us': 'EN brief' } }]);
+  });
+
   it('GET /api/bootstrap：顺带下发首页公告与在线人数（省掉两个独立请求）', async () => {
     const { env } = envFor(baseRules());
     const body = await json(await app.request('/api/bootstrap', {}, env as never));

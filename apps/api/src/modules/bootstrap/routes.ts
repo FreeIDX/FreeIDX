@@ -3,7 +3,7 @@
  * 合并版头渲染依赖的 forumlist/grouplist/当前用户为单请求（§7 首屏 RTT 收敛）。
  */
 import { Hono } from 'hono';
-import { effectiveBanScope, normForumNameI18n, normNameI18n } from '@freeidx/shared';
+import { effectiveBanScope, normForumNameI18n } from '@freeidx/shared';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
 import type { D1b } from '../../core/db';
 import type { GroupForAccess } from '../../core/access';
@@ -43,9 +43,10 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
         nameI18n: normForumNameI18n(f.name_i18n),
         rank: f.rank,
         brief: f.brief,
-        /* 简介多语言（0028）：整份 map 下发，前端按当前界面语言取词。
-           保留它的唯一理由是发现页「全部版块」网格从本接口取简介（DiscoveryPage）。 */
-        briefI18n: normNameI18n(f.brief_i18n),
+        /* 简介多语言（0028）**不下发**：28 个版块 × 10 语言实测 38.7KB raw / 15.5KB gzip，
+           占整包 gzip 的 66%（整包 73KB / 23.5KB gz），而唯一消费方是发现页「全部版块」网格
+           → 改由 GET /api/forums/briefs 按需拉（边缘缓存 300s）。顺带把 localStorage 的版块树
+           快照（store/auth.ts 的 NAV_SNAPSHOT_KEY）也削掉同样体积，首帧解析更快。 */
         threads: f.threads,
         todayposts: f.todayposts,
         todaythreads: f.todaythreads,

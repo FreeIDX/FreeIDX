@@ -253,6 +253,8 @@ describe('边缘缓存：游客只读接口', () => {
   it('右栏/聚合类只读接口均已纳入边缘缓存，且正则互不抢占', () => {
     const ttlOf = (path: string) => API_TTL.find(([re]) => re.test(path))?.[1];
     const required: Array<[string, number]> = [
+      // 版块简介多语言：发现页按需拉（bootstrap 不再携带），站点结构低频变更
+      ['/api/forums/briefs', 300],
       ['/api/online', 30],
       ['/api/posts/latest', 30],
       ['/api/rank/users', 600],
@@ -287,6 +289,16 @@ describe('边缘缓存：游客只读接口', () => {
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
     expect(second.source.calls.length).toBe(0);
     expect(await second.res.json()).toEqual(await first.res.json());
+  });
+
+  it('版块简介（发现页按需拉）命中边缘后不再查库', async () => {
+    const first = await hit('/api/forums/briefs');
+    expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(edge.entries.size).toBe(1);
+
+    const second = await hit('/api/forums/briefs', {}, envFor());
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(second.source.calls.length).toBe(0);
   });
 
   it('无 Cache API 环境优雅降级（workers.dev / 本地预览）', async () => {

@@ -48,6 +48,8 @@ export const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/bootstrap$/, 30],
   [/^\/api\/threads$/, 60],
   [/^\/api\/forums\/\d+\/threads$/, 60],
+  /* 版块简介多语言：发现页按需拉取（bootstrap 已不再背这 15KB gzip）。站点结构低频变更，300s 足够 */
+  [/^\/api\/forums\/briefs$/, 300],
   [/^\/api\/users\/\d+\/(?:threads|posts)$/, 30],
   [/^\/api\/threads\/\d+$/, 120],
   [/^\/api\/users\/\d+$/, 60],

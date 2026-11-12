@@ -6,10 +6,18 @@
  *  / 最新评论（顶层回帖 create_date desc，头像+昵称+25 字摘要）；
  * 开关与轮播图来自 light 扩展（后台插件中心可配，停用则本页入口与内容零残留）。
  */
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import type { ThreadListItem } from '@freeidx/shared';
-import { fetchLatestComments, fmtDate, getRankUsers, type LatestComment, type RankUserItem } from '../../../lib/api';
+import {
+  fetchLatestComments,
+  fmtDate,
+  getForumBriefs,
+  getRankUsers,
+  type LatestComment,
+  type RankUserItem,
+} from '../../../lib/api';
 import { useAuth } from '../../../store/auth';
 import { useForumName, useLocalizedName, useT } from '../../../lib/i18n';
 import { useLight } from '../../../store/theme';
@@ -123,6 +131,19 @@ export function DiscoveryPage() {
     staleTime: 60_000,
     enabled: discOn,
   });
+  /* 版块简介多语言（0028）：bootstrap 不再下发（实测占整包 gzip 的 66%），只有本页「全部版块」
+     需要，故按需拉一次（边缘缓存 300s）。briefMap 为空时逐条回退单值 brief / 旧快照字段。 */
+  const briefs = useQuery({
+    queryKey: ['forum-briefs'],
+    queryFn: getForumBriefs,
+    staleTime: 300_000,
+    enabled: discOn,
+  });
+  const briefMap = useMemo(() => {
+    const m = new Map<number, Record<string, string>>();
+    for (const b of briefs.data?.list ?? []) m.set(b.fid, b.briefI18n);
+    return m;
+  }, [briefs.data]);
   /** 在线人数：随 bootstrap 下发（原先是一次独立的 GET /api/online?summary=1） */
   const onlineCount = useAuth((s) => s.online);
 
@@ -191,7 +212,9 @@ export function DiscoveryPage() {
                             {f.todayposts}
                           </span>
                         </div>
-                        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-lt-grey">{localized(f.brief, f.briefI18n)}</p>
+                        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-lt-grey">
+                          {localized(f.brief, briefMap.get(f.fid) ?? f.briefI18n)}
+                        </p>
                         {mods && (
                           <p className="mt-1 flex items-center gap-1 text-xs text-lt-grey">
                             <Icon name="user" className="size-3" />

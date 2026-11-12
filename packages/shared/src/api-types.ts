@@ -39,7 +39,9 @@ export interface ForumNode {
   nameI18n?: Record<string, string>;
   rank: number;
   brief: string;
-  /** 版块简介多语言（0028）：locale → 简介；缺省/空 = 未配置，展示回退 brief */
+  /** 版块简介多语言（0028）：locale → 简介；缺省/空 = 未配置，展示回退 brief。
+   *  **bootstrap 不下发**（28 版块 × 10 语言 ≈ 15KB gzip，占整包 66%）：只有发现页需要，
+   *  改由 GET /api/forums/briefs 按需拉取（见 ForumBriefsPayload）。 */
   briefI18n?: Record<string, string>;
   threads: number;
   todayposts: number;
@@ -66,6 +68,14 @@ export interface ForumNode {
   lang?: ContentLang | '';
   /** 二级导航（并入 bootstrap） */
   children?: ForumNode[];
+}
+
+/**
+ * GET /api/forums/briefs：版块简介多语言（0028）的按需下发。
+ * 由发现页「全部版块」网格消费；只含当前访问者可见且**配了多语言简介**的版块。
+ */
+export interface ForumBriefsPayload {
+  list: Array<{ fid: number; briefI18n: Record<string, string> }>;
 }
 
 /** 列表行：thread 反规范化列 → 零 JOIN 零 user 查询（§5.2） */

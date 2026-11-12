@@ -28,6 +28,7 @@ import {
   canUpdatePost,
   forumAccessMod,
   forumAccessUser,
+  forumListAccessFilter,
   threadListAccessFilter,
 } from '../../core/access';
 import type { AccessCtx } from '../../core/access';
@@ -390,6 +391,33 @@ export function threadRoutes(): Hono<ReadEnv> {
   app.get('/api/threads', (c) => threadListHandler(c, intParam(c.req.query('fid'), 0)));
 
   app.get('/api/forums/:fid/threads', (c) => threadListHandler(c, intParam(c.req.param('fid'))));
+
+  /**
+   * GET /api/forums/briefs —— 版块简介多语言（0028）的**按需**下发。
+   *
+   * 为什么单独拆出来：bootstrap 是全站首屏硬依赖，实测 73KB 里 38.7KB 是 28 个版块 × 10 语言的
+   * brief_i18n（gzip 后 15.5KB，占整包 gzip 的 66%），而它的唯一消费方只有「发现页 · 全部版块」网格。
+   * 拆出后 bootstrap 的 gzip 从 23.5KB 降到 10.1KB；本端点只在发现页被打开时才请求，
+   * 且走边缘缓存（API_TTL 300s）——命中后就是 1 个 RTT、零 D1。
+   *
+   * 口径：
+   *  - 只返回**当前访问者可见**的版块（与 bootstrap 同一 forumListAccessFilter），
+   *    私密版块的简介不得经此端点泄漏；
+   *  - `brief_i18n` 为空的版块不下发（前端回退单值 brief），避免下发一堆空对象。
+   */
+  app.get('/api/forums/briefs', async (c) => {
+    const { db, cache } = core(c);
+    const [forumlist, grouplist, viewer] = await Promise.all([
+      loadForumlist(cache, db),
+      loadGrouplist(cache, db),
+      loadViewer(cache, db, c),
+    ]);
+    const visible = forumListAccessFilter(forumlist, viewer.gid, grouplist);
+    const list = Object.values(visible)
+      .map((f) => ({ fid: f.fid, briefI18n: normNameI18n(f.brief_i18n) }))
+      .filter((f) => Object.keys(f.briefI18n).length > 0);
+    return ok(c, 'ok', { data: { list } });
+  });
 
   /**
    * 站内搜索（页头搜索框落点，idx_search）：range=thread（默认，仅标题）| all（标题+正文）| user（用户名）。

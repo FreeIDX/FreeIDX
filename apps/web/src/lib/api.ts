@@ -2,6 +2,7 @@ import type {
   ApiEnvelope,
   BootstrapPayload,
   CreatePostReq,
+  ForumBriefsPayload,
   CreateThreadReq,
   LoginReq,
   ModThreadsReq,
@@ -139,6 +140,14 @@ export function apiSend<T>(
 
 export function bootstrap(): Promise<BootstrapPayload> {
   return apiGet<BootstrapPayload>('/api/bootstrap');
+}
+
+/**
+ * 版块简介多语言（0028）：bootstrap 不再下发（占整包 gzip 的 66%），只由发现页「全部版块」按需拉。
+ * 服务端按访问者可见版块过滤，并走边缘缓存（300s）。
+ */
+export function getForumBriefs(): Promise<ForumBriefsPayload> {
+  return apiGet<ForumBriefsPayload>('/api/forums/briefs');
 }
 
 /** 表单写请求：不设 Content-Type（浏览器带 multipart boundary），保留 CSRF + credentials，解信封同 apiSend */
