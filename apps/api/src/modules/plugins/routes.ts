@@ -55,16 +55,23 @@ export function pluginsRoutes(): Hono<ReadEnv> {
     return ok(c, 'ok', { data: codes });
   });
 
-  /** 每日签到状态：奖励配置 + 当前用户今日已签/累计天数/本周七天标记 + 今日签到聚合（人数与签到者列表） */
+  /**
+   * 每日签到状态：奖励配置 + 当前用户今日已签/累计天数/本周七天标记 + 今日签到聚合（人数与签到者列表）
+   *
+   * 波次（首屏右栏「每日签到」卡的 TTFB 直接由这里决定）：
+   *   波1 extensions 状态 ‖ viewer（两者互不依赖）
+   *   波2 rewards ‖ status ‖ today（三者都只依赖波1 的结果，且都是独立读）
+   * 原先 state → rewards → viewer → [status,today] 四波串行，改为两波；停用插件的
+   * 早退分支仍在波1 之后（状态与 viewer 都只是缓存/单行查询，代价可忽略）。
+   */
   app.get('/api/checkin', async (c) => {
     const { db, cache } = core(c);
-    const state = await loadExtensionsState(cache, db);
+    const [state, v] = await Promise.all([loadExtensionsState(cache, db), loadViewer(cache, db, c)]);
     if (!isEnabled(checkinPlugin.manifest, state)) {
       return ok(c, 'ok', { data: { enabled: false } });
     }
-    const rewards = await loadCheckinRewards(cache, db);
-    const v = await loadViewer(cache, db, c);
-    const [status, today] = await Promise.all([
+    const [rewards, status, today] = await Promise.all([
+      loadCheckinRewards(cache, db),
       v.uid > 0 ? checkinStatus(db, v.uid) : Promise.resolve({ checked: false, days: 0, ...emptyWeek() }),
       checkinToday(db),
     ]);

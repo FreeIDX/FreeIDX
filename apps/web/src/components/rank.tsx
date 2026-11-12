@@ -11,6 +11,7 @@ import { Link } from 'react-router';
 import { fetchHotFavorites, getRankForum, getRankThreads, getRankUsers, type RankThreadItem } from '../lib/api';
 import { Avatar } from './Avatar';
 import { Icon } from './icons';
+import { Skeleton } from './Skeleton';
 import { Card, CardTabs, CardTitle, SidePanel, cx } from './ui';
 import { useT } from '../lib/i18n';
 import { useLight } from '../store/theme';
@@ -48,10 +49,28 @@ function RankThreadList({ list }: { list: RankThreadItem[] }) {
   );
 }
 
+/**
+ * 排行榜骨架行：与真实行同高（.zh-rank-row 31px），
+ * 首屏加载期用它代替「加载中」一行文字——后者会让卡片高度在数据到达时突然跳变。
+ */
+function RankRowsSkeleton({ rows }: { rows: number }) {
+  return (
+    <ul className="m-0 list-none p-0" aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => (
+        <li key={i} className="zh-rank-row flex items-center gap-1.5">
+          <Skeleton circle className="size-[17px]" />
+          <Skeleton className="h-3 flex-1" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** 首页右栏卡一：总排行（全站浏览量倒序，缓存 1 天）/ 周排行（最近一周创建，缓存 1h） */
 export function RankThreadCard() {
   const [range, setRange] = useState<'all' | 'week'>('all');
-  const q = useQuery({ queryKey: ['rank-threads', range], queryFn: () => getRankThreads(range, 10) });
+  /* staleTime 5min：服务端本身就缓存 1h/1d，站内来回切页时不必重复请求 */
+  const q = useQuery({ queryKey: ['rank-threads', range], queryFn: () => getRankThreads(range, 10), staleTime: 300_000 });
   const t = useT();
   return (
     <Card
@@ -66,7 +85,7 @@ export function RankThreadCard() {
       bodyClass="px-5 py-1"
     >
       {q.isError && <p className="py-3 text-center text-xs text-destructive">{(q.error as Error).message}</p>}
-      {q.isPending && <p className="py-3 text-center text-xs text-muted-foreground">{t('loading')}</p>}
+      {q.isPending && <RankRowsSkeleton rows={10} />}
       {q.data && <RankThreadList list={q.data.list} />}
     </Card>
   );
@@ -122,7 +141,7 @@ type UserRankType = (typeof USER_TABS)[number]['k'];
 /** 首页右栏卡二：新会员（uid 倒序）/ 活跃榜（login_date），各取 16 人 */
 export function RankUserCard() {
   const [type, setType] = useState<UserRankType>('new');
-  const q = useQuery({ queryKey: ['rank-users', type], queryFn: () => getRankUsers(type, 16) });
+  const q = useQuery({ queryKey: ['rank-users', type], queryFn: () => getRankUsers(type, 16), staleTime: 300_000 });
   const list = q.data?.list ?? [];
   const t = useT();
   return (
@@ -149,7 +168,17 @@ export function RankUserCard() {
       bodyClass="p-2"
     >
       {q.isError && <p className="py-2 text-center text-xs text-destructive">{(q.error as Error).message}</p>}
-      {q.isPending && <p className="py-2 text-center text-xs text-muted-foreground">{t('loading')}</p>}
+      {/* 16 个头像位骨架：与真实网格同构（4 列 × 39px 头像 + 名字），数据到达时不产生高度跳变 */}
+      {q.isPending && (
+        <div className="flex flex-wrap" aria-hidden="true">
+          {Array.from({ length: 16 }, (_, i) => (
+            <div key={i} className="mb-3 w-1/4 text-center">
+              <Skeleton circle className="mx-auto size-[39px]" />
+              <Skeleton className="mx-auto mt-2 h-3 w-12" />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap">
         {list.map((u) => (
           /* .col-xs-4：25% 列宽、居中、hover 蓝底圆角加粗 */
@@ -178,7 +207,7 @@ export function RankForumHotCard({ fid }: { fid: number }) {
       <CardTitle>{t('forum_hot')}</CardTitle>
       <div className="mt-2">
         {q.isError && <p className="py-2 text-center text-xs text-destructive">{(q.error as Error).message}</p>}
-        {q.isPending && <p className="py-2 text-center text-xs text-muted-foreground">{t('loading')}</p>}
+        {q.isPending && <RankRowsSkeleton rows={10} />}
         {q.data && <RankThreadList list={q.data.list} />}
       </div>
     </SidePanel>

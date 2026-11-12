@@ -9,6 +9,7 @@ import { Link } from 'react-router';
 import type { ForumNode } from '@freeidx/shared';
 import { Icon, type IconName } from './icons';
 import { Avatar } from './Avatar';
+import { Skeleton } from './Skeleton';
 import { useForumName, useT } from '../lib/i18n';
 import { useAuthModal } from '../store/authModal';
 import { useAuth } from '../store/auth';
@@ -306,6 +307,7 @@ function useSideNavCollapsed(): [boolean, () => void] {
  *  可折叠为 56px 图标轨（增强交互），折叠态持久化。 */
 function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; ariaLabel?: string; divider?: boolean }) {
   const forumlist = useAuth((s) => s.forumlist);
+  const loaded = useAuth((s) => s.loaded);
   const t = useT();
   /* 版块名多语言（0027）：按当前界面语言取词 */
   const fname = useForumName();
@@ -389,6 +391,21 @@ function SideNav({ items, ariaLabel, divider = true }: { items: SideNavItem[]; a
         </div>
         {divider && <div className={cx('my-2 border-t border-zh-line', collapsed ? 'mx-2' : 'mx-4')} aria-hidden="true" />}
         <ul>
+          {/* 首次访问（无本地版块树快照）等 bootstrap 期间：按行给骨架。
+              此前这里是空 <ul>，左栏只显示一个「版块导航」标题，数据到达时整列突然展开，
+              视觉上就会被判定为「左栏比中间栏慢」。 */}
+          {!loaded && forumlist.length === 0 && (
+            <li className="px-2" aria-hidden="true">
+              <div className={cx('py-1', collapsed ? 'flex flex-col items-center gap-1' : 'space-y-1')}>
+                {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className={cx('flex min-h-10 items-center gap-2.5 px-3', collapsed && 'justify-center px-0')}>
+                    <Skeleton className="size-7 shrink-0" radius="rounded-[8px]" />
+                    {!collapsed && <Skeleton className="h-3.5 flex-1" />}
+                  </div>
+                ))}
+              </div>
+            </li>
+          )}
           {tops.map((f) => {
             /* 折叠态（56px）不渲染子项，避免溢出 */
             const kids = collapsed ? [] : kidsOf(f.fid);
@@ -629,6 +646,36 @@ export function UserSideCard(props: {
               <div key={label} className="rounded-md bg-zh-stat-bg px-1 py-1.5 text-center">
                 <b className="text-sm font-semibold leading-none tabular-nums text-foreground">{value}</b>
                 <p className="mt-1 text-[11px] leading-none text-muted-foreground">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * 登录态用户卡骨架：bootstrap 未返回时占位。
+ * 版式与 UserSideCard 同构（80px 背景 + 上移头像 + 组徽章行 + 进度条 + 四格统计），
+ * 目的是让右栏在加载期保持与真实版式同构——此前这里是「整块不渲染」，
+ * bootstrap 回来时全部卡片一起向下撑开，视觉上就会被判定为「右栏比中间慢」。
+ */
+export function UserSideCardSkeleton() {
+  return (
+    <section className="zh-card mb-4 overflow-hidden" aria-hidden="true">
+      <div className="h-[80px] w-full bg-cover bg-center" style={{ backgroundImage: 'url(/theme-light/bg-0.webp)' }} />
+      <div className="relative -mt-[25px] px-4 pb-4">
+        <div className="flex flex-col items-center">
+          <Skeleton circle className="size-16 border-[3px] border-card" />
+          <Skeleton className="mt-3 h-4 w-24" />
+          <Skeleton className="mt-2 h-4 w-14" />
+          <Skeleton className="mt-2.5 h-2.5 w-full" radius="rounded-full" />
+          <div className="mt-3 grid w-full grid-cols-4 gap-1.5">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="rounded-md bg-zh-stat-bg px-1 py-1.5 text-center">
+                <Skeleton className="mx-auto h-3.5 w-6" />
+                <Skeleton className="mx-auto mt-1.5 h-2.5 w-8" />
               </div>
             ))}
           </div>

@@ -53,6 +53,8 @@ function rules(): SqlRule[] {
     { test: /FROM bbs_thread WHERE ok = 1 ORDER BY last_date DESC LIMIT 1000/, rows: [{ tid: 2, last_date: 1700000002 }] },
     // llms.txt 的精华主题清单
     { test: /FROM bbs_thread WHERE digest > 0/, rows: [{ tid: 2, subject: '你好世界' }] },
+    /* 右栏用户榜（/api/rank/users）：公共只读，无 viewer 维度 */
+    { test: /FROM bbs_user WHERE ok = 1 AND uid > 0 ORDER BY uid DESC/, rows: [{ uid: 1, username: 'admin', avatar: 0 }] },
     { test: /bbs_cache/, first: null },
   ];
 }
@@ -142,6 +144,26 @@ describe('边缘缓存：游客只读接口', () => {
   it('Authorization 头绕开缓存', async () => {
     await hit('/api/threads', { authorization: 'Bearer x' });
     expect(edge.entries.size).toBe(0);
+  });
+
+  /* 右栏排行对登录用户放开边缘缓存（PUBLIC_READONLY）：响应体里没有任何按 uid/gid 定制的字段，
+     放开后登录用户（含站长）刷新首页时右栏聚合接口不再每次冷穿透 Worker + D1。 */
+  it('公共只读端点（排行）对登录轨也参与缓存；个人化端点仍绕开', async () => {
+    const login = { cookie: 'csrf=token1; sid=abcdef; at=x' };
+    const first = await hit('/api/rank/users?type=new&limit=16');
+    expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
+    const body = await first.res.json();
+    expect(edge.entries.size).toBe(1);
+
+    const second = await hit('/api/rank/users?type=new&limit=16', login, envFor());
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(second.source.calls.length).toBe(0); // 命中即零 D1 / 零 session 查询
+    expect(await second.res.json()).toEqual(body);
+
+    // 反向保证：同一登录轨访问按访问者定制的列表接口仍然完全不参与缓存
+    const list = await hit('/api/threads', login);
+    expect(list.res.headers.get('x-edge-cache')).toBeNull();
+    expect(edge.entries.size).toBe(1);
   });
 
   it('首访（尚无 csrf Cookie）：冷缓存穿透签发 Cookie；缓存就位后 HIT 并补签，不重复签发', async () => {

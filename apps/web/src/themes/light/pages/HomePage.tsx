@@ -9,6 +9,7 @@ import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
 import { Pagination } from '../../../components/Pagination';
 import { ThreadList } from '../../../components/ThreadList';
 import { ThreadListSkeleton } from '../../../components/ThreadListSkeleton';
+import { Skeleton } from '../../../components/Skeleton';
 import { AnnouncementBar } from '../../../components/AnnouncementBar';
 import { ContentLangBar } from '../../../components/ContentLangBar';
 import { useContentLangFilter } from '../../../store/contentLang';
@@ -23,6 +24,7 @@ import {
   QuickHelpCard,
   SidePanel,
   UserSideCard,
+  UserSideCardSkeleton,
 } from '../../../components/ui';
 import { HotFavoritesCard, RankThreadCard, RankUserCard } from '../../../components/rank';
 import { useT, useGroupName } from '../../../lib/i18n';
@@ -43,6 +45,8 @@ export function HomePage() {
   const forumlist = useAuth((s) => s.forumlist);
   const grouplist = useAuth((s) => s.grouplist);
   const me = useAuth((s) => s.me);
+  /* bootstrap 是否已落库：右栏据此区分「游客」与「还不知道是不是游客」，避免先渲染游客卡再翻成用户卡 */
+  const authLoaded = useAuth((s) => s.loaded);
   /** 小黑屋（0025）：生效范围按 banUntil 惰性判定（bootstrap 可能命中缓存，不带实时性承诺） */
   const banScope = me ? effectiveBanScope(me.banScope, me.banUntil, Math.floor(Date.now() / 1000)) : 0;
   const runtime = useAuth((s) => s.runtime);
@@ -166,8 +170,11 @@ export function HomePage() {
               />
               <QuickHelpCard uid={me.uid} />
             </>
-          ) : (
+          ) : authLoaded ? (
             <GuestCard />
+          ) : (
+            /* bootstrap 未回：同构骨架。此前这里是整块不渲染，返回时所有卡片一起下移 */
+            <UserSideCardSkeleton />
           ))}
         {/* 每日签到卡片（checkin 插件启用时渲染，停用零残留） */}
         <CheckinCard />
@@ -179,7 +186,20 @@ export function HomePage() {
         {light.siteInfoTotal && (
           <SidePanel pad="p-4">
             <p className="mb-2 text-sm font-medium text-card-header-ink">{t('site_stats')}</p>
-            <CardStats items={stats} />
+            {/* 站点数据全来自 bootstrap：未落库时先给同构骨架，避免 4 个 0 一闪再变真实值 */}
+            {authLoaded ? (
+              <CardStats items={stats} />
+            ) : (
+              <div className="grid grid-cols-2 gap-x-4 gap-y-4 p-4" aria-hidden="true">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-2.5">
+                    <Skeleton className="size-6 shrink-0" radius="rounded-full" />
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="ml-auto h-3.5 w-6" />
+                  </div>
+                ))}
+              </div>
+            )}
           </SidePanel>
         )}
         {/* 用户榜（新会员/活跃） */}

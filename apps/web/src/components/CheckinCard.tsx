@@ -6,13 +6,35 @@
  * 签到 POST /api/checkin，成功后就地展示奖励明细并刷新 bootstrap（头部积分即时更新）。游客点击登录按钮开弹窗登录。
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiGet, apiSend } from '../lib/api';
 import { useAuth } from '../store/auth';
 import { useAuthModal } from '../store/authModal';
 import { SidePanel, cx } from './ui';
 import { Icon } from './icons';
+import { Skeleton } from './Skeleton';
 import { useT } from '../lib/i18n';
+
+/**
+ * 上次观察到的插件启用状态（localStorage '1'/'0'）。
+ *
+ * 作用：签到卡的 `enabled` 原本只看 bootstrap 的 `ext.checkin`，于是请求必须**排在 bootstrap 之后**，
+ * 右侧栏第一张卡等于付两个 RTT。用这个本地记忆把判断提前到首帧：
+ *  - 记录为 '0'（上次明确停用）→ 不请求、不渲染（停用站点零残留）；
+ *  - 其余（'1' 或从未记录）→ 与 bootstrap 并行发出请求，比原链路少一个 RTT；
+ *    从未记录且实际已停用时，接口返回 enabled:false 后组件自行移除（只闪现一次，随后被记住）。
+ */
+const CHECKIN_HINT_KEY = 'freeidx:checkin-on';
+
+/** '1' 启用 / '0' 停用 / null 无记忆 */
+function checkinEnabledHint(): boolean | null {
+  try {
+    const v = localStorage.getItem(CHECKIN_HINT_KEY);
+    return v === null ? null : v === '1';
+  } catch {
+    return null;
+  }
+}
 
 /** GET /api/checkin 响应（modules/plugins/routes.ts） */
 interface CheckinStatus {
@@ -72,14 +94,28 @@ export function CheckinCard() {
   const [doing, setDoing] = useState(false);
   const [flash, setFlash] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
+  const hint = checkinEnabledHint();
   const q = useQuery({
     queryKey: ['checkin'],
     queryFn: () => apiGet<CheckinStatus>('/api/checkin'),
-    enabled: cfg?.enabled === true,
+    /* bootstrap 已回来 → 以它为准；尚未回来 → 用本地记忆先行判断（见 checkinEnabledHint） */
+    enabled: cfg ? cfg.enabled === true : hint !== false,
     staleTime: 30_000,
   });
 
-  if (!cfg?.enabled || q.data?.enabled === false) return null;
+  /** 记录插件启用状态，供下次首帧提前判断（停用站点从此不再请求） */
+  useEffect(() => {
+    if (!q.data) return;
+    try {
+      localStorage.setItem(CHECKIN_HINT_KEY, q.data.enabled ? '1' : '0');
+    } catch {
+      /* 隐私模式下不记忆，只影响提前量 */
+    }
+  }, [q.data]);
+
+  /* 停用判定三档：bootstrap 明确停用 / 接口明确停用 / 上次记忆为停用且 bootstrap 未回 */
+  if (cfg ? !cfg.enabled : hint === false) return null;
+  if (q.data?.enabled === false) return null;
   const checked = q.data?.checked === true;
   const days = q.data?.days ?? 0;
   const todayCount = q.data?.todayCount;
@@ -108,7 +144,11 @@ export function CheckinCard() {
       <div className="flex items-center justify-between gap-3 bg-zh-accent-soft px-4 py-3">
         <div className="min-w-0">
           <p className="truncate text-base font-bold text-foreground">{t('checkin_title')}</p>
-          {todayCount != null && <p className="mt-0.5 text-xs text-lt-grey">{t('checkin_today_count', { count: todayCount })}</p>}
+          {todayCount != null ? (
+            <p className="mt-0.5 text-xs text-lt-grey">{t('checkin_today_count', { count: todayCount })}</p>
+          ) : (
+            !q.isError && <Skeleton className="mt-1.5 h-3 w-24" />
+          )}
           {me && <p className="mt-0.5 text-xs text-lt-grey">{t('checkin_days', { days })}</p>}
         </div>
         {me ? (
@@ -136,7 +176,7 @@ export function CheckinCard() {
         )}
       </div>
       {/* 本周七天格子：周一~周四一行 4 格，周五~周日一行 3 格（等宽 → 更宽）；今天蓝框高亮，已签到打勾 */}
-      {todayIndex != null && (
+      {todayIndex != null ? (
         <div className="px-4 pb-3 pt-3">
           {WEEK_ROWS.map((row, r) => (
             <div key={r} className={cx('flex gap-2', r > 0 && 'mt-2')}>
@@ -157,6 +197,17 @@ export function CheckinCard() {
                   </div>
                 );
               })}
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* 七天格子骨架：与真实格子同高（68px），数据到达时卡片不跳高 */
+        <div className="px-4 pb-3 pt-3" aria-hidden="true">
+          {WEEK_ROWS.map((row, r) => (
+            <div key={r} className={cx('flex gap-2', r > 0 && 'mt-2')}>
+              {row.map((key) => (
+                <Skeleton key={key} className="min-h-[68px] flex-1" radius="rounded-[10px]" />
+              ))}
             </div>
           ))}
         </div>

@@ -171,15 +171,37 @@ export function maybeCtx(c: unknown): Waiter | undefined {
 }
 
 /**
- * 参与资格判定：无 Authorization、无登录轨 Cookie（sid/at/admin_at）即可。
+ * 「与访问者无关」的只读端点白名单：即使请求携带登录轨 Cookie 也允许命中/回填边缘缓存。
+ *
+ * 依据：这些响应体里没有任何按 uid/gid 定制的字段（排行榜只有 tid/subject 或 uid/username/avatar；
+ * 注入位/快捷回复是站点级配置；在线数是一个数字），游客副本与登录副本逐字节等价。
+ *
+ * 为什么必须单独开一档：PERSONAL_COOKIE 是「响应可能按用户定制」的保守近似，代价是**登录用户
+ * （含站长）每一次刷新都要冷穿透整条链路**——首页右栏的排行卡各有 1 次 Worker 调用 + 1 次
+ * session 查询 + 1 次 D1，明明数据是全网同值的。放开这一档后，登录用户的右栏聚合接口可直接
+ * 200ms 内从边缘 HIT（TTL 600s/3600s），这是右栏显示速度最直接的改善。
+ *
+ * 边界：**不放**任何做版块可读性过滤的端点（如 /api/threads/hot-favorites、/api/related-threads）——
+ * 它们的结果随 viewer 的 gid 变化，置入本白名单会让登录用户看到游客副本（漏内容）。
+ */
+const PUBLIC_READONLY: ReadonlyArray<RegExp> = [
+  /^\/api\/rank\/(?:threads|users|forum)$/,
+  /^\/api\/insert-codes$/,
+  /^\/api\/quick-reply-message$/,
+  /^\/api\/online$/,
+];
+
+/**
+ * 参与资格判定：无 Authorization，且（无登录轨 Cookie（sid/at/admin_at）或命中公共只读白名单）即可。
  * 旧口径额外要求「已持有 csrf Cookie」，等价于把所有真首访挡在边缘缓存之外——每个新访客的
  * /api/bootstrap 都要冷穿透整条 D1 链路（实测首访 TTFB 2~3s 的主要来源）。csrf 门禁的存在意义
  * 只是保证 Set-Cookie 签发不被缓存吞掉，现改为 HIT 分支主动补签（见 edgeCache 内注释），
  * 该前提不再需要。
  */
-function isCacheEligible(req: { headers: Headers }): boolean {
+function isCacheEligible(req: { headers: Headers }, path: string): boolean {
   if (req.headers.has('authorization')) return false;
-  return !PERSONAL_COOKIE.test(req.headers.get('cookie') ?? '');
+  if (!PERSONAL_COOKIE.test(req.headers.get('cookie') ?? '')) return true;
+  return PUBLIC_READONLY.some((re) => re.test(path));
 }
 
 /** csrf Cookie 名（与 middleware/csrf.ts 同口径） */
@@ -214,8 +236,9 @@ export function edgeCache() {
       const filePrefix = FILES_PUBLIC.some((re) => re.test(c.req.path));
       const ttl = API_TTL.find(([re]) => re.test(c.req.path))?.[1];
       if (!ttl && !filePrefix) return next();
-      // 资格口径分两档（见各函数注释）：API 要求已持有 csrf Cookie；/files 公共直链不要求
-      if (!(filePrefix ? isFileCacheEligible(raw) : isCacheEligible(raw))) return next();
+      // 资格口径分三档（见各函数注释）：/files 公共直链最宽；API 默认绕过登录轨；
+      // PUBLIC_READONLY 里的公共只读端点对登录轨也放开（响应体与访问者无关）
+      if (!(filePrefix ? isFileCacheEligible(raw) : isCacheEligible(raw, c.req.path))) return next();
       const b = bucket();
       if (!b) return next();
 

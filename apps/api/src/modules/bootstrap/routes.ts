@@ -5,6 +5,8 @@
 import { Hono } from 'hono';
 import { effectiveBanScope, normForumNameI18n, normNameI18n } from '@freeidx/shared';
 import { USER_PUBLIC_COLS } from '../../core/db/columns';
+import type { D1b } from '../../core/db';
+import type { GroupForAccess } from '../../core/access';
 import { forumListAccessFilter } from '../../core/access';
 import { hasSeeCheck } from '../../core/check';
 import { forumLangOf, forumRankCompare, loadForumlist, loadGrouplist, loadSetting, loadViewer } from '../../core/loaders';
@@ -76,71 +78,24 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
       allowsell: Number(g.allowsell ?? 0),
     }));
 
-    let me = null;
-    if (viewer.uid > 0) {
-      const [u, followers, following, favorites, unread] = await Promise.all([
-        db
-          .prepare<Record<string, number | string>>(
-            `SELECT ${USER_PUBLIC_COLS}, golds, rmbs, ban_scope, ban_until, ban_reason FROM bbs_user WHERE uid = ?`,
-          )
-          .bind(viewer.uid)
-          .first<Record<string, number | string>>(),
-        db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_follow WHERE followee_uid = ?').bind(viewer.uid).first<{ c: number }>(),
-        db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_follow WHERE follower_uid = ?').bind(viewer.uid).first<{ c: number }>(),
-        db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_favorite WHERE uid = ?').bind(viewer.uid).first<{ c: number }>(),
-        /* 消息未读数（huux_notice：实时 COUNT，口径见 0006 迁移） */
-        db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_notice WHERE recvuid = ? AND isread = 0').bind(viewer.uid).first<{ c: number }>(),
-      ]);
-      if (u) {
-        const avatarAuto = avatarAutoOf(Number(u.avatar), u.avatar_auto);
-        me = {
-          uid: Number(u.uid),
-          gid: Number(u.gid),
-          username: String(u.username),
-          avatar: Number(u.avatar),
-          /** 预设头像路径（avatar=0 且 avatar_auto 非 '0' 时生效） */
-          ...(avatarAuto ? { avatar_auto: avatarAuto } : {}),
-          /** 主页背景预设编号（'0'=默认 bg-0.png） */
-          bgimg: String(u.bgimg ?? '0'),
-          threads: Number(u.threads),
-          posts: Number(u.posts),
-          credits: Number(u.credits),
-          /** 三币种（积分区展示）：金币 / 人民币（分） */
-          golds: Number(u.golds ?? 0),
-          rmbs: Number(u.rmbs ?? 0),
-          createDate: Number(u.create_date),
-          followers: Number(followers?.c ?? 0),
-          following: Number(following?.c ?? 0),
-          favorites: Number(favorites?.c ?? 0),
-          unreadNotices: Number(unread?.c ?? 0),
-          /** 账号审核状态（tt_check）：非 1 时前台顶部提示且禁发帖回帖 */
-          ok: Number(u.ok ?? 1),
-          /**
-           * 小黑屋（0025）：生效中的封禁位（0=未封禁/已到期）。
-           * 前台据此提示原因与到期时间，并在禁言时置灰发帖/回帖入口；
-           * 到期的惰性判定在前端按 banUntil 再算一次（bootstrap 可能命中缓存）。
-           */
-          banScope: effectiveBanScope(u.ban_scope, u.ban_until, Math.floor(Date.now() / 1000)),
-          banUntil: Number(u.ban_until ?? 0),
-          banReason: String(u.ban_reason ?? ''),
-          /** see_check 组（tt_check）：列表/帖内显示未过审内容与现场审核按钮 */
-          seeCheck: hasSeeCheck(grouplist[Number(u.gid)]),
-          /** 认证头衔（'0'=未认证；个人中心头像旁 V 标） */
-          v: String(u.v ?? '0'),
-        };
-      }
-    }
+    /**
+     * 登录用户的 me 段：只依赖第一波的 viewer/grouplist，与下面的
+     * runtime/ext/theme/公告段**互不依赖**，因此不单独 await（那样要多吃一轮 D1 往返），
+     * 而是作为 Promise 直接并入下一段 Promise.all。
+     */
+    const mePromise = viewer.uid > 0 ? loadMe(db, viewer.uid, grouplist) : Promise.resolve(null);
 
     /**
-     * 以下四段互不依赖，并发发出：
+     * 以下五段互不依赖，并发发出：
      *  - runtime_card（L0+L2 / 60s 读穿）
      *  - 插件运行时装配（extensions 状态 → bbs_kv）
      *  - 启用主题 id
-     *  - 公告（60s 读穿）+ 实时在线数
+     *  - 公告（60s 读穿）+ 在线数（L0 / 30s）
+     *  - me（登录用户；已与公共段解耦，见上）
      * 原先逐段 await，每段各付一次 D1/KV 往返；bootstrap 是首屏硬依赖，串行会直接叠加到 TTFB。
      * 只有 `bus.emit` 依赖插件运行时，仍在装配完成后调用（见下）。
      */
-    const [runtime, rt, theme, [announcements, online]] = await Promise.all([
+    const [runtime, rt, theme, [announcements, online], me] = await Promise.all([
       // 站点运行数据：全站贴子总数 + 用户数（bbs_forum 无 posts 反规范化列 → COUNT(bbs_post)），
       // 'runtime_card' 走默认键策略 L0+L2 / 60s 读穿，预算友好
       remember(cache, 'runtime_card', async () => {
@@ -157,7 +112,9 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
        * 首页公告条与在线人数：原本各是一个独立请求（GET /api/announcements、GET /api/online?summary=1）。
        * 并入 bootstrap 后：少 2 次 Worker 调用，且冷启动少 2 条 D1 查询。
        * 公告走 60s 读穿缓存（登录用户每个 bootstrap 都真打一次 D1，公告变更低频）；
-       * 在线数刻意保持实时（COUNT 便宜且语义就是"当前在线"）。
+       * 在线数走 `online_count` 的 L0-only / 30s 缓存：COUNT(bbs_session) 是**全表扫描**，
+       * 而 bootstrap 对登录用户不吃边缘缓存（响应含 me），此前每次刷新都真打一遍，
+       * 是首屏固定开销里最没必要的一条。「当前在线」±30s 无语义损失，且不占 D1 写额度。
        * fail-soft：一条公告和一个数字不值得让整份首屏数据失败（配额耗尽/表缺失时按空处理）。
        */
       Promise.all([
@@ -176,12 +133,15 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
             )
             .catch(() => []),
         ),
-        db
-          .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session')
-          .first<{ c: number }>()
-          .then((r) => Number(r?.c ?? 0))
-          .catch(() => 0),
+        remember(cache, 'online_count', () =>
+          db
+            .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session')
+            .first<{ c: number }>()
+            .then((r) => Number(r?.c ?? 0))
+            .catch(() => 0),
+        ),
       ]),
+      mePromise,
     ]);
 
     // 契约 ⑦ bootstrap:contribute：插件字段随核心一次下发，不产生额外请求
@@ -206,4 +166,96 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
   });
 
   return app;
+}
+
+/** 登录轨 me 段载荷（与前端 store/auth.ts 的 me 结构同构） */
+interface BootstrapMe {
+  uid: number;
+  gid: number;
+  username: string;
+  avatar: number;
+  avatar_auto?: string;
+  bgimg: string;
+  threads: number;
+  posts: number;
+  credits: number;
+  golds: number;
+  rmbs: number;
+  createDate: number;
+  followers: number;
+  following: number;
+  favorites: number;
+  unreadNotices: number;
+  ok: number;
+  banScope: number;
+  banUntil: number;
+  banReason: string;
+  seeCheck: boolean;
+  v: string;
+}
+
+/**
+ * me 段装载（登录用户）。
+ *
+ * 性能要点：社交四计数（关注/粉丝/收藏/未读）原本是 4 条独立 COUNT，即使 Promise.all
+ * 也要 4 次 D1 往返（D1 每次 prepare().first() 都是一次子请求）。这里合并成**一条 SQL 的
+ * 4 个标量子查询**：1 次往返拿到全部计数，主表 1 条，合计 2 次（且两者并行）。
+ * 语义不变（仍按 uid 实时 COUNT，未读数是实时口径）。
+ */
+async function loadMe(db: D1b, uid: number, grouplist: Record<number, GroupForAccess>): Promise<BootstrapMe | null> {
+  const [u, counts] = await Promise.all([
+    db
+      .prepare<Record<string, number | string>>(
+        `SELECT ${USER_PUBLIC_COLS}, golds, rmbs, ban_scope, ban_until, ban_reason FROM bbs_user WHERE uid = ?`,
+      )
+      .bind(uid)
+      .first<Record<string, number | string>>(),
+    db
+      .prepare<{ followers: number; following: number; favorites: number; unread: number }>(
+        `SELECT
+           (SELECT COUNT(*) FROM bbs_follow WHERE followee_uid = ?) AS followers,
+           (SELECT COUNT(*) FROM bbs_follow WHERE follower_uid = ?) AS following,
+           (SELECT COUNT(*) FROM bbs_favorite WHERE uid = ?) AS favorites,
+           (SELECT COUNT(*) FROM bbs_notice WHERE recvuid = ? AND isread = 0) AS unread`,
+      )
+      .bind(uid, uid, uid, uid)
+      .first<{ followers: number; following: number; favorites: number; unread: number }>(),
+  ]);
+  if (!u) return null;
+  const avatarAuto = avatarAutoOf(Number(u.avatar), u.avatar_auto);
+  return {
+    uid: Number(u.uid),
+    gid: Number(u.gid),
+    username: String(u.username),
+    avatar: Number(u.avatar),
+    /** 预设头像路径（avatar=0 且 avatar_auto 非 '0' 时生效） */
+    ...(avatarAuto ? { avatar_auto: avatarAuto } : {}),
+    /** 主页背景预设编号（'0'=默认 bg-0.png） */
+    bgimg: String(u.bgimg ?? '0'),
+    threads: Number(u.threads),
+    posts: Number(u.posts),
+    credits: Number(u.credits),
+    /** 三币种（积分区展示）：金币 / 人民币（分） */
+    golds: Number(u.golds ?? 0),
+    rmbs: Number(u.rmbs ?? 0),
+    createDate: Number(u.create_date),
+    followers: Number(counts?.followers ?? 0),
+    following: Number(counts?.following ?? 0),
+    favorites: Number(counts?.favorites ?? 0),
+    unreadNotices: Number(counts?.unread ?? 0),
+    /** 账号审核状态（tt_check）：非 1 时前台顶部提示且禁发帖回帖 */
+    ok: Number(u.ok ?? 1),
+    /**
+     * 小黑屋（0025）：生效中的封禁位（0=未封禁/已到期）。
+     * 前台据此提示原因与到期时间，并在禁言时置灰发帖/回帖入口；
+     * 到期的惰性判定在前端按 banUntil 再算一次（bootstrap 可能命中缓存）。
+     */
+    banScope: effectiveBanScope(u.ban_scope, u.ban_until, Math.floor(Date.now() / 1000)),
+    banUntil: Number(u.ban_until ?? 0),
+    banReason: String(u.ban_reason ?? ''),
+    /** see_check 组（tt_check）：列表/帖内显示未过审内容与现场审核按钮 */
+    seeCheck: hasSeeCheck(grouplist[Number(u.gid)]),
+    /** 认证头衔（'0'=未认证；个人中心头像旁 V 标） */
+    v: String(u.v ?? '0'),
+  };
 }

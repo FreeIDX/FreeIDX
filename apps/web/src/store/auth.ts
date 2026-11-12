@@ -11,6 +11,55 @@ import {
 import { bootstrap, login, logout, onSessionExpired, register, type LoginResult, type RegisterResult } from '../lib/api';
 import { queryClient } from '../lib/query-client';
 
+/**
+ * 版块树快照（localStorage）：首帧直接渲染左侧「版块导航」与顶栏版块入口，不必等 bootstrap。
+ *
+ * 为什么需要：左栏数据没有独立请求，只吃 bootstrap 的 forumlist。而 bootstrap 是全站最贵的接口
+ * （登录用户 8~10 次 D1，且响应含 me → 不吃边缘缓存），实测是左栏「空白卡 → 突然出现」的唯一原因。
+ * 版块树是站点公开结构（游客同样可见、变更极低频），把它同步持久化后：
+ *   首帧（同步读 localStorage，0 RTT）→ 左栏已是完整导航；bootstrap 回来后覆盖为新值。
+ * 只存 forumlist/grouplist（公开结构），**不存 me/setting**（私域数据不落盘）。
+ * TTL 7 天：超过后按无快照处理，避免长期未访问的用户看到远古版块表。
+ */
+const NAV_SNAPSHOT_KEY = 'freeidx:nav-snapshot';
+const NAV_SNAPSHOT_TTL = 7 * 86400;
+
+interface NavSnapshot {
+  v: 1;
+  ts: number;
+  forumlist: ForumNode[];
+  grouplist: GroupRow[];
+}
+
+function readNavSnapshot(): NavSnapshot | null {
+  try {
+    const raw = localStorage.getItem(NAV_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as NavSnapshot;
+    if (s?.v !== 1 || !Array.isArray(s.forumlist) || !Array.isArray(s.grouplist)) return null;
+    const age = Math.floor(Date.now() / 1000) - Number(s.ts ?? 0);
+    if (!Number.isFinite(age) || age < 0 || age > NAV_SNAPSHOT_TTL) return null;
+    return s;
+  } catch {
+    // 隐私模式 / 配额 / 坏 JSON：当作无快照，走原有 bootstrap 路径
+    return null;
+  }
+}
+
+function writeNavSnapshot(forumlist: ForumNode[], grouplist: GroupRow[]): void {
+  try {
+    localStorage.setItem(
+      NAV_SNAPSHOT_KEY,
+      JSON.stringify({ v: 1, ts: Math.floor(Date.now() / 1000), forumlist, grouplist } satisfies NavSnapshot),
+    );
+  } catch {
+    /* 写入失败仅本次会话少一份首帧快照，不影响功能 */
+  }
+}
+
+/** 模块求值期同步读取（main.tsx 在 render 前 import 本模块 → 首帧即可用） */
+const navSnapshot = readNavSnapshot();
+
 interface AuthState {
   loaded: boolean;
   setting: SiteSetting | null;
@@ -79,8 +128,9 @@ let inflight: Promise<void> | null = null;
 export const useAuth = create<AuthState>((set, get) => ({
   loaded: false,
   setting: null,
-  forumlist: [],
-  grouplist: [],
+  /* 首帧即用快照渲染版块导航（bootstrap 返回后覆盖；无快照 → 空数组，与原行为一致） */
+  forumlist: navSnapshot?.forumlist ?? [],
+  grouplist: navSnapshot?.grouplist ?? [],
   me: null,
   announcements: [],
   online: 0,
@@ -109,6 +159,8 @@ export const useAuth = create<AuthState>((set, get) => ({
           online: d.online ?? 0,
           error: null,
         });
+        // 回填版块树快照：下次首帧（含刷新/新开标签）左栏直接出内容，不再等 bootstrap
+        writeNavSnapshot(d.forumlist ?? [], d.grouplist ?? []);
       } catch (e) {
         // 原始错误只在这里能看到：超时（ApiTimeoutError）、断网（TypeError）与服务端 5xx
         // 都可能是同一条「系统繁忙」之外的现场信息，控制台留痕便于用户/站长自查

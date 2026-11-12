@@ -44,6 +44,14 @@ const KEY_POLICIES: Record<string, KeyPolicy> = {
   tt_credits: { ttl: 3600, layers: ['L0', 'L1'] },
 
   runtime: { ttl: 10, layers: ['L0', 'L2'] },
+
+  /**
+   * 在线人数（bootstrap 随下发）：COUNT(bbs_session) 是全表扫描，而登录用户的 bootstrap
+   * 不吃边缘缓存（响应含 me），此前每次刷新都真打一遍。
+   * 「当前在线」容忍 ±30s（与 touchSession 的 60s 刷新节流同量级），故只挂 L0：
+   * 零 D1 写额度、零 KV 写额度，跨 isolate 各存一份也符合该指标的精度预期。
+   */
+  online_count: { ttl: 30, layers: ['L0'] },
 };
 /** 前缀策略：user:{uid} = L0+L2/30s（禁 KV） */
 export function policyFor(key: string): KeyPolicy {

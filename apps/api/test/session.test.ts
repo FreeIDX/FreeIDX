@@ -30,13 +30,17 @@ function rules(extra: SqlRule[] = []): SqlRule[] {
     /* bootstrap 站点数据卡 runtime 计数（全站贴子/用户数） */
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_post$/, first: { c: 0 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_user$/, first: { c: 0 } },
-    /* bootstrap「我的」计数卡（0002_social 关注/收藏、0006_notice 未读） */
+    /* bootstrap「我的」计数卡（0002_social 关注/收藏、0006_notice 未读）：
+       4 个标量子查询合并为一条 SQL（首屏性能项），单条 COUNT 规则不再命中它 */
+    { test: /AS followers/, first: { followers: 0, following: 0, favorites: 0, unread: 0 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_follow/, first: { c: 0 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_favorite/, first: { c: 0 } },
     { test: /SELECT COUNT\(\*\) AS c FROM bbs_notice/, first: { c: 0 } },
     { test: /bbs_forum_access/, rows: [] },
     { test: /FROM bbs_user WHERE uid = \?/, first: USER },
     { test: /bbs_cache/, first: null },
+    /* 在线数（bootstrap 随下发，L0/30s 读穿） */
+    { test: /SELECT COUNT\(\*\) AS c FROM bbs_session/, first: { c: 0 } },
     { test: /REPLACE INTO bbs_session/, rows: [] },
     { test: /SELECT uid,last_date FROM bbs_session/, first: null },
   ];
