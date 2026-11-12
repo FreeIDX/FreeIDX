@@ -16,6 +16,7 @@ import { PmButton } from '../../../components/PmButton';
 import { PostCard } from '../../../components/PostCard';
 import { RelatedThreads } from '../../../components/RelatedThreads';
 import { ThreadSkeleton } from '../../../components/ThreadSkeleton';
+import { ThreadToc } from '../../../components/ThreadToc';
 import { VBadge } from '../../../components/VBadge';
 import { NotFoundPage } from './NotFoundPage';
 import { Turnstile, turnstileDisabled } from '../../../components/Turnstile';
@@ -1045,6 +1046,7 @@ export function ThreadPage() {
                 ) : (
                   <>
                     <article
+                      id="thread-first-post"
                       className="post-body break-words text-sm leading-[1.7]"
                       onClick={(e) => {
                         // 付费块内交互由事件委托处理（renderPayHtml 产出纯 HTML）：支付按钮开确认弹层、购买记录走 SPA 路由
@@ -1343,6 +1345,8 @@ export function ThreadPage() {
                   </div>
                 </div>
               </section>
+              {/* 文章目录（toc 插件：右栏作者卡下方；停用/标题不足时零残留，仅第 1 页有首帖） */}
+              <ThreadToc sourceId="thread-first-post" post={op} />
               {/* 插入代码 thread_user_after_htm：侧栏「关于盘主」卡之后 */}
               <InsertCode html={insertCodes.thread_user_after_htm} />
             </>

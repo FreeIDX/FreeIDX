@@ -19,6 +19,7 @@ import { geoPlugin } from '../../extensions/geo';
 import { adsPlugin } from '../../extensions/ads';
 import { checkinPlugin } from '../../extensions/checkin';
 import { relatedPlugin } from '../../extensions/related';
+import { tocPlugin } from '../../extensions/toc';
 import { lightPlugin } from '../../extensions/light';
 import { mcpPlugin } from '../../extensions/mcp';
 import { cardExtensionModule } from '../../extensions/card';
@@ -27,9 +28,9 @@ import { paypalExtensionModule } from '../../extensions/paypal';
 import { idxViewBoostModule, idxQuickReplyModule, idxInsertCodeModule } from '../../extensions/legacy-extensions';
 
 /** seo/geo 出厂启用（§16.4，后台可独立停用）；ads 出厂停用（§17 默认无广告）；light 出厂启用（前台主题配置面）；
- *  mcp 出厂停用（未配访问令牌前不暴露 /mcp 入口，启用后仍需令牌）；related 出厂停用（相关帖子区块默认不出现）。
+ *  mcp 出厂停用（未配访问令牌前不暴露 /mcp 入口，启用后仍需令牌）；related / toc 出厂停用（区块默认不出现）。
  *  仅列参与 per-request 运行时装配的插件（贡献 bootstrap/事件/路由，且预载 config）——支付通道不在此列。 */
-export const EXTENSION_MODULES: ExtensionModule[] = [seoPlugin, geoPlugin, adsPlugin, checkinPlugin, relatedPlugin, lightPlugin, mcpPlugin];
+export const EXTENSION_MODULES: ExtensionModule[] = [seoPlugin, geoPlugin, adsPlugin, checkinPlugin, relatedPlugin, tocPlugin, lightPlugin, mcpPlugin];
 
 /**
  * 后台扩展目录（§15.4 支付通道启停/配置走 /api/admin/extensions/{id}）：

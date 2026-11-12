@@ -587,6 +587,7 @@ export type FrontKey =
   | 'thread_create'
   | 'thread_deleted_in_recycle'
   | 'thread_sort_aria'
+  | 'thread_toc'
   | 'threads'
   | 'time_label'
   | 'today_posts'
