@@ -22,6 +22,7 @@ import { classifyUserAgent, matchRegisteredPath } from './core/crawler';
 import { prerender, seoCoreRoutes } from './modules/seo/core';
 import { loadSetting } from './core/loaders';
 import { loadPreloadMap, shellPreloadTags } from './core/preload-map';
+import { listPreloadScript, threadPreloadScript } from './core/shell-preload';
 import { loadThemeId } from './core/theme';
 import { escAttr } from './core/fmt';
 import { acceptLangOf, createApiT, t0, type ApiT } from './core/i18n';
@@ -309,11 +310,18 @@ async function injectShell(
   res: Response,
   themeId: string,
   siteLang: string,
-  site: { title: string; description: string; favicon?: string } | null = null,
+  site: { title: string; description: string; favicon?: string; contentLang?: number } | null = null,
   preloadHtml = '',
 ): Promise<Response> {
   try {
     const html = await res.text();
+    /**
+     * 内容语言默认筛选模式（0=关闭 1=默认全部 2=跟随界面语言，见 SiteSetting.contentLang）。
+     * 只下发站点级设置，不含任何访客数据；与 title/description 同属壳页语义，共用 60s 缓存窗口。
+     * 前端首帧据此决定列表是否带 `?lang=`，否则 bootstrap 到达前模式恒为 0，
+     * 首页会先发一次无 lang 的列表请求、到达后再带 lang 重发一次（实测两次跨洋请求）。
+     */
+    const contentLangMode = Math.min(2, Math.max(0, Number(site?.contentLang ?? 0) || 0));
     /**
      * 内联脚本无法 import，语言匹配规则是 shared/i18n/locales.ts 的 matchBrowserLocale 的**镜像**
      * （完全一致 → 中文按 hant/tw/hk/mo 分流 → 同主语言），改动必须同步两处。
@@ -322,6 +330,7 @@ async function injectShell(
     const script =
       `<script>window.__FI_THEME__=${JSON.stringify(themeId)};` +
       `window.__FI_LANG__=${JSON.stringify(siteLang)};` +
+      `window.__FI_CONTENT_LANG_MODE__=${JSON.stringify(contentLangMode)};` +
       `var FI_L=${JSON.stringify(AVAILABLE_LOCALES)};` +
       `function fiM(a){for(var i=0;i<a.length;i++){var t=String(a[i]||"").toLowerCase().replace(/_/g,"-");` +
       `if(!t)continue;if(FI_L.indexOf(t)>=0)return t;var b=t.split("-")[0];` +
@@ -330,6 +339,8 @@ async function injectShell(
       `var fiG=null;try{fiG=localStorage.getItem("freeidx.lang")}catch(e){}` +
       `if(!fiG||FI_L.indexOf(fiG)<0)fiG=fiM(navigator.languages||[navigator.language])||${JSON.stringify(siteLang)};` +
       `document.documentElement.lang=fiG;` +
+      threadPreloadScript() +
+      listPreloadScript() +
       `try{if(/^zh/.test(fiG)){var k=document.createElement("link");` +
       `k.rel="preload";k.as="font";k.type="font/woff2";k.crossOrigin="";` +
       `k.href=${JSON.stringify(CJK_FONT_URL)};document.head.appendChild(k)}}catch(e){}</script>`;
@@ -444,6 +455,8 @@ app.notFound(async (c) => {
           description: siteDescriptionOf(site),
           /* localizedSetting 原样透传非文本字段，favicon_url 可直接取 */
           favicon: site.favicon_url ? String(site.favicon_url) : '',
+          /* 内容语言默认筛选模式：让前端首帧就能算出列表的 ?lang=，不必等 bootstrap */
+          contentLang: Number(site.contentLang ?? 0),
         }
       : null,
     preloadHtml,

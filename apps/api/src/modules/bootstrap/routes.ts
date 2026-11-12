@@ -131,53 +131,62 @@ export function bootstrapRoutes(): Hono<ReadEnv> {
       }
     }
 
-    // 站点运行数据：全站贴子总数 + 用户数（bbs_forum 无 posts 反规范化列 → COUNT(bbs_post)），
-    // 'runtime_card' 走默认键策略 L0+L2 / 60s 读穿，预算友好
-    const runtime = await remember(cache, 'runtime_card', async () => {
-      const [posts, users] = await Promise.all([
-        db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_post').first<{ c: number }>(),
-        db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_user').first<{ c: number }>(),
-      ]);
-      return { posts: Number(posts?.c ?? 0), users: Number(users?.c ?? 0) };
-    });
+    /**
+     * 以下四段互不依赖，并发发出：
+     *  - runtime_card（L0+L2 / 60s 读穿）
+     *  - 插件运行时装配（extensions 状态 → bbs_kv）
+     *  - 启用主题 id
+     *  - 公告（60s 读穿）+ 实时在线数
+     * 原先逐段 await，每段各付一次 D1/KV 往返；bootstrap 是首屏硬依赖，串行会直接叠加到 TTFB。
+     * 只有 `bus.emit` 依赖插件运行时，仍在装配完成后调用（见下）。
+     */
+    const [runtime, rt, theme, [announcements, online]] = await Promise.all([
+      // 站点运行数据：全站贴子总数 + 用户数（bbs_forum 无 posts 反规范化列 → COUNT(bbs_post)），
+      // 'runtime_card' 走默认键策略 L0+L2 / 60s 读穿，预算友好
+      remember(cache, 'runtime_card', async () => {
+        const [posts, users] = await Promise.all([
+          db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_post').first<{ c: number }>(),
+          db.prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_user').first<{ c: number }>(),
+        ]);
+        return { posts: Number(posts?.c ?? 0), users: Number(users?.c ?? 0) };
+      }),
+      getExtensions(cache, db, c.env),
+      // 启用主题 id：与 ext.light 分开两个概念——theme 选「用哪套外观」，ext.light 是简蓝的配置面
+      loadThemeId(cache, db),
+      /**
+       * 首页公告条与在线人数：原本各是一个独立请求（GET /api/announcements、GET /api/online?summary=1）。
+       * 并入 bootstrap 后：少 2 次 Worker 调用，且冷启动少 2 条 D1 查询。
+       * 公告走 60s 读穿缓存（登录用户每个 bootstrap 都真打一次 D1，公告变更低频）；
+       * 在线数刻意保持实时（COUNT 便宜且语义就是"当前在线"）。
+       * fail-soft：一条公告和一个数字不值得让整份首屏数据失败（配额耗尽/表缺失时按空处理）。
+       */
+      Promise.all([
+        remember(cache, 'announcements', async () =>
+          db
+            .prepare<{ aid: number; message: string; create_date: number }>(
+              'SELECT aid, message, create_date FROM bbs_announcement WHERE isshow = 1 ORDER BY aid DESC LIMIT 10',
+            )
+            .all()
+            .then((r) =>
+              r.results.map((x) => ({
+                aid: Number(x.aid),
+                message: unescapeHtmlEntities(String(x.message ?? '')),
+                createDate: Number(x.create_date ?? 0),
+              })),
+            )
+            .catch(() => []),
+        ),
+        db
+          .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session')
+          .first<{ c: number }>()
+          .then((r) => Number(r?.c ?? 0))
+          .catch(() => 0),
+      ]),
+    ]);
 
     // 契约 ⑦ bootstrap:contribute：插件字段随核心一次下发，不产生额外请求
     const ext: Record<string, unknown> = {};
-    const rt = await getExtensions(cache, db, c.env);
     await rt.bus.emit('bootstrap:contribute', { payload: ext });
-
-    // 启用主题 id：与 ext.light 分开两个概念——theme 选「用哪套外观」，ext.light 是简蓝的配置面
-    const theme = await loadThemeId(cache, db);
-
-    /**
-     * 首页公告条与在线人数：原本各是一个独立请求（GET /api/announcements、GET /api/online?summary=1）。
-     * 并入 bootstrap 后：少 2 次 Worker 调用，且冷启动少 2 条 D1 查询。
-     * 公告走 60s 读穿缓存（登录用户每个 bootstrap 都真打一次 D1，公告变更低频）；
-     * 在线数刻意保持实时（COUNT 便宜且语义就是"当前在线"）。
-     * fail-soft：一条公告和一个数字不值得让整份首屏数据失败（配额耗尽/表缺失时按空处理）。
-     */
-    const [announcements, online] = await Promise.all([
-      remember(cache, 'announcements', async () =>
-        db
-          .prepare<{ aid: number; message: string; create_date: number }>(
-            'SELECT aid, message, create_date FROM bbs_announcement WHERE isshow = 1 ORDER BY aid DESC LIMIT 10',
-          )
-          .all()
-          .then((r) =>
-            r.results.map((x) => ({
-              aid: Number(x.aid),
-              message: unescapeHtmlEntities(String(x.message ?? '')),
-              createDate: Number(x.create_date ?? 0),
-            })),
-          )
-          .catch(() => []),
-      ),
-      db
-        .prepare<{ c: number }>('SELECT COUNT(*) AS c FROM bbs_session')
-        .first<{ c: number }>()
-        .then((r) => Number(r?.c ?? 0))
-        .catch(() => 0),
-    ]);
 
     return ok(c, 'ok', {
       // mailOn 现算后覆盖：setting 本身是缓存对象，不得就地改写（L0/L1 共享）

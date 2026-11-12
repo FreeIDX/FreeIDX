@@ -56,6 +56,8 @@ declare global {
   interface Window {
     /** Worker 在 SPA 壳中注入的站点语言（见 apps/api 的 injectShell），首帧即可用 */
     __FI_LANG__?: string;
+    /** 壳注入的内容语言默认筛选模式（0/1/2，见 store/contentLang 的 useContentLangMode） */
+    __FI_CONTENT_LANG_MODE__?: number;
   }
 }
 
@@ -123,10 +125,17 @@ export const useLangPref = create<LangPrefState>((set) => ({
 
 /** 前台展示语言：用户偏好（非法值忽略）优先，其次浏览器语言，最后站点语言 */
 export function useLang(): string {
-  const siteLang = useAuth((s) => s.setting?.lang ?? DEFAULT_LOCALE);
+  const siteLang = useAuth((s) => s.setting?.lang);
   const pref = useLangPref((s) => s.pref);
   if (pref && AVAILABLE_LOCALES.includes(pref)) return pref;
-  return browserLocale() ?? siteLang;
+  const browser = browserLocale();
+  if (browser) return browser;
+  /* bootstrap 未到达时回落到壳注入的站点语言（与 initialLocale 的末档一致）：
+   * 此前直接落 DEFAULT_LOCALE(en-us)，浏览器语言不在可选清单里的访客会先按 en-us 算内容语言，
+   * 首页因此先发一次 lang=en 的列表请求、bootstrap 到达后再发 lang=zh（与 useContentLangMode 同一问题）。 */
+  if (siteLang && AVAILABLE_LOCALES.includes(siteLang)) return siteLang;
+  const injected = typeof window === 'undefined' ? '' : (window.__FI_LANG__ ?? '');
+  return AVAILABLE_LOCALES.includes(injected) ? injected : DEFAULT_LOCALE;
 }
 
 /**

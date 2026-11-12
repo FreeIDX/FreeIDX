@@ -42,10 +42,22 @@ export const useContentLang = create<{ pref: string; setPref: (v: string) => voi
   },
 }));
 
-/** 站点开关：0=关闭（不显示筛选条、不传 lang） 1=开启默认全部 2=开启默认跟随界面语言 */
+/**
+ * 站点开关：0=关闭（不显示筛选条、不传 lang） 1=开启默认全部 2=开启默认跟随界面语言。
+ *
+ * bootstrap 未到达时用壳注入的 `window.__FI_CONTENT_LANG_MODE__`：
+ * 否则模式恒为 0，首页会先发一次「全部语言」的列表请求，bootstrap 到达后再按模式带 `&lang=`
+ * 重发一次（实测两次跨洋请求，前一次结果直接作废）。注入值与 title/description 同属壳页语义、
+ * 共用同一条 60s 缓存副本；bootstrap 到达后一律以实时 setting 为准。
+ */
 export function useContentLangMode(): number {
   const setting = useAuth((s) => s.setting);
-  return Math.min(2, Math.max(0, Number(setting?.contentLang ?? 0) || 0));
+  const raw = setting
+    ? setting.contentLang
+    : typeof window === 'undefined'
+      ? 0
+      : window.__FI_CONTENT_LANG_MODE__;
+  return Math.min(2, Math.max(0, Number(raw ?? 0) || 0));
 }
 
 /**
