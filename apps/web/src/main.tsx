@@ -13,6 +13,7 @@ import { ThemeProvider } from './lib/theme/provider';
 import { resolveActiveTheme } from './lib/theme/active';
 import { pageNameOfPath } from './lib/theme/page-of-path';
 import { reloadForNewAssets } from './lib/chunk-reload';
+import { installThreadPrefetch } from './lib/prefetch-thread';
 import './styles/globals.css';
 
 /* 主题彩蛋：控制台版权输出（配色 #409EFF / #f2f3f5） */
@@ -52,6 +53,12 @@ if (/^\/(?:page\/\d+)?$/.test(window.location.pathname)) {
   void queryClient.prefetchQuery({ queryKey: ['rank-threads', 'all'], queryFn: () => getRankThreads('all', 10), staleTime: 300_000 });
   void queryClient.prefetchQuery({ queryKey: ['rank-users', 'new'], queryFn: () => getRankUsers('new', 16), staleTime: 300_000 });
 }
+
+/**
+ * 列表 → 帖子详情的「意图预取」：指针在帖子链接上停留 120ms 即预取详情（游客通常直接命中边缘缓存），
+ * 点击时数据已在 react-query 里，省掉整段跨洋 RTT。容量/弱网/失败清理等边界见 lib/prefetch-thread.ts。
+ */
+installThreadPrefetch();
 
 /**
  * 首屏预载：语言包（词典按需加载）与启用主题（外观层）并行取回后再挂载，
