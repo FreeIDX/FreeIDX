@@ -26,6 +26,8 @@ const EXT_ICONS: Record<string, ExtIconMeta> = {
   ads: { icon: 'megaphone', tint: 'bg-price/10 text-price ring-price/15' },
   // 每日签到（日历打勾）
   checkin: { icon: 'calendar_check', tint: 'bg-success/10 text-success ring-success/15' },
+  // 相关帖子（链路关联，天蓝）
+  related: { icon: 'link', tint: 'bg-[#0ea5e9]/10 text-[#0ea5e9] ring-[#0ea5e9]/15' },
   // 卡密兑换券
   card: { icon: 'ticket', tint: 'bg-[#7c3aed]/10 text-[#7c3aed] ring-[#7c3aed]/15' },
   // Stripe 品牌紫

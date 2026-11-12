@@ -60,6 +60,9 @@ export const API_TTL: ReadonlyArray<readonly [RegExp, number]> = [
   [/^\/api\/vip\/plans$/, 30],
   [/^\/api\/payment-providers$/, 30],
   [/^\/api\/checkin$/, 30],
+  /* 相关帖子（related 插件）：游客可判定（仅 ok=1 + 可读版块），与 hot-posts 同档 60s；
+   * 插件启停/配置变更最多 60s 内跟上，与详情页 60s 副本同一陈旧窗口。 */
+  [/^\/api\/related-threads$/, 60],
 ];
 
 /** 爬虫预渲染 HTML 的 TTL（与 §16.1 R2 产物同步，1h） */

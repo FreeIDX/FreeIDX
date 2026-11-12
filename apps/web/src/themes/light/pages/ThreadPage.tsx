@@ -14,6 +14,7 @@ import { InsertCode, useInsertCodes } from '../../../components/InsertCode';
 import { Pagination } from '../../../components/Pagination';
 import { PmButton } from '../../../components/PmButton';
 import { PostCard } from '../../../components/PostCard';
+import { RelatedThreads } from '../../../components/RelatedThreads';
 import { ThreadSkeleton } from '../../../components/ThreadSkeleton';
 import { VBadge } from '../../../components/VBadge';
 import { NotFoundPage } from './NotFoundPage';
@@ -1098,6 +1099,9 @@ export function ThreadPage() {
 
           {/* 插入代码 thread_message_after_htm：主贴内容卡之后，每页一次 */}
           <InsertCode html={insertCodes.thread_message_after_htm} />
+
+          {/* 相关帖子（related 插件：主贴下方、评论区上方；仅第 1 页，停用/无内容时零残留） */}
+          {page === 1 && <RelatedThreads tid={tid} />}
 
           {/* ============ 快捷回复卡（#comment_input，位于楼层列表之前）============ */}
           {d && th && (

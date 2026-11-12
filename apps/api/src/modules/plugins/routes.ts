@@ -6,6 +6,7 @@
  *                                  键名为存储键（勿改名），空串照返，前端据此决定是否渲染。
  *  GET  /api/checkin             ← 每日签到插件状态：{ enabled, rewards?, checked?, days?, todayCount?, todayUsers? }
  *  POST /api/checkin             ← 每日签到执行（需登录；按天幂等，重复签到报 checkin.already）
+ *  GET  /api/related-threads     ← 相关帖子插件列表：{ enabled, list: [{ tid, fid, subject, username, avatar, posts, views, createDate, lastDate, reasons }] }
  * 均免登录（POST 签到除外）；插件停用时按「关闭态」返回（enabled:false / 全空串 / 404），前台零残留。
  */
 import { Hono } from 'hono';
@@ -13,10 +14,13 @@ import { Code } from '@freeidx/shared';
 import { AppError, ok } from '../../middleware/envelope';
 import { loadExtConfig } from '../../core/ext-store';
 import { isEnabled, loadExtensionsState } from '../../core/extensions/registry';
-import { loadViewer } from '../../core/loaders';
+import { loadForumlist, loadGrouplist, loadViewer, makeAccessCtx } from '../../core/loaders';
+import { forumAccessUser } from '../../core/access';
+import { hasSeeCheck } from '../../core/check';
 import { checkinPlugin, checkinStatus, checkinToday, doCheckin, emptyWeek, loadCheckinRewards } from '../../extensions/checkin';
+import { loadRelatedConfig, queryRelatedThreads, relatedPlugin } from '../../extensions/related';
 import { INSERT_CODE_EXT_ID, INSERT_CODE_KEYS, QUICK_REPLY_EXT_ID, idxQuickReplyModule, idxInsertCodeModule } from '../../extensions/legacy-extensions';
-import { core, type ReadEnv } from '../shared';
+import { core, intParam, type ReadEnv } from '../shared';
 
 export function pluginsRoutes(): Hono<ReadEnv> {
   const app = new Hono<ReadEnv>();
@@ -65,6 +69,52 @@ export function pluginsRoutes(): Hono<ReadEnv> {
       checkinToday(db),
     ]);
     return ok(c, 'ok', { data: { enabled: true, rewards, ...status, ...today } });
+  });
+
+  /**
+   * 相关帖子（related 插件）：帖子详情页「主贴下方、评论区上方」的列表数据。
+   * 权限与审核口径与列表接口一致（可读版块 + ok 可见性下推到 SQL）；
+   * 插件停用返回 enabled:false（前端据此不渲染、不再请求）。
+   */
+  app.get('/api/related-threads', async (c) => {
+    const { db, cache } = core(c);
+    const state = await loadExtensionsState(cache, db);
+    if (!isEnabled(relatedPlugin.manifest, state)) return ok(c, 'ok', { data: { enabled: false, list: [] } });
+    const tid = intParam(c.req.query('tid'));
+    const empty = { enabled: true, list: [] };
+    if (tid <= 0) return ok(c, 'ok', { data: empty });
+    const cfg = await loadRelatedConfig(cache, db);
+    const [forumlist, grouplist, viewer] = await Promise.all([
+      loadForumlist(cache, db),
+      loadGrouplist(cache, db),
+      loadViewer(cache, db, c),
+    ]);
+    const ctx = makeAccessCtx(viewer, forumlist, grouplist);
+    const thread = await db
+      .prepare<{ tid: number; fid: number; uid: number; tags: string }>('SELECT tid,fid,uid,tags FROM bbs_thread WHERE tid = ?')
+      .bind(tid)
+      .first<{ tid: number; fid: number; uid: number; tags: string }>();
+    // 主题不存在或当前访问者无权阅读其版块：与详情页同一口径，直接空列表（不泄露其它版块内容）
+    if (!thread || !forumAccessUser(ctx, Number(thread.fid), 'allowread')) return ok(c, 'ok', { data: empty });
+    const readableFids = Object.keys(forumlist)
+      .map(Number)
+      .filter((fid) => forumAccessUser(ctx, fid, 'allowread'));
+    const tags = String(thread.tags ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 4);
+    const list = await queryRelatedThreads(db, {
+      tid,
+      fid: Number(thread.fid),
+      uid: Number(thread.uid),
+      tags,
+      readableFids,
+      viewerUid: viewer.uid,
+      seeCheck: hasSeeCheck(grouplist[viewer.gid]),
+      cfg,
+    });
+    return ok(c, 'ok', { data: { enabled: true, list } });
   });
 
   /** 每日签到执行（需登录）：按天幂等，重复签到返回 checkin.already；成功回奖励明细供前台提示 */
