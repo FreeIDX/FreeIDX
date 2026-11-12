@@ -18,7 +18,7 @@ import { ThreadSkeleton } from '../../../components/ThreadSkeleton';
 import { VBadge } from '../../../components/VBadge';
 import { NotFoundPage } from './NotFoundPage';
 import { Turnstile, turnstileDisabled } from '../../../components/Turnstile';
-import { Alert, Breadcrumb, Button, Card, Modal, TagBadge, cx } from '../../../components/ui';
+import { Alert, Breadcrumb, Button, Card, Modal, TagBadge, cx, inputCls } from '../../../components/ui';
 import { useReadUnread } from '../../../hooks/useReadUnread';
 import { LG_UP, useMediaQuery } from '../../../hooks/useMediaQuery';
 import { useAuth } from '../../../store/auth';
@@ -212,6 +212,7 @@ export function ThreadPage() {
   });
   const [quickSel, setQuickSel] = useState(0);
   const [opEditing, setOpEditing] = useState(false);
+  const [opSubject, setOpSubject] = useState('');
   const [opErr, setOpErr] = useState('');
   const refresh = useAuth((s) => s.refresh);
   const forumlist = useAuth((s) => s.forumlist);
@@ -522,11 +523,13 @@ export function ThreadPage() {
   });
 
   const edit = useMutation({
-    mutationFn: (vars: { pid: number; change: { html: string; attachAids: number[] }; contentBuy?: number; contentBuyType?: number }) =>
+    mutationFn: (vars: { pid: number; change: { html: string; attachAids: number[]; subject?: string }; contentBuy?: number; contentBuyType?: number }) =>
       updatePost(vars.pid, {
         message: vars.change.html,
         doctype: 0,
         attachAids: vars.change.attachAids,
+        // 首帖编辑可改标题（服务端仅 isfirst 生效）；楼层编辑不带该字段
+        ...(vars.change.subject !== undefined ? { subject: vars.change.subject } : {}),
         // 首帖编辑携带收费设置（否/空数 → content_buy=0）
         ...(vars.contentBuy !== undefined ? { contentBuy: vars.contentBuy, contentBuyType: vars.contentBuyType } : {}),
       }),
@@ -542,8 +545,10 @@ export function ThreadPage() {
       if (ctx?.prev) qc.setQueryData(queryKey, ctx.prev);
       throw e;
     },
-    onSettled: () => {
+    onSettled: (_d, _e, vars) => {
       void qc.invalidateQueries({ queryKey: ['thread', tid] });
+      // 标题变更同步版块/首页列表里的主题标题
+      if (vars.change.subject !== undefined) void qc.invalidateQueries({ queryKey: ['threads'] });
     },
   });
 
@@ -635,6 +640,7 @@ export function ThreadPage() {
   /** 进入首帖编辑：收费设置初值取主题现值 */
   const startOpEdit = () => {
     if (!th) return;
+    setOpSubject(th.subject ?? '');
     setOpSellOn(th.contentBuy > 0);
     setOpSellNum(th.contentBuy > 0 ? String(th.contentBuy) : '');
     setOpSellType(th.contentBuyType > 0 ? th.contentBuyType : 1);
@@ -966,21 +972,31 @@ export function ThreadPage() {
               {op ? (
                 opEditing ? (
                   <div>
+                    {/* 首帖编辑可改标题（与发帖页口径一致：128 上限、非空校验） */}
+                    <input
+                      className={cx(inputCls, 'mb-2 w-full')}
+                      placeholder={t('subject')}
+                      maxLength={128}
+                      value={opSubject}
+                      onChange={(e) => setOpSubject(e.target.value)}
+                    />
                     <LazyComposer
                       initialHtml={op.message ?? ''}
                       submitLabel={t('save')}
                       busy={edit.isPending}
                       allowSell={canSell && opSellOn}
-                      onSubmit={(c) =>
-                        edit
+                      onSubmit={(c) => {
+                        const subject = opSubject.trim();
+                        if (!subject) throw new Error(t('please_input_subject'));
+                        return edit
                           .mutateAsync({
                             pid: op.pid,
-                            change: { html: c.html, attachAids: c.attachAids },
+                            change: { html: c.html, attachAids: c.attachAids, subject },
                             // 收费设置（非 allowsell 组不带此二参，服务端忽略）
                             ...(canSell ? { contentBuy: opSellOn ? Number(opSellNum || 0) : 0, contentBuyType: opSellType } : {}),
                           })
-                          .then(() => setOpEditing(false))
-                      }
+                          .then(() => setOpEditing(false));
+                      }}
                       onCancel={() => setOpEditing(false)}
                     />
                     {/* 收费设置（首帖 + allowsell 组；「购买 :」+ 是/否，选「是」现数字与币种） */}

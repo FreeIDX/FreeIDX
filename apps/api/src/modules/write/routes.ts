@@ -179,7 +179,11 @@ async function updatePost(c: Ctx): Promise<Response> {
   let movedForum = false;
   if (isfirst) {
     const newFid = Number(b.fid ?? fid);
-    const subject = b.subject !== undefined ? b.subject.toString() : thread.subject;
+    // 标题非空口径与创建统一（write.subjectRequired）；未传则保持原值
+    const subject = b.subject !== undefined ? b.subject.toString().trim() : thread.subject;
+    if (b.subject !== undefined && !subject) {
+      throw new AppError(Code.VALIDATION_ERROR, t('write.subjectRequired'));
+    }
     // 标题上限与创建口径统一（128，write.subjectTooLong）：历史 80 上限会使 81~128 字的存量标题一旦改动即无法保存
     if (subject !== thread.subject && codeLen(subject) > 128) {
       throw new AppError(Code.VALIDATION_ERROR, t('write.subjectTooLong'));
