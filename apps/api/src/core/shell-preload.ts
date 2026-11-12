@@ -20,6 +20,9 @@ export function threadPreloadScript(): string {
     `if(m){var tid=+m[1];if(tid>0&&Number.isSafeInteger(tid)){` +
     `var pg=+(m[2]||1);if(!(pg>0))pg=1;` +
     `var l=document.createElement("link");l.rel="preload";l.as="fetch";` +
+    /* fetchpriority：`as=fetch` 在 Chrome 里是 Low 优先级，实测列表/详情请求会被排到 JS 之后，
+       与「少一个 RTT」的初衷相反；显式提优先级后它才真正与入口 chunk 并行 */
+    `try{l.fetchPriority="high"}catch(e){}` +
     `l.crossOrigin="use-credentials";l.href="/api/threads/"+tid+"?page="+pg;` +
     `document.head.appendChild(l)}}}catch(e){}`
   );
@@ -63,6 +66,8 @@ export function listPreloadScript(): string {
     `"&orderby="+(u.get("orderby")==="lastpid"?"lastpid":"tid")+` +
     `(tag?"&tag="+encodeURIComponent(tag):"")+(cl?"&lang="+encodeURIComponent(cl):"")}}}` +
     `if(href){var l=document.createElement("link");l.rel="preload";l.as="fetch";` +
+    /* 同 threadPreloadScript：`as=fetch` 默认最低优先级，不显式提权就会被 JS/CSS 挤到后面 */
+    `try{l.fetchPriority="high"}catch(e){}` +
     `l.crossOrigin="use-credentials";l.href=href;document.head.appendChild(l)}}catch(e){}`
   );
 }

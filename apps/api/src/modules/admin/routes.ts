@@ -198,6 +198,14 @@ async function readSettingRaw(db: D1b): Promise<Record<string, unknown>> {
 /* ---------------- 站点 Logo / Favicon 上传（base64 提交 → 落盘 R2 site/） ---------------- */
 
 const SITE_ICON_MAX_BYTES = 1024 * 1024; // 1MB：顶栏/标签页展示足够，防 base64 大包
+/**
+ * favicon 三档产物的单张上限：上传端已在浏览器里裁成正方形并压成 PNG（32/180/192），
+ * 正常只有几 KB；64KB 是「浏览器没转换成功却硬塞原图」的兜底闸门。
+ */
+const FAVICON_VARIANT_MAX_BYTES = 64 * 1024;
+/** favicon 多尺寸的固定 key（边长即 key，壳页与 SEO 按同一 base 派生，见 core/fmt.ts 的 iconLinkTags） */
+const FAVICON_SIZES = [32, 180, 192] as const;
+const faviconKey = (n: number): string => `site/favicon-${n}.png`;
 /** ext → R2 httpMetadata contentType */
 const SITE_ICON_MIME: Record<string, string> = {
   png: 'image/png',
@@ -213,6 +221,7 @@ function decodeSiteIcon(
   raw: string,
   t: ApiT,
   allowIco: boolean,
+  maxBytes = SITE_ICON_MAX_BYTES,
 ): { bytes: Uint8Array; ext: string } {
   const m = new RegExp(
     `^data:image\\/(png|jpe?g|gif|webp|bmp${allowIco ? '|x-icon|vnd\\.microsoft\\.icon' : ''});base64,(.+)$`,
@@ -231,7 +240,7 @@ function decodeSiteIcon(
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     if (!bytes.length) throw new Error('empty');
-    if (bytes.length > SITE_ICON_MAX_BYTES)
+    if (bytes.length > maxBytes)
       throw new AppError(Code.FORM_FILE_TOO_LARGE, t('admin.iconTooLarge'), { size: bytes.length });
     return { bytes, ext };
   } catch (e) {
@@ -249,23 +258,68 @@ function siteIconR2Key(url: string): string | null {
   return m ? m[1]! : null;
 }
 
-/** PUT /api/admin/setting/:kind（logo|favicon）：上传即生效（写 kv setting + 失效 L1） */
+/**
+ * favicon 多尺寸载荷：`variants` 必须同时带 180 与 192（缺一即视为老客户端，回落单文件路径，
+ * 避免壳页派生出 404 的 apple-touch-icon）。
+ */
+function faviconVariantMap(input: Record<string, unknown>): Record<string, unknown> | null {
+  const v = input.variants;
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  return String(o['180'] ?? '') && String(o['192'] ?? '') ? o : null;
+}
+
+/**
+ * PUT /api/admin/setting/:kind（logo|favicon）：上传即生效（写 kv setting + 失效 L1）。
+ *
+ * favicon 两种载荷：
+ *  - `{ data, variants: { "180": …, "192": … } }`：后台已把原图裁成正方形并压成 PNG，
+ *    这里落 `site/favicon-{32,180,192}.png`，`favicon_url` 指向 32 档，另两档由壳页/SEO 按
+ *    key 派生（core/fmt.ts 的 iconLinkTags）。标签页图标从此只下 32×32，不再拉原图。
+ *  - `{ data }`：老客户端或 .ico，保持单文件 `site/favicon.{ext}`，行为与改动前完全一致。
+ */
 async function putSiteIcon(c: Ctx, kind: SiteIconKind) {
   const { db, cache } = core(c);
   const t = c.get('t');
   const input = await readJson(c);
-  const { bytes, ext } = decodeSiteIcon(String(input.data ?? ''), t, kind === 'favicon');
-
-  const key = `site/${kind}.${ext}`;
   const cur = await readSettingRaw(db);
   const field = SITE_ICON_FIELDS[kind];
   const bucket = filesBucket(c.env);
-  // 换格式（png→jpg 等）时清掉旧对象，不留孤儿；同 ext 覆盖写无需删
-  const oldKey = siteIconR2Key(String(cur[field] ?? ''));
-  if (oldKey && oldKey !== key) await bucket.delete(oldKey).catch(() => undefined);
-  await bucket.put(key, bytes, { httpMetadata: { contentType: SITE_ICON_MIME[ext] } });
 
-  const next = { ...cur, [field]: `/files/${key}?v=${Math.floor(Date.now() / 1000)}` };
+  /** 本次要写的对象：favicon 多尺寸时 3 个，其余 1 个 */
+  const writes: Array<{ key: string; bytes: Uint8Array; ext: string }> = [];
+  const variants = kind === 'favicon' ? faviconVariantMap(input) : null;
+  if (variants) {
+    const main = decodeSiteIcon(String(input.data ?? ''), t, false, FAVICON_VARIANT_MAX_BYTES);
+    if (main.ext !== 'png') throw new AppError(Code.VALIDATION_ERROR, t('admin.iconFormat'));
+    writes.push({ key: faviconKey(32), bytes: main.bytes, ext: 'png' });
+    for (const size of FAVICON_SIZES) {
+      if (size === 32) continue;
+      const v = decodeSiteIcon(String(variants[String(size)] ?? ''), t, false, FAVICON_VARIANT_MAX_BYTES);
+      if (v.ext !== 'png') throw new AppError(Code.VALIDATION_ERROR, t('admin.iconFormat'));
+      writes.push({ key: faviconKey(size), bytes: v.bytes, ext: 'png' });
+    }
+  } else {
+    const { bytes, ext } = decodeSiteIcon(String(input.data ?? ''), t, kind === 'favicon');
+    writes.push({ key: `site/${kind}.${ext}`, bytes, ext });
+  }
+
+  // 换格式（png→jpg）/ 换尺寸方案时清掉旧对象，不留孤儿；同 key 覆盖写无需删
+  const stale = new Set<string>();
+  const oldKey = siteIconR2Key(String(cur[field] ?? ''));
+  if (oldKey && !writes.some((w) => w.key === oldKey)) stale.add(oldKey);
+  if (kind === 'favicon') {
+    for (const size of FAVICON_SIZES) {
+      const k = faviconKey(size);
+      if (!writes.some((w) => w.key === k)) stale.add(k);
+    }
+  }
+  if (stale.size) await bucket.delete([...stale]).catch(() => undefined);
+  await Promise.all(
+    writes.map((w) => bucket.put(w.key, w.bytes, { httpMetadata: { contentType: SITE_ICON_MIME[w.ext] } })),
+  );
+
+  const next = { ...cur, [field]: `/files/${writes[0]!.key}?v=${Math.floor(Date.now() / 1000)}` };
   await db
     .prepare('REPLACE INTO bbs_kv (k,v,expiry) VALUES (?,?,0)')
     .bind('setting', JSON.stringify(next))
@@ -281,9 +335,15 @@ async function deleteSiteIcon(c: Ctx, kind: SiteIconKind) {
   const cur = await readSettingRaw(db);
   const field = SITE_ICON_FIELDS[kind];
   const oldKey = siteIconR2Key(String(cur[field] ?? ''));
-  if (oldKey)
+  /* favicon 的三档产物都要清：只删 favicon_url 指向的那一张，另两档会变成孤儿对象，
+     被存储维护按 site/ 前缀回收前一直是可访问的残留。 */
+  const keys = [
+    ...(oldKey ? [oldKey] : []),
+    ...(kind === 'favicon' ? FAVICON_SIZES.map(faviconKey) : []),
+  ];
+  if (keys.length)
     await filesBucket(c.env)
-      .delete(oldKey)
+      .delete(keys)
       .catch(() => undefined);
   const next = { ...cur, [field]: '' };
   await db

@@ -153,4 +153,47 @@ describe('站点设置后台（T3-4 DoD）', () => {
     );
     expect((await jsonOf(res)).code).toBe(Code.VALIDATION_ERROR);
   });
+
+  /* favicon 多尺寸（性能项）：上传端已在浏览器里裁正方形并压成 32/180/192 三档 PNG，
+     服务端只落固定 key；标签页图标不再引用原图（线上曾出现 830KB favicon，占首访流量 60%）。 */
+  it('PUT favicon（多尺寸）：落三档 PNG，favicon_url 指向 32 档且带同一版本号', async () => {
+    const { db, calls } = fakeD1Sql(rules());
+    const r2 = fakeR2();
+    const env = { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: r2 };
+    const png = (tag: string) => `data:image/png;base64,${Buffer.from(tag).toString('base64')}`;
+    const res = await app.request(
+      '/api/admin/setting/favicon',
+      {
+        method: 'PUT',
+        headers: { cookie: `admin_at=${await token()}; csrf=t`, 'content-type': 'application/json', 'x-csrf-token': 't' },
+        body: JSON.stringify({ data: png('32'), variants: { '180': png('180'), '192': png('192') } }),
+      },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    expect([...r2.store.keys()].sort()).toEqual([
+      'site/favicon-180.png',
+      'site/favicon-192.png',
+      'site/favicon-32.png',
+    ]);
+    const written = JSON.parse(String(calls.find((c) => /REPLACE INTO bbs_kv/.test(c.sql))?.params[1])) as Record<string, unknown>;
+    expect(written.favicon_url).toMatch(/^\/files\/site\/favicon-32\.png\?v=\d+$/);
+  });
+
+  it('PUT favicon（老载荷，单文件）：保持 site/favicon.{ext}，行为与改动前一致', async () => {
+    const { db } = fakeD1Sql(rules());
+    const r2 = fakeR2();
+    const env = { JWT_SECRET: SECRET, SITE_URL: 'http://localhost', DB: db, CACHE: fakeKv(), FILES: r2 };
+    const res = await app.request(
+      '/api/admin/setting/favicon',
+      {
+        method: 'PUT',
+        headers: { cookie: `admin_at=${await token()}; csrf=t`, 'content-type': 'application/json', 'x-csrf-token': 't' },
+        body: JSON.stringify({ data: 'data:image/png;base64,iVBORw0KGgo=' }),
+      },
+      env as never,
+    );
+    expect((await jsonOf(res)).code).toBe(Code.OK);
+    expect([...r2.store.keys()]).toEqual(['site/favicon.png']);
+  });
 });

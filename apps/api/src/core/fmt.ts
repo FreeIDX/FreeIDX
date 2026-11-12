@@ -28,6 +28,31 @@ export function escAttr(s: string): string {
 }
 
 /**
+ * favicon 的 `<link>` 标签组（壳页与爬虫预渲染共用，避免两处口径漂移）。
+ *
+ * 后台上传站点图标时，浏览器侧已把原图按正方形裁切成 32/180/192 三档 PNG
+ * （见 admin 的 SettingPage → lib/favicon-payload），存成 `site/favicon-<n>.png` 并以同版本号写进
+ * `favicon_url`。这里按同一 base + 同一 `?v=` 派生另外两档：
+ *  - 标签页只用 32×32，不再让浏览器为「标签页小图标」下载数百 KB 的原图（实测某站 favicon 830KB，
+ *    是首访总流量的 60%，且与首屏 JS/字体抢带宽）；
+ *  - apple-touch-icon 180 与 192 供 iOS/Android 桌面图标使用。
+ * 旧数据（未走过新上传路径的单文件 `/files/site/favicon.png`、`.ico`）保持原来的一行 link，行为不变。
+ */
+export function iconLinkTags(url: string): string {
+  const m = /^(\/files\/site\/favicon)-32\.png(\?[^\s"'<>]*)?$/.exec(url.trim());
+  if (!m) return `<link rel="icon" href="${escAttr(url)}">`;
+  const base = m[1]!;
+  const ver = m[2] ?? '';
+  const one = (rel: string, size: number, extra: string) =>
+    `<link rel="${rel}"${extra} sizes="${size}x${size}" href="${escAttr(`${base}-${size}.png${ver}`)}">`;
+  return [
+    one('icon', 32, ' type="image/png"'),
+    one('icon', 192, ' type="image/png"'),
+    one('apple-touch-icon', 180, ''),
+  ].join('');
+}
+
+/**
  * 还原入库时转义的 HTML 实体（公告正文专用）。
  *
  * 公告写侧（admin/notices）为防存储型 XSS 统一 `htmlSpecialChars` 后入库，后台列表以 innerHTML

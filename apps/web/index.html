@@ -6,9 +6,114 @@
     <!-- 占位标题：构建期读不到后台设置，运行时由 Worker 的 injectShell 替换为「站点名 - 一句话定位」
          （见 apps/api/src/index.ts）；爬虫走 prerender() 的预渲染正文，不读这里。 -->
     <title>FreeIDX</title>
+    <script>
+      /* 后台是独立外壳（侧栏版式），骨架屏按前台版式绘制：命中 /admin 时整块关掉，避免版式跳动 */
+      try {
+        if (/^\/admin(\/|$)/.test(location.pathname)) document.documentElement.setAttribute('data-fi-skel', 'off');
+      } catch (e) {}
+    </script>
+    <style>
+      /* 首屏骨架（性能项）：React 挂载前 #root 是空的，此前 FCP 要等「入口 JS + 词条包」下载执行完；
+         这里用纯 CSS 画出顶栏 + 内容占位，首个像素只等 HTML 本身。
+         #root 一旦有子节点即整块隐藏（兄弟选择器，无脚本依赖），挂载后不参与任何布局与交互。 */
+      #fi-boot {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 16px 24px;
+      }
+      #root:not(:empty) ~ #fi-boot,
+      html[data-fi-skel='off'] #fi-boot {
+        display: none;
+      }
+      #fi-boot .r {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      #fi-boot .b {
+        background: #eceef1;
+        border-radius: 6px;
+        animation: fi-pulse 1.2s ease-in-out infinite;
+      }
+      #fi-boot .bar {
+        height: 56px;
+        margin-bottom: 16px;
+      }
+      #fi-boot .dot {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+      }
+      #fi-boot .nav {
+        width: 56px;
+        height: 12px;
+      }
+      #fi-boot .row {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      #fi-boot .list {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #fi-boot .item {
+        height: 78px;
+        margin-bottom: 10px;
+      }
+      #fi-boot .side {
+        width: 280px;
+        flex: 0 0 auto;
+        height: 260px;
+      }
+      @media (max-width: 900px) {
+        #fi-boot .side {
+          display: none;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        #fi-boot .b {
+          background: #2a2d31;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #fi-boot .b {
+          animation: none;
+        }
+      }
+      @keyframes fi-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.55;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <!-- 首屏骨架：位置在 #root 之后，#root 渲染出内容后由 CSS 隐藏（见上方 style） -->
+    <div id="fi-boot" aria-hidden="true">
+      <div class="r bar">
+        <span class="b dot"></span>
+        <span class="b nav"></span>
+        <span class="b nav"></span>
+        <span class="b nav"></span>
+        <span class="b nav"></span>
+      </div>
+      <div class="row">
+        <div class="list">
+          <div class="b item"></div>
+          <div class="b item"></div>
+          <div class="b item"></div>
+          <div class="b item"></div>
+        </div>
+        <div class="b side"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

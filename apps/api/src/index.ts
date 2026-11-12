@@ -24,7 +24,7 @@ import { loadSetting } from './core/loaders';
 import { loadPreloadMap, shellPreloadTags } from './core/preload-map';
 import { listPreloadScript, threadPreloadScript } from './core/shell-preload';
 import { loadThemeId } from './core/theme';
-import { escAttr } from './core/fmt';
+import { escAttr, iconLinkTags } from './core/fmt';
 import { acceptLangOf, createApiT, t0, type ApiT } from './core/i18n';
 import { threadRoutes } from './modules/thread/routes';
 import { bootstrapRoutes } from './modules/bootstrap/routes';
@@ -353,10 +353,11 @@ async function injectShell(
      */
     const metaHtml = site
       ? [
-          /* 站点图标前置注入（后台 favicon_url，R2 site/ 直链）：浏览器解析到 link[rel=icon] 后
+          /* 站点图标前置注入（后台 favicon_url，R2 site/ 直链）：浏览器解析到 link 后
            * 不会再盲请求 /favicon.ico（那会白付一次 Worker 全链路再 404）；图标随 HTML 即时出现，
-           * 不必等 JS 启动后由 App.tsx 再设。爬虫侧 prerender 早已注入同一字段（seo/core.ts）。 */
-          site.favicon ? `<link rel="icon" href="${escAttr(site.favicon)}">` : '',
+           * 不必等 JS 启动后由 App.tsx 再设。爬虫侧 prerender 同一口径（seo/core.ts）。
+           * 多尺寸派生见 core/fmt.ts 的 iconLinkTags：标签页只取 32×32，避免下载数百 KB 原图。 */
+          site.favicon ? iconLinkTags(site.favicon) : '',
           site.description ? `<meta name="description" content="${escAttr(site.description)}">` : '',
           `<meta property="og:type" content="website">`,
           `<meta property="og:title" content="${escAttr(site.title)}">`,

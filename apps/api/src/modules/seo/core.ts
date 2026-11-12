@@ -26,7 +26,7 @@ import { BOT_HTML_TTL, SHARED_UA, edgeLookup, edgeStore, isPersonalRequest, mayb
 import { loadSetting } from '../../core/loaders';
 import { createApiT } from '../../core/i18n';
 import { getExtensions } from '../../core/extensions';
-import { escAttr } from '../../core/fmt';
+import { escAttr, iconLinkTags } from '../../core/fmt';
 import type { ExtensionsRuntime } from '../../core/extensions/registry';
 import { classifyUserAgent, matchPolicyCrawler, pageRoute } from '../../core/crawler';
 import { canonicalBase } from '../../core/site';
@@ -89,7 +89,7 @@ export function newPageMeta(
   /* 站点图标/Logo（后台基础设置上传，site/ 前缀 R2 直链）：favicon 注入 head，logo 作 og:image（有站点网址则拼绝对地址） */
   const favicon = setting.favicon_url ? String(setting.favicon_url) : '';
   const logo = setting.logo_url ? String(setting.logo_url) : '';
-  if (favicon) base.head.push(`<link rel="icon" href="${escAttr(favicon)}">`);
+  if (favicon) base.head.push(iconLinkTags(favicon));
   if (logo) base.og['og:image'] = setting.url ? `${setting.url.replace(/\/$/, '')}${logo}` : logo;
   /**
    * 站点级 title / description 统一走 shared/site-text：

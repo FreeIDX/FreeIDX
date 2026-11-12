@@ -305,6 +305,11 @@ async function siteKeysInUse(db: D1b): Promise<Set<string>> {
       if (m) out.add(m[1]!);
     };
     for (const field of ['logo_url', 'favicon_url']) add(raw[field]);
+    /* favicon 多尺寸（site/favicon-{32,180,192}.png）：setting 只存 32 档的直链，另两档由壳页按
+       key 派生引用。不在这里登记就会被当孤儿删掉，apple-touch-icon / 192 图标随即 404。 */
+    if (String(raw.favicon_url ?? '')) {
+      for (const size of [32, 180, 192]) out.add(`site/favicon-${size}.png`);
+    }
     /* 导航项上传的图标同属 site/ 前缀（site/nav/…）：不计入「在用」会被当孤儿删掉，
        线上顶栏图标随即 404。nav 存 JSON 字符串（也可能是数组），两种都兼容。 */
     let nav: unknown = raw.nav;

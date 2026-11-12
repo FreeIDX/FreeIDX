@@ -2,9 +2,11 @@
  * Cache API 边缘响应缓存层（§7 读取屏障）测试：
  *  - 游客只读接口 HIT 后对 D1 零查询（runlevel 的 setting 查询一并省掉）
  *  - 个人化请求（登录轨 Cookie / Authorization）绕开，csrf Cookie 不影响参与资格
- *  - 只写入 200 且无 Set-Cookie 的响应；抛错路径不落缓存
+ *  - 只写入 200 且 Set-Cookie 仅限 csrf 的响应（缓存副本会剥掉该头，HIT 时按需补签）；
+ *    抛错路径不落缓存
  *  - 缓存副本带 max-age，客户端响应不带（TTL 归边缘，不污染浏览器缓存）
  *  - UA 分类进键：爬虫 HTML 与人类响应互不串台（Cloudflare 缓存键不认 Vary）
+ *  - 公共图片（附件预览）与二进制直链同口径：共享键、保留源头 max-age
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../src/index';
@@ -73,6 +75,43 @@ function envFor() {
   };
 }
 
+/** 用一条覆盖规则换掉 setting（其余规则沿用），供「站点级设置影响壳页注入」类断言使用 */
+function envWithSetting(patch: Record<string, unknown>) {
+  const base = { ...(JSON.parse(SETTING) as Record<string, unknown>), ...patch };
+  const fake = fakeD1Sql([
+    { test: /FROM bbs_kv/, first: (params: readonly unknown[]) => (params[0] === 'extensions' ? null : { v: JSON.stringify(base) }) },
+    ...rules().filter((r) => !/FROM bbs_kv/.test(r.test.source)),
+  ]);
+  return {
+    env: {
+      DB: fake.db,
+      CACHE: fakeKv(),
+      FILES: fakeR2(),
+      ASSETS: fakeAssets(),
+      SITE_URL: 'http://localhost',
+    },
+    calls: fake.calls,
+  };
+}
+
+/** 附件预览接口所需的数据面：公开件（credits=0）与受限期件（credits>0）共用 */
+function attachEnv(credits = 0) {
+  const fake = fakeD1Sql([
+    ...rules(),
+    {
+      test: /FROM bbs_attach WHERE aid = \?/,
+      first: {
+        aid: 42, uid: 1, tid: 2, filename: 'attach/202410/x.png', orgfilename: 'x.png',
+        filesize: 3, isimage: 1, status: 1, credits,
+      },
+    },
+  ]);
+  return {
+    env: { DB: fake.db, CACHE: fakeKv(), FILES: fakeR2(), ASSETS: fakeAssets(), SITE_URL: 'http://localhost' },
+    calls: fake.calls,
+  };
+}
+
 let edge: ReturnType<typeof fakeCaches>;
 beforeEach(() => {
   l0Clear();
@@ -113,13 +152,13 @@ describe('边缘缓存：游客只读接口', () => {
   it('缓存副本带 max-age，下发给客户端的响应不带（MISS 与 HIT 同口径）', async () => {
     await hit('/api/threads');
     const stored = Array.from(edge.entries.values())[0]!;
-    expect(new Headers(stored.headers).get('cache-control')).toBe('public, max-age=30');
+    expect(new Headers(stored.headers).get('cache-control')).toBe('public, max-age=60');
     expect(stored.headers.some(([k]) => k.toLowerCase() === 'x-edge-cache')).toBe(false);
 
     const fresh = await hit('/api/threads?fid=1', {}, envFor());
     expect(fresh.res.headers.get('cache-control')).toBeNull();
 
-    // HIT 同样不得带 max-age：HTTP 缓存键不含 Cookie，游客在 30s 窗口内登录后重新拉
+    // HIT 同样不得带 max-age：HTTP 缓存键不含 Cookie，游客在副本有效期内登录后重新拉
     // /api/bootstrap 会被浏览器喂回「游客版」→ 认证态串扰（登录成功但顶栏仍是游客）。
     const second = await hit('/api/threads', {}, envFor());
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
@@ -166,18 +205,23 @@ describe('边缘缓存：游客只读接口', () => {
     expect(edge.entries.size).toBe(1);
   });
 
-  it('首访（尚无 csrf Cookie）：冷缓存穿透签发 Cookie；缓存就位后 HIT 并补签，不重复签发', async () => {
-    // 冷缓存 + 无 csrf：参与读取但 MISS，穿透整条链路由 csrf 中间件签发；带 Set-Cookie 的响应不入缓存
+  it('首访（尚无 csrf Cookie）：MISS 也回填（副本剥掉 csrf 头），第二个人起直接 HIT 并补签', async () => {
+    /* 首访请求本身仍会冷穿透（缓存里还没有东西），但这次 MISS 的产物必须落缓存：
+       否则「每个新访客的第一屏接口都冷穿透」，低流量时段边缘命中率接近 0。 */
     const cold = await hit('/api/threads', { cookie: '_ga=1' });
-    expect(cold.res.headers.get('x-edge-cache')).toBeNull();
-    expect(cold.res.headers.get('set-cookie')).toContain('csrf=');
-    expect(edge.entries.size).toBe(0);
+    expect(cold.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(cold.res.headers.get('set-cookie')).toContain('csrf='); // 下发给本次请求方的响应仍带签发
 
-    // 缓存就位（由持 csrf 的请求回填）
-    await hit('/api/threads');
     expect(edge.entries.size).toBe(1);
+    const stored = Array.from(edge.entries.values())[0]!;
+    // 副本里不得残留 Set-Cookie：同一份副本会发给所有游客，csrftoken 必须由 HIT 分支现场补签
+    expect(stored.headers.some(([k]) => k.toLowerCase() === 'set-cookie')).toBe(false);
+    // 副本 max-age 归边缘 TTL（不污染浏览器缓存）
 
-    // 真首访（无 csrf Cookie）：HIT 且在响应上补签 csrf（与 csrf 中间件 GET 分支同口径），不再冷穿透 D1
+    const storedHeaders = new Headers(stored.headers);
+    expect(storedHeaders.get('cache-control')).toBe('public, max-age=60');
+
+    // 第二个首访（无 csrf Cookie）：HIT 且在响应上补签 csrf（与 csrf 中间件 GET 分支同口径），零 D1
     const firstVisit = await hit('/api/threads', { cookie: '_ga=1' }, envFor());
     expect(firstVisit.res.headers.get('x-edge-cache')).toBe('HIT');
     expect(firstVisit.res.headers.get('set-cookie')).toContain('csrf=');
@@ -188,6 +232,7 @@ describe('边缘缓存：游客只读接口', () => {
     expect(again.res.headers.get('x-edge-cache')).toBe('HIT');
     expect(again.res.headers.get('set-cookie')).toBeNull();
   });
+
 
   it('路由抛错（主题不存在）不落缓存', async () => {
     const { res } = await hit('/api/threads/9');
@@ -225,7 +270,7 @@ describe('边缘缓存：游客只读接口', () => {
     ];
     for (const [path, ttl] of required) expect(ttlOf(path), `${path} 的边缘 TTL`).toBe(ttl);
     // 详情页与 hot-posts 是同级路径，细节规则不能互相覆盖
-    expect(ttlOf('/api/threads/7')).toBe(60);
+    expect(ttlOf('/api/threads/7')).toBe(120);
     // 付费/写侧接口必须仍在白名单外
     for (const path of ['/api/me', '/api/orders/abc', '/api/my/favorites', '/api/threads/7/paylist']) {
       expect(ttlOf(path), `${path} 不应参与边缘缓存`).toBeUndefined();
@@ -250,6 +295,38 @@ describe('边缘缓存：游客只读接口', () => {
     expect(res.headers.get('x-edge-cache')).toBeNull();
     expect(((await res.json()) as { code: number }).code).toBe(0);
     expect(source.calls.length).toBeGreaterThan(0);
+  });
+});
+
+describe('边缘缓存：公共图片（附件预览）', () => {
+  it('公开件按二进制共享键缓存：保留源头 max-age，命中后不再读 R2/D1', async () => {
+    const first = attachEnv();
+    await first.env.FILES.put('attach/202410/x.png', 'IMG', { httpMetadata: { contentType: 'image/png' } });
+    const a = await hit('/api/attachments/42/preview', {}, first as never);
+    expect(a.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(a.res.headers.get('cache-control')).toBe('public, max-age=86400');
+
+    expect(edge.entries.size).toBe(1);
+    const [key, stored] = Array.from(edge.entries.entries())[0]!;
+    // 二进制与语言/UA 无关：不编 fi-lang，人类与爬虫共用一份
+    expect(key).toContain('fi-ua=human');
+    expect(key).not.toContain('fi-lang');
+    // 副本保留源头 max-age（浏览器命中边缘后仍按 1 天缓存，不能退化成每次刷新都回源）
+    expect(new Headers(stored.headers).get('cache-control')).toBe('public, max-age=86400');
+
+    const second = await hit('/api/attachments/42/preview', { 'accept-language': 'en-US,en;q=0.9' }, attachEnv() as never);
+    expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(second.res.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(second.source.calls.length).toBe(0); // 不读 bbs_attach / bbs_thread / bbs_kv
+    expect(await second.res.text()).toBe('IMG');
+  });
+
+  it('受限期件（付费未购）不落缓存：响应为 no-store 错误信封', async () => {
+    const gated = attachEnv(10);
+    const res = await hit('/api/attachments/42/preview', {}, gated as never);
+    expect(res.res.headers.get('cache-control')).toBe('no-store');
+    expect(res.res.headers.get('x-edge-cache')).toBeNull();
+    expect(edge.entries.size).toBe(0);
   });
 });
 
@@ -381,14 +458,14 @@ describe('边缘缓存：SPA 壳 HTML（人类页面导航）', () => {
     expect(Array.from(edge.entries.keys()).filter((k) => k.endsWith('/__fi/spa-shell'))).toHaveLength(1);
   });
 
-  it('浏览器短缓存：HIT 与 MISS 同口径（max-age=60，对齐 SHELL_TTL 陈旧窗口）', async () => {
+  it('浏览器短缓存：HIT 与 MISS 同口径（max-age=120，对齐 SHELL_TTL 陈旧窗口）', async () => {
     const s = countingEnv();
     const first = await hit('/', {}, s as never);
     expect(first.res.headers.get('x-edge-cache')).toBe('MISS');
-    expect(first.res.headers.get('cache-control')).toBe('public, max-age=60');
+    expect(first.res.headers.get('cache-control')).toBe('public, max-age=120');
     const second = await hit('/', {}, s as never);
     expect(second.res.headers.get('x-edge-cache')).toBe('HIT');
-    expect(second.res.headers.get('cache-control')).toBe('public, max-age=60');
+    expect(second.res.headers.get('cache-control')).toBe('public, max-age=120');
   });
 
   it('站长轨（admin_at）跳过读缓存：改完设置/切完主题当场可见', async () => {
@@ -431,6 +508,16 @@ describe('边缘缓存：SPA 壳 HTML（人类页面导航）', () => {
   it('壳页注入站点 favicon link（后台已配置时）：浏览器不再盲请求 /favicon.ico', async () => {
     const html = await (await hit('/', {}, envFor() as never)).res.text();
     expect(html).toContain('<link rel="icon" href="/files/site/favicon.png?v=1">');
+  });
+
+  it('favicon 多尺寸：标签页只取 32×32，另派生 192 与 apple-touch-icon（同一版本号）', async () => {
+    const env = envWithSetting({ favicon_url: '/files/site/favicon-32.png?v=99' });
+    const html = await (await hit('/', {}, env as never)).res.text();
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/files/site/favicon-32.png?v=99">');
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="192x192" href="/files/site/favicon-192.png?v=99">');
+    expect(html).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/files/site/favicon-180.png?v=99">');
+    // 原图直链不得再作为标签页图标下发（线上曾出现 830KB favicon）
+    expect(html).not.toContain('<link rel="icon" href="/files/site/favicon-32.png');
   });
 
   it('预载清单缺失（本地 dev / 旧产物）：壳页仍带 bootstrap 预载，功能不受影响', async () => {

@@ -38,9 +38,13 @@ export async function loadPreloadMap(env: Env, baseUrl: string): Promise<Preload
  *  - `/api/bootstrap`：入口 chunk 一执行就会请求它，从 HTML 里预载可让它与入口 chunk 并行
  *    （`crossorigin="use-credentials"` 与前端 `fetch(..., { credentials: 'include' })` 同模式，
  *    浏览器才能复用这份预载；少了这个属性会退化成两次请求）。
+ *    `fetchpriority="high"`：`as=fetch` 在 Chrome 默认是 Low 优先级，实测会被入口 JS/CSS 挤到后面，
+ *    等于白预载；提权后才与首屏 chunk 真正并行。
  */
 export function shellPreloadTags(map: PreloadMap | null, siteLang: string): string {
-  const out: string[] = [`<link rel="preload" as="fetch" href="/api/bootstrap" crossorigin="use-credentials">`];
+  const out: string[] = [
+    `<link rel="preload" as="fetch" href="/api/bootstrap" crossorigin="use-credentials" fetchpriority="high">`,
+  ];
   const i18nFile = map?.i18n?.[siteLang];
   if (i18nFile) out.push(`<link rel="modulepreload" crossorigin href="/${i18nFile}">`);
   return out.join('');

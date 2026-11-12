@@ -30,6 +30,7 @@ import {
   deleteSiteFavicon,
 } from '../api';
 import type { AdminSettingInput, AdminSettingMap } from '../types';
+import { buildFaviconPayload } from '../favicon-payload';
 import { useAdminT } from '../t';
 import { NameI18nModal } from '../NameI18nModal';
 import { useAdminAction } from '../use-action';
@@ -205,14 +206,19 @@ export function SettingPage() {
       return;
     }
     try {
-      const data = await new Promise<string>((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result));
-        fr.onerror = () => reject(new Error(t('forum_icon_read_err', '图片读取失败')));
-        fr.readAsDataURL(file);
-      });
-      if (kind === 'logo') setLogoUrl((await uploadSiteLogo(data)).logo_url);
-      else setFaviconUrl((await uploadSiteFavicon(data)).favicon_url);
+      if (kind === 'favicon') {
+        /* 先在浏览器里裁正方形并压成 32/180/192 三档 PNG：标签页只取 32 档，
+           不再让每个首访用户下载原图（见 admin/favicon-payload.ts） */
+        setFaviconUrl((await uploadSiteFavicon(await buildFaviconPayload(file))).favicon_url);
+      } else {
+        const data = await new Promise<string>((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result));
+          fr.onerror = () => reject(new Error(t('forum_icon_read_err', '图片读取失败')));
+          fr.readAsDataURL(file);
+        });
+        setLogoUrl((await uploadSiteLogo(data)).logo_url);
+      }
       setIconMsg('');
       await refresh(); // 顶栏 logo / 标签页 favicon 读全局 setting，同步刷新
     } catch (e) {
