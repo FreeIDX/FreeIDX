@@ -290,6 +290,11 @@ app.onError(handleError);
  * 只预载第 00 片：它是 UI 文案 + 最常用汉字，任何中文页面都会用到（约 123KB）；
  * 其余 11 片由浏览器按 unicode-range 在真实渲染到片内字符时才取，提前预载等于白下。
  * 仅中文界面预载：非中文界面根本不引用这套字体（见 globals.css 的 --font-app）。
+ *
+ * **弱网不预载**：字体是 `font-display: swap`，不预载也不会阻塞首屏文本（先用系统字体渲染，
+ * 到了再换），而 123KB 在 2g/3g 上与入口 JS/CSS 抢带宽的代价远大于收益。判断用
+ * `navigator.connection`（Chromium 系；Safari/Firefox 没有该对象 → 按原行为预载），
+ * 命中 `saveData` 或 effectiveType 为 slow-2g/2g/3g 时跳过。
  */
 const CJK_FONT_URL = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v2-00.woff2';
 
@@ -348,7 +353,10 @@ async function injectShell(
       `document.documentElement.lang=fiG;` +
       threadPreloadScript() +
       listPreloadScript() +
-      `try{if(/^zh/.test(fiG)){var k=document.createElement("link");` +
+      /* 字体预载：弱网/省流量跳过（字体是 swap，不预载只是晚一点换字体，不阻塞文本） */
+      `try{var fc=navigator.connection||navigator.mozConnection||navigator.webkitConnection;` +
+      `var fs=!!(fc&&(fc.saveData||/^(slow-2g|2g|3g)$/.test(fc.effectiveType||"")));` +
+      `if(/^zh/.test(fiG)&&!fs){var k=document.createElement("link");` +
       `k.rel="preload";k.as="font";k.type="font/woff2";k.crossOrigin="";` +
       `k.href=${JSON.stringify(CJK_FONT_URL)};document.head.appendChild(k)}}catch(e){}</script>`;
     /**

@@ -579,4 +579,39 @@ describe('边缘缓存：SPA 壳 HTML（人类页面导航）', () => {
     expect(html).toContain('as="fetch" href="/api/bootstrap"');
     expect(html).not.toContain('modulepreload" crossorigin href="/assets/i18n-bbs');
   });
+
+  /* 字体是 font-display: swap：不预载不阻塞首屏文本，弱网下 123KB 与入口 JS 抢带宽得不偿失。
+     这里直接执行壳页注入的那段脚本，断言 navigator.connection 各档位的实际行为。 */
+  it('字体预载：正常网络预载中文首片，弱网/省流量跳过', async () => {
+    const html = await (await hit('/', {}, envFor() as never)).res.text();
+    const bootScript = /<script>(window\.__FI_THEME__[\s\S]*?)<\/script>/.exec(html)?.[1] ?? '';
+    expect(bootScript).toContain('window.__FI_THEME__');
+    const FONT = '/fonts/HarmonyOS_Sans_SC_Medium.subset.v2-00.woff2';
+    const run = (nav: Record<string, unknown>): string[] => {
+      const appended: string[] = [];
+      const doc = {
+        documentElement: { lang: '' },
+        createElement: () => ({}) as Record<string, unknown>,
+        head: {
+          appendChild: (el: { href?: string }) => {
+            if (el.href) appended.push(el.href);
+          },
+        },
+      };
+      new Function('window', 'document', 'navigator', 'localStorage', 'location', bootScript)(
+        { __FI_CONTENT_LANG_MODE__: 0 },
+        doc,
+        nav,
+        { getItem: () => null },
+        { pathname: '/', search: '' },
+      );
+      return appended;
+    };
+    expect(run({ languages: ['zh-CN'] })).toContain(FONT);
+    expect(run({ languages: ['zh-CN'], connection: { effectiveType: '4g' } })).toContain(FONT);
+    expect(run({ languages: ['zh-CN'], connection: { saveData: true } })).not.toContain(FONT);
+    expect(run({ languages: ['zh-CN'], connection: { effectiveType: '3g' } })).not.toContain(FONT);
+    // 非中文界面本来就不预载这套字体
+    expect(run({ languages: ['en-US'] })).not.toContain(FONT);
+  });
 });
