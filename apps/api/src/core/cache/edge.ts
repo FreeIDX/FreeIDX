@@ -101,7 +101,8 @@ const FILES_PUBLIC: ReadonlyArray<RegExp> = [/^\/files\/avatar\//, /^\/files\/fo
  * 已购用户的副本不会写进游客缓存。
  * `/api/attachments/:aid/download` 必须继续在列外：它带扣费与权限语义。
  */
-const BINARY_PUBLIC: ReadonlyArray<RegExp> = [/^\/api\/attachments\/\d+\/preview$/];
+const ATTACH_PREVIEW = /^\/api\/attachments\/\d+\/preview$/;
+const BINARY_PUBLIC: ReadonlyArray<RegExp> = [ATTACH_PREVIEW];
 
 /** 请求里登记了 Set-Cookie 的全部值（Workers 与 Node 均有 getSetCookie；老环境回退单值读取） */
 function setCookieList(h: Headers): string[] {
@@ -350,9 +351,13 @@ export function edgeCache() {
       const binary = filePrefix || BINARY_PUBLIC.some((re) => re.test(c.req.path));
       const ttl = API_TTL.find(([re]) => re.test(c.req.path))?.[1];
       if (!ttl && !binary) return next();
-      // 资格口径分三档（见各函数注释）：/files 公共直链最宽；API 默认绕过登录轨；
-      // PUBLIC_READONLY 里的公共只读端点对登录轨也放开（响应体与访问者无关）
-      if (!(binary ? isFileCacheEligible(raw) : isCacheEligible(raw, c.req.path))) return next();
+      const attachPreview = ATTACH_PREVIEW.test(c.req.path);
+      // 资格口径分四档（见各函数注释）：/files 公共直链最宽；API 默认绕过登录轨；
+      // PUBLIC_READONLY 里的公共只读端点对登录轨也放开（响应体与访问者无关）；
+      // 附件预览对登录轨放开**读**——写回分支拒绝登录轨写入，缓存里只会是游客可见的副本
+      if (binary) {
+        if (attachPreview ? raw.headers.has('authorization') : !isFileCacheEligible(raw)) return next();
+      } else if (!isCacheEligible(raw, c.req.path)) return next();
       const b = bucket();
       if (!b) return next();
 
@@ -413,6 +418,13 @@ export function edgeCache() {
       await next();
       const res = c.res;
       if (!storeEligible(res)) return;
+      /* 附件预览：登录轨请求只读不写。公开件本身与身份无关，但「当前用户看得到」不等于
+         「游客也看得到」——版块 allowread / 主题审核态都按 gid 与 uid 判定，写进去就会把
+         私密版块或未过审主题的图片副本发给游客。读方向是安全的：缓存里只会存在游客能看到的副本。 */
+      if (attachPreview && PERSONAL_COOKIE.test(raw.headers.get('cookie') ?? '')) {
+        c.res = withState(res, 'MISS');
+        return;
+      }
       const copy = cachedCopy(res.clone(), ttl, binary);
       /* 同时写一份 TTL = fresh + 陈旧窗口 的副本：它只在 fresh 过期后兜底，
          且只在 SWR 白名单接口上写，避免给长尾接口平白多一次缓存写。 */

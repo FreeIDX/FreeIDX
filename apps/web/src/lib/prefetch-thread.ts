@@ -12,8 +12,9 @@
  *
  * 边界（避免把「优化」变成「放大请求」）：
  *  - 停留 120ms 才算意图：快速划过一屏列表不会产生任何请求；
- *  - 单次页面加载最多 12 条：登录用户不吃边缘缓存（响应含 me / 点赞态），每条预取都是一次
- *    真 Worker + D1，必须封顶；
+ *  - 游客单次页面加载最多 12 条、登录用户最多 3 条：登录用户不吃边缘缓存（响应含 me / 点赞态），
+ *    每条预取都是一次真 Worker + 20~35 条 D1 查询，是列表页最贵的隐藏开销，必须按身份分级封顶
+ *    （免费层 10 万 Worker 请求/天，12 条预取 ≈ 12 次请求 + 300 条 SQL，比打开一个帖子贵一个量级）；
  *  - 弱网/省流量（`saveData` 或 2g/3g）直接不预取——预取是纯优化，不能抢首屏带宽；
  *  - 已成功预取过的 `tid:page` 不重复请求；预取失败（403 无权 / 404 已删）立刻把这条查询从
  *    缓存摘掉，否则点进去会先命中 error 状态闪一下错误页；
@@ -22,11 +23,23 @@
 import type { ThreadDetail } from '@freeidx/shared';
 import { apiGet } from './api';
 import { queryClient } from './query-client';
+import { useAuth } from '../store/auth';
 
 /** 悬停意图判定阈值（ms） */
 const HOVER_DELAY_MS = 120;
-/** 单次页面加载的预取上限（登录用户每条预取 = 1 次 Worker + 若干 D1 查询） */
-const MAX_PREFETCH_PER_LOAD = 12;
+/** 游客：URL 级边缘缓存可命中，只是 1 次 Worker 请求 */
+const MAX_PREFETCH_GUEST = 12;
+/** 登录用户：每条都是真 Worker + 完整 D1 回源，压到 3 条换取额度 */
+const MAX_PREFETCH_MEMBER = 3;
+/** bootstrap 尚未返回时不知道身份，按登录用户的保守值走 */
+const MAX_PREFETCH_UNKNOWN = 3;
+
+/** 当前会话的预取上限：身份决定「一次预取值不值得」，与页面路径无关 */
+function prefetchLimit(): number {
+  const s = useAuth.getState();
+  if (!s.loaded) return MAX_PREFETCH_UNKNOWN;
+  return s.me ? MAX_PREFETCH_MEMBER : MAX_PREFETCH_GUEST;
+}
 
 interface Target {
   tid: number;
@@ -73,7 +86,7 @@ function clearPending(): void {
 
 function prefetch(t: Target): void {
   const id = `${t.tid}:${t.page}`;
-  if (attempted.has(id) || started >= MAX_PREFETCH_PER_LOAD) return;
+  if (attempted.has(id) || started >= prefetchLimit()) return;
   const queryKey = ['thread', t.tid, t.page] as const;
   // 已有成功数据（例如刚从另一个列表点进来又返回）→ 无需再取
   if (queryClient.getQueryState(queryKey)?.status === 'success') return;

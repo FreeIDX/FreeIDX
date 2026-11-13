@@ -1,7 +1,8 @@
 /**
  * Cache API 边缘响应缓存层（§7 读取屏障）测试：
  *  - 游客只读接口 HIT 后对 D1 零查询（runlevel 的 setting 查询一并省掉）
- *  - 个人化请求（登录轨 Cookie / Authorization）绕开，csrf Cookie 不影响参与资格
+ *  - 个人化请求（登录轨 Cookie / Authorization）绕开，csrf Cookie 不影响参与资格；
+ *    唯一例外是附件预览：登录轨可**读**游客副本，但不写回（防私密版块/未过审副本泄漏）
  *  - 只写入 200 且 Set-Cookie 仅限 csrf 的响应（缓存副本会剥掉该头，HIT 时按需补签）；
  *    抛错路径不落缓存
  *  - 缓存副本带 max-age，客户端响应不带（TTL 归边缘，不污染浏览器缓存）
@@ -342,6 +343,34 @@ describe('边缘缓存：公共图片（附件预览）', () => {
     expect(res.res.headers.get('cache-control')).toBe('no-store');
     expect(res.res.headers.get('x-edge-cache')).toBeNull();
     expect(freshEntries().length).toBe(0);
+  });
+
+  /* 登录用户此前对图片预览完全不参与边缘缓存（isFileCacheEligible 见登录轨即拒），
+     一张图 = 1 次 Worker + loadViewer + readAttach；10 图帖 ≈ 10 次请求 + 20~30 条 SQL。
+     放开「读」而不放开「写」：缓存里只会有游客能看到的副本，按 gid 才可见的内容不会外溢。 */
+  it('登录轨可读游客副本但不写回：零 D1 命中，冷 MISS 也不落缓存', async () => {
+    const guest = attachEnv();
+    await guest.env.FILES.put('attach/202410/x.png', 'IMG', { httpMetadata: { contentType: 'image/png' } });
+    const warm = await hit('/api/attachments/42/preview', {}, guest as never);
+    expect(warm.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(freshEntries().length).toBe(1);
+
+    // 读方向：登录用户命中游客副本，不再 loadViewer/readAttach
+    const member = attachEnv();
+    const hot = await hit('/api/attachments/42/preview', { cookie: 'csrf=t; sid=abcdef' }, member as never);
+    expect(hot.res.headers.get('x-edge-cache')).toBe('HIT');
+    expect(hot.source.calls.length).toBe(0);
+    expect(await hot.res.text()).toBe('IMG');
+    expect(freshEntries().length).toBe(1); // 命中不新增副本
+
+    // 写方向：登录用户冷 MISS 时只读不写，避免「按 gid 才可见」的副本泄漏给游客
+    edge.entries.clear();
+    const cold = attachEnv();
+    await cold.env.FILES.put('attach/202410/x.png', 'IMG', { httpMetadata: { contentType: 'image/png' } });
+    const miss = await hit('/api/attachments/42/preview', { cookie: 'csrf=t; sid=abcdef' }, cold as never);
+    expect(miss.res.headers.get('x-edge-cache')).toBe('MISS');
+    expect(miss.source.calls.length).toBeGreaterThan(0); // 完整回源了一次
+    expect(freshEntries().length).toBe(0); // 但副本没有落缓存
   });
 });
 
