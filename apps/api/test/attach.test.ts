@@ -53,6 +53,23 @@ function baseRules(attach = defaultAttach()): SqlRule[] {
   ];
 }
 
+/** 在标准规则上覆盖「主题审核态 / 付费 / 游客组下载位」，用于缓存可达性组合断言 */
+function withRules(over: {
+  thread?: Partial<{ fid: number; content_buy: number; uid: number; ok: number }>;
+  guestDown?: number;
+}): SqlRule[] {
+  const rules = baseRules();
+  if (over.thread) {
+    const row = rules.find((x) => /SELECT fid,content_buy,uid,ok FROM bbs_thread WHERE tid/.test(x.test.source));
+    if (row) row.first = () => ({ fid: 1, content_buy: 0, uid: 1, ok: 1, ...over.thread });
+  }
+  if (over.guestDown !== undefined) {
+    const row = rules.find((x) => /FROM bbs_group/.test(x.test.source));
+    if (row) row.rows = [{ ...GROUP_ADMIN }, { ...GROUP_GUEST, allowread: 1, allowdown: over.guestDown }];
+  }
+  return rules;
+}
+
 const authHeaders = (): HeadersInit => ({ cookie: 'sid=sessA; csrf=tok123', 'x-csrf-token': 'tok123' });
 
 beforeEach(() => l0Clear());
@@ -136,6 +153,33 @@ describe('GET /api/attachments/:aid/preview', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/png');
     expect(res.headers.get('content-disposition')).toContain('inline');
+  });
+
+  /* 缓存安全：图片响应带 public/max-age 会被 CDN 按 URL 缓存，且副本不区分 Cookie。
+     因此「只有登录后才看得到」的图片必须 private —— 否则组内用户先访问，游客随后直接命中副本。 */
+  it('游客组无 allowdown → 登录用户预览也不得 public（防 CDN 副本外溢）', async () => {
+    const r = makeEnv(baseRules(defaultAttach({ filename: 'attach/202410/x.png', isimage: 1 })));
+    r.r2.store.set('attach/202410/x.png', { data: new TextEncoder().encode('binary'), contentType: 'image/png' });
+    // 现有 fixture 的游客组 allowdown=0、管理员组 allowdown=1：viewer 能过闸门，游客视角不可下
+    const res = await app.request('/api/attachments/42/preview', { headers: { cookie: 'sid=sessA' } }, r.env as never);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+  });
+
+  it('待审主题（ok=0）：作者仍可预览，但响应 private（副本不得给游客）', async () => {
+    const r = makeEnv(withRules({ thread: { ok: 0 }, guestDown: 1 }));
+    r.r2.store.set('attach/202410/x.png', { data: new TextEncoder().encode('binary'), contentType: 'image/png' });
+    const res = await app.request('/api/attachments/42/preview', { headers: { cookie: 'sid=sessA' } }, r.env as never);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+  });
+
+  it('公开免费 + 游客可下 → public, max-age=86400（允许进 CDN）', async () => {
+    const r = makeEnv(withRules({ guestDown: 1 }));
+    r.r2.store.set('attach/202410/x.png', { data: new TextEncoder().encode('binary'), contentType: 'image/png' });
+    const res = await app.request('/api/attachments/42/preview', { headers: { cookie: 'sid=sessA' } }, r.env as never);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('public, max-age=86400');
   });
 
   it('临时件非本人 → NO_PERMISSION', async () => {

@@ -244,10 +244,19 @@ async function attachVisibilityGate(
   ctx: ReturnType<typeof makeAccessCtx>;
   grouplist: Awaited<ReturnType<typeof loadGrouplist>>;
   exempt: boolean;
+  /** 游客视角是否同样可见：false 时响应必须 private，否则登录用户先访问的副本会外溢给游客 */
+  guestReadable: boolean;
 }> {
   const v = await loadViewer(core.cache, core.db, c);
   const [forumlist, grouplist] = await Promise.all([loadForumlist(core.cache, core.db), loadGrouplist(core.cache, core.db)]);
   const ctx = makeAccessCtx(v, forumlist, grouplist);
+  /* 游客视角复核（缓存安全）：当前 viewer 能看 ≠ 游客能看。冻结版块 allowread / allowdown
+     与 accesson 矩阵后，只有「游客也能读且能下」的附件才允许调用方打 public —— 否则
+     组内用户先访问的响应会被 CDN / 边缘缓存按 URL 存下来，游客随后直接命中。 */
+  const guestCtx = makeAccessCtx({ uid: 0, gid: 0 }, forumlist, grouplist);
+  const guestReadable =
+    forumAccessUser(guestCtx, Number(th.fid), 'allowread') &&
+    forumAccessUser(guestCtx, Number(th.fid), 'allowdown');
   // 版块可见性 + 主题审核态：免费附件同样不能绕过（按 aid 遍历即可读到私密版块/待审主题的附件）
   if (!forumAccessUser(ctx, Number(th.fid), 'allowread') || !forumAccessUser(ctx, Number(th.fid), 'allowdown')) {
     throw new AppError(Code.NO_PERMISSION, t('attach.downloadDenied'));
@@ -270,9 +279,9 @@ async function attachVisibilityGate(
 
   // 付费附件（T5-2，§15.1）：上传者/管理员/（可配）版主/VIP 免扣；其余需付积分（下载侧负责扣费，预览侧拒绝）。
   const price = Number(a.credits ?? 0);
-  if (price <= 0) return { v, ctx, grouplist, exempt: true };
+  if (price <= 0) return { v, ctx, grouplist, exempt: true, guestReadable };
   const isUploader = v.uid > 0 && v.uid === Number(a.uid);
-  if (isUploader || v.gid === 1) return { v, ctx, grouplist, exempt: true };
+  if (isUploader || v.gid === 1) return { v, ctx, grouplist, exempt: true, guestReadable };
   if (v.uid <= 0) throw new AppError(Code.NOT_LOGIN, t('attach.loginForDownload'));
   const setting = await loadSetting(core.cache, core.db);
   const freeForMod = Number(setting.attachFreeForMod ?? 1) > 0 && forumAccessMod(ctx, Number(th.fid), 'allowdelete');
@@ -284,7 +293,7 @@ async function attachVisibilityGate(
       .first<{ vip_expire_at: number }>();
     freeForVip = Number(vip?.vip_expire_at ?? 0) > now();
   }
-  return { v, ctx, grouplist, exempt: freeForMod || freeForVip };
+  return { v, ctx, grouplist, exempt: freeForMod || freeForVip, guestReadable };
 }
 
 /** 付费附件「已付费下载过」判定：与扣费幂等键同源（bbs_point_log.biz_key = `attach:{aid}:{uid}`） */
@@ -317,11 +326,14 @@ async function previewAttachment(c: Ctx): Promise<Response> {
       .first<AttachThread>();
     if (!th) throw new AppError(Code.NO_PERMISSION, t('attach.downloadDenied'));
     const price = Number(a.credits ?? 0);
-    const { v, exempt } = await attachVisibilityGate(core, c, a, th, t);
+    const { v, exempt, guestReadable } = await attachVisibilityGate(core, c, a, th, t);
     if (price > 0 && !exempt && !(await hasPaidAttach(core, v.uid, aid))) {
       throw new AppError(Code.NO_PERMISSION, t('attach.downloadDenied'));
     }
-    gated = price > 0 || Number(th.content_buy ?? 0) > 0;
+    /* gated = 「不能进公共缓存」。除付费外还必须覆盖两类「登录后才看得到」的情况：
+       - 主题非 ok=1：作者/版主/管理员仍可预览，但副本不应被游客命中；
+       - 游客视角不可读/不可下：组内可见的私密版块图片同样不能落 CDN / 边缘。 */
+    gated = price > 0 || Number(th.content_buy ?? 0) > 0 || Number(th.ok) !== 1 || !guestReadable;
   }
   /* `?t=1` = 列表缩略图：命中返回 400px WebP，缺失自动回退原图（存量附件零影响）。
      权限判定在上方已全部走完——读哪个对象都不改变可见性，故复用同一套闸门。 */
